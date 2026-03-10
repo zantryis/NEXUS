@@ -11,6 +11,8 @@ data/config.yaml
 tests/
 docs/
 scripts/
-*.md
+docs/*.md
+state.md
+CLAUDE.md
 .claude/
 .vscode/
