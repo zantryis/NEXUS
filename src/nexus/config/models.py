@@ -23,6 +23,7 @@ class TopicConfig(BaseModel):
     subtopics: list[str] = Field(default_factory=list)
     source_languages: list[str] = Field(default_factory=lambda: ["en"])
     perspective_diversity: str = "low"
+    filter_threshold: float = 6.0
 
 
 class ModelsConfig(BaseModel):

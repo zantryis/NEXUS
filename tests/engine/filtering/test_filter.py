@@ -1,10 +1,15 @@
 """Tests for relevance filtering via LLM."""
 
+import json
 import pytest
+from datetime import date
 from unittest.mock import AsyncMock
 from nexus.engine.sources.polling import ContentItem
 from nexus.config.models import TopicConfig
-from nexus.engine.filtering.filter import score_relevance, score_batch, filter_items
+from nexus.engine.filtering.filter import (
+    score_relevance, score_batch, filter_items,
+    score_significance_batch, _format_event_context,
+)
 
 
 @pytest.fixture
@@ -62,14 +67,12 @@ async def test_score_batch(topic):
     assert len(scores) == 2
     assert scores[0] == (8, "Relevant")
     assert scores[1] == (2, "Not relevant")
-    # Only one LLM call for the batch
     mock_llm.complete.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_score_batch_fallback_on_bad_json(topic):
     mock_llm = AsyncMock()
-    # First call (batch) fails, then two individual fallback calls
     mock_llm.complete.side_effect = [
         "bad json",
         '{"score": 7, "reason": "ok"}',
@@ -88,9 +91,9 @@ async def test_score_batch_fallback_on_bad_json(topic):
 
 
 @pytest.mark.asyncio
-async def test_filter_items_uses_batching(topic):
+async def test_filter_items_pass1_only(topic):
+    """Without recent_events, filter_items does pass 1 only."""
     mock_llm = AsyncMock()
-    # One batch call returns both scores
     mock_llm.complete.return_value = (
         '[{"id": 0, "score": 8, "reason": "Relevant"}, '
         '{"id": 1, "score": 2, "reason": "Not relevant"}]'
@@ -104,5 +107,101 @@ async def test_filter_items_uses_batching(topic):
     results = await filter_items(mock_llm, items, topic, threshold=5)
     assert len(results) == 1
     assert results[0].relevance_score == 8
-    # Should be a single batch call, not two individual calls
     assert mock_llm.complete.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_filter_items_uses_topic_threshold():
+    """filter_items uses topic.filter_threshold when no explicit threshold given."""
+    topic = TopicConfig(
+        name="AI Research",
+        subtopics=["agents"],
+        filter_threshold=8.0,
+    )
+    mock_llm = AsyncMock()
+    mock_llm.complete.return_value = (
+        '[{"id": 0, "score": 7, "reason": "Good"}, '
+        '{"id": 1, "score": 9, "reason": "Great"}]'
+    )
+    items = [
+        ContentItem(title="A", url="https://a.com", source_id="t", full_text="text"),
+        ContentItem(title="B", url="https://b.com", source_id="t", full_text="text"),
+    ]
+
+    results = await filter_items(mock_llm, items, topic)
+    assert len(results) == 1
+    assert results[0].title == "B"
+
+    # Explicit threshold overrides
+    mock_llm.complete.return_value = (
+        '[{"id": 0, "score": 7, "reason": "Good"}, '
+        '{"id": 1, "score": 9, "reason": "Great"}]'
+    )
+    items2 = [
+        ContentItem(title="A", url="https://a.com", source_id="t", full_text="text"),
+        ContentItem(title="B", url="https://b.com", source_id="t", full_text="text"),
+    ]
+    results2 = await filter_items(mock_llm, items2, topic, threshold=5)
+    assert len(results2) == 2
+
+
+@pytest.mark.asyncio
+async def test_filter_items_two_pass(topic):
+    """With recent_events, filter_items runs both passes."""
+    from nexus.engine.knowledge.events import Event
+
+    mock_llm = AsyncMock()
+    # Pass 1 response: both articles relevant
+    pass1_response = '[{"id": 0, "score": 8, "reason": "Relevant"}, {"id": 1, "score": 7, "reason": "Relevant"}]'
+    # Pass 2 response: article 0 is novel+significant, article 1 is not novel
+    pass2_response = json.dumps([
+        {"id": 0, "significance": 8, "is_novel": True, "reason": "New development"},
+        {"id": 1, "significance": 3, "is_novel": False, "reason": "Already covered"},
+    ])
+    mock_llm.complete.side_effect = [pass1_response, pass2_response]
+
+    items = [
+        ContentItem(title="New AI breakthrough", url="https://a.com", source_id="t", full_text="Novel research"),
+        ContentItem(title="Old AI news", url="https://b.com", source_id="t", full_text="We already know this"),
+    ]
+
+    recent = [Event(date=date(2026, 3, 8), summary="Previous AI event", significance=7)]
+    results = await filter_items(mock_llm, items, topic, threshold=5, recent_events=recent)
+
+    # Article 0 passes (novel + significant), article 1 filtered (sig=3, not novel)
+    assert len(results) == 1
+    assert results[0].title == "New AI breakthrough"
+    # Two LLM calls: pass 1 batch + pass 2 batch
+    assert mock_llm.complete.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_score_significance_batch(topic):
+    mock_llm = AsyncMock()
+    mock_llm.complete.return_value = json.dumps([
+        {"id": 0, "significance": 9, "is_novel": True, "reason": "Major"},
+    ])
+
+    items = [ContentItem(title="A", url="https://a.com", source_id="t", full_text="text")]
+    results = await score_significance_batch(mock_llm, items, topic, "- [2026-03-08] Prior event")
+
+    assert len(results) == 1
+    assert results[0]["significance"] == 9
+    assert results[0]["is_novel"] is True
+
+
+def test_format_event_context():
+    from nexus.engine.knowledge.events import Event
+
+    events = [
+        Event(date=date(2026, 3, 8), summary="Event A", significance=7),
+        Event(date=date(2026, 3, 9), summary="Event B", significance=5),
+    ]
+    ctx = _format_event_context(events)
+    assert "Event A" in ctx
+    assert "Event B" in ctx
+    assert "2026-03-08" in ctx
+
+
+def test_format_event_context_empty():
+    assert _format_event_context([]) == ""

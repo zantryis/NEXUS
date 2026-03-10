@@ -49,6 +49,53 @@ def append_events(path: Path, new_events: list[Event]) -> None:
     save_events(path, existing)
 
 
+def is_duplicate_event(new: "Event", existing: "Event", entity_threshold: float = 0.6) -> bool:
+    """Check if new event is a duplicate of existing based on entity overlap + date proximity.
+
+    Returns True if >entity_threshold entity overlap on same date (±1 day).
+    """
+    if not new.entities or not existing.entities:
+        return False
+
+    # Date proximity: same day or adjacent
+    date_diff = abs((new.date - existing.date).days)
+    if date_diff > 1:
+        return False
+
+    # Entity overlap
+    new_set = {e.lower() for e in new.entities}
+    existing_set = {e.lower() for e in existing.entities}
+    if not new_set or not existing_set:
+        return False
+
+    overlap = len(new_set & existing_set)
+    max_possible = min(len(new_set), len(existing_set))
+    overlap_ratio = overlap / max_possible if max_possible > 0 else 0
+
+    return overlap_ratio >= entity_threshold
+
+
+def merge_events(target: "Event", source: "Event") -> "Event":
+    """Merge source event into target: combine sources and entities."""
+    # Add source's sources
+    existing_urls = {s.get("url") for s in target.sources}
+    for s in source.sources:
+        if s.get("url") not in existing_urls:
+            target.sources.append(s)
+
+    # Merge entities (deduplicated)
+    existing_entities = {e.lower() for e in target.entities}
+    for e in source.entities:
+        if e.lower() not in existing_entities:
+            target.entities.append(e)
+            existing_entities.add(e.lower())
+
+    # Keep higher significance
+    target.significance = max(target.significance, source.significance)
+
+    return target
+
+
 EXTRACT_SYSTEM_PROMPT = (
     "You extract structured event data from news articles. "
     "Given an article and topic context, output JSON with: "
@@ -65,17 +112,28 @@ async def extract_event(
     existing_events: list[Event],
 ) -> Optional[Event]:
     """Extract a structured event from a content item via LLM."""
+    # Wider event window: last 7 days, up to 30 events
     recent_context = ""
     if existing_events:
-        recent = existing_events[-10:]
+        from datetime import timedelta
+        cutoff = date.today() - timedelta(days=7)
+        recent = [e for e in existing_events if e.date >= cutoff][-30:]
         recent_context = "\n".join(
             f"- [{e.date}] {e.summary}" for e in recent
         )
+
+    # Language and source metadata for context
+    article_lang = item.detected_language or item.source_language or "unknown"
+    source_meta = ""
+    if item.source_affiliation or item.source_country:
+        source_meta = f"\nSource affiliation: {item.source_affiliation or 'unknown'}, Country: {item.source_country or 'unknown'}"
 
     user_prompt = (
         f"Topic: {topic.name}\n"
         f"Subtopics: {', '.join(topic.subtopics)}\n\n"
         f"Recent events:\n{recent_context or 'None yet'}\n\n"
+        f"Article language: {article_lang}{source_meta}\n"
+        f"Write the summary in English.\n\n"
         f"Article title: {item.title}\n"
         f"Article text: {(item.full_text or '')[:3000]}"
     )
@@ -95,8 +153,10 @@ async def extract_event(
             summary=data["summary"],
             sources=[{
                 "url": item.url,
-                "language": item.language or "en",
+                "language": item.detected_language or item.source_language or "en",
                 "outlet": item.source_id,
+                "affiliation": item.source_affiliation or "",
+                "country": item.source_country or "",
             }],
             entities=data.get("entities", []),
             relation_to_prior=data.get("relation_to_prior", ""),

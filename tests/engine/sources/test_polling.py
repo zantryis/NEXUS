@@ -35,6 +35,24 @@ def test_content_item_model():
     )
     assert item.title == "Test"
     assert item.full_text is None
+    assert item.extraction_status == "pending"
+    assert item.source_language is None
+    assert item.source_affiliation is None
+
+
+def test_content_item_with_source_metadata():
+    item = ContentItem(
+        title="Test",
+        url="https://example.com",
+        source_id="cgtn",
+        source_language="en",
+        source_affiliation="state",
+        source_country="CN",
+        source_tier="A",
+    )
+    assert item.source_affiliation == "state"
+    assert item.source_country == "CN"
+    assert item.source_language == "en"
 
 
 def test_poll_feed_parses_entries():
@@ -65,8 +83,8 @@ def test_poll_feed_handles_bad_feed():
 
 def test_poll_all_feeds():
     sources = [
-        {"url": "https://example.com/feed1", "id": "feed1"},
-        {"url": "https://example.com/feed2", "id": "feed2"},
+        {"url": "https://example.com/feed1", "id": "feed1", "language": "en", "tier": "A"},
+        {"url": "https://example.com/feed2", "id": "feed2", "language": "fa", "tier": "A"},
     ]
     with patch("nexus.engine.sources.polling.poll_feed") as mock_poll:
         mock_poll.side_effect = [
@@ -76,6 +94,39 @@ def test_poll_all_feeds():
         items = poll_all_feeds(sources)
         assert len(items) == 2
         assert mock_poll.call_count == 2
+
+
+def test_poll_all_feeds_passes_metadata():
+    """Verify source metadata flows from registry dict to poll_feed."""
+    sources = [
+        {
+            "url": "https://example.com/feed",
+            "id": "cgtn",
+            "language": "en",
+            "tier": "A",
+            "affiliation": "state",
+            "country": "CN",
+        },
+    ]
+    with patch("nexus.engine.sources.polling.feedparser.parse") as mock_parse:
+        mock_parse.return_value = MagicMock(
+            bozo=False,
+            entries=[
+                MagicMock(
+                    title="Article",
+                    link="https://cgtn.com/1",
+                    get=lambda k, d=None: "Summary" if k == "summary" else d,
+                    **{"published_parsed": None},
+                ),
+            ],
+        )
+        items = poll_all_feeds(sources)
+        assert len(items) == 1
+        assert items[0].source_language == "en"
+        assert items[0].source_affiliation == "state"
+        assert items[0].source_country == "CN"
+        assert items[0].source_tier == "A"
+        assert items[0].language == "en"
 
 
 def test_poll_all_feeds_skips_failed():

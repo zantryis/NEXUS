@@ -1,0 +1,90 @@
+"""Tests for fixture capture and replay."""
+
+from datetime import date, datetime
+from nexus.testing.fixtures import FixtureCapture, FixtureReplay, list_captured_days
+from nexus.engine.sources.polling import ContentItem
+from nexus.engine.knowledge.events import Event
+
+
+def test_capture_and_replay_roundtrip(tmp_path):
+    """Capture pipeline data and replay it — verifies serialization."""
+    fixture_dir = tmp_path / "fixtures"
+
+    # Capture
+    capture = FixtureCapture(fixture_dir, "iran-us-relations", "day-1")
+
+    items = [
+        ContentItem(
+            title="Sanctions article",
+            url="https://example.com/article",
+            source_id="nyt",
+            snippet="US sanctions...",
+            full_text="Full text about sanctions",
+            source_language="en",
+            source_affiliation="private",
+            source_country="US",
+            detected_language="en",
+            extraction_status="ok",
+            relevance_score=8.0,
+        ),
+    ]
+    events = [
+        Event(
+            date=date(2026, 3, 9),
+            summary="US announces new Iran sanctions",
+            entities=["US", "Iran", "Treasury"],
+            sources=[{"url": "https://example.com/article", "outlet": "nyt"}],
+            significance=8,
+        ),
+    ]
+
+    capture.save_polled(items)
+    capture.save_ingested(items)
+    capture.save_filtered(items)
+    capture.save_events(events)
+
+    # Replay
+    replay = FixtureReplay(fixture_dir, "iran-us-relations", "day-1")
+
+    polled = replay.load_polled()
+    assert len(polled) == 1
+    assert polled[0].title == "Sanctions article"
+    assert polled[0].source_affiliation == "private"
+
+    ingested = replay.load_ingested()
+    assert len(ingested) == 1
+    assert ingested[0].full_text == "Full text about sanctions"
+
+    loaded_events = replay.load_events()
+    assert len(loaded_events) == 1
+    assert loaded_events[0].summary == "US announces new Iran sanctions"
+    assert loaded_events[0].entities == ["US", "Iran", "Treasury"]
+
+
+def test_list_captured_days(tmp_path):
+    fixture_dir = tmp_path / "fixtures"
+    FixtureCapture(fixture_dir, "test-topic", "day-1")
+    FixtureCapture(fixture_dir, "test-topic", "day-2")
+
+    days = list_captured_days(fixture_dir, "test-topic")
+    assert days == ["day-1", "day-2"]
+
+
+def test_list_captured_days_empty(tmp_path):
+    assert list_captured_days(tmp_path / "fixtures", "nonexistent") == []
+
+
+def test_replay_missing_files(tmp_path):
+    """Replay with missing files returns empty lists."""
+    fixture_dir = tmp_path / "fixtures"
+    FixtureCapture(fixture_dir, "test-topic", "day-1")
+    replay = FixtureReplay(fixture_dir, "test-topic", "day-1")
+
+    # Dir exists but files haven't been written
+    # save_polled was not called, so polled.json doesn't exist
+    # Actually the capture creates the dir, let's test replay directly
+    empty_dir = fixture_dir / "empty-topic" / "day-1"
+    empty_dir.mkdir(parents=True)
+    replay2 = FixtureReplay(fixture_dir, "empty-topic", "day-1")
+    assert replay2.load_polled() == []
+    assert replay2.load_events() == []

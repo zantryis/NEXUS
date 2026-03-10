@@ -9,11 +9,25 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
+def _parse_models_override(args: list[str]) -> dict[str, str]:
+    """Parse --models-override key=value pairs from CLI args."""
+    overrides = {}
+    i = 0
+    while i < len(args):
+        if args[i] == "--models-override" and i + 1 < len(args):
+            key, _, value = args[i + 1].partition("=")
+            if key and value:
+                overrides[key] = value
+            i += 2
+        else:
+            i += 1
+    return overrides
+
+
 def run_engine():
     """Run the daily engine pipeline."""
     load_dotenv()
     from nexus.config.loader import load_config
-    from nexus.config.models import ModelsConfig
     from nexus.engine.pipeline import run_pipeline
     from nexus.llm.client import LLMClient
 
@@ -25,12 +39,25 @@ def run_engine():
         sys.exit(1)
 
     api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        print("GEMINI_API_KEY not set. Add it to .env")
+    anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+
+    if not api_key and not anthropic_api_key:
+        print("Set GEMINI_API_KEY or ANTHROPIC_API_KEY in .env")
         sys.exit(1)
 
     config = load_config(config_path)
-    llm = LLMClient(config.models, api_key=api_key)
+
+    # Apply model overrides from CLI
+    overrides = _parse_models_override(sys.argv)
+    if overrides:
+        for key, value in overrides.items():
+            if hasattr(config.models, key):
+                setattr(config.models, key, value)
+                print(f"  Model override: {key}={value}")
+            else:
+                print(f"  Warning: unknown model key '{key}'")
+
+    llm = LLMClient(config.models, api_key=api_key, anthropic_api_key=anthropic_api_key)
 
     briefing_path = asyncio.run(run_pipeline(config, llm, data_dir))
     print(f"Briefing generated: {briefing_path}")
@@ -111,6 +138,59 @@ def run_sources():
         sys.exit(1)
 
 
+def run_evaluate():
+    """Evaluate synthesis quality via LLM judge."""
+    load_dotenv()
+    import yaml
+    from nexus.engine.synthesis.knowledge import TopicSynthesis
+    from nexus.engine.evaluation.judge import judge_synthesis, compare_syntheses
+    from nexus.config.models import ModelsConfig
+    from nexus.llm.client import LLMClient
+
+    api_key = os.getenv("GEMINI_API_KEY")
+    anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key and not anthropic_api_key:
+        print("Set GEMINI_API_KEY or ANTHROPIC_API_KEY in .env")
+        sys.exit(1)
+
+    models = ModelsConfig()
+    overrides = _parse_models_override(sys.argv)
+    for key, value in overrides.items():
+        if hasattr(models, key):
+            setattr(models, key, value)
+
+    llm = LLMClient(models, api_key=api_key, anthropic_api_key=anthropic_api_key)
+
+    subcommand = sys.argv[2] if len(sys.argv) > 2 else ""
+
+    if subcommand == "synthesis":
+        if len(sys.argv) < 4:
+            print("Usage: python -m nexus evaluate synthesis <path-to-synthesis.yaml>")
+            sys.exit(1)
+        path = Path(sys.argv[3])
+        raw = yaml.safe_load(path.read_text())
+        synthesis = TopicSynthesis(**raw)
+        scores = asyncio.run(judge_synthesis(llm, synthesis))
+        print(yaml.dump(scores, default_flow_style=False))
+
+    elif subcommand == "compare":
+        if len(sys.argv) < 5:
+            print("Usage: python -m nexus evaluate compare <synthesis-A.yaml> <synthesis-B.yaml>")
+            sys.exit(1)
+        path_a, path_b = Path(sys.argv[3]), Path(sys.argv[4])
+        syn_a = TopicSynthesis(**yaml.safe_load(path_a.read_text()))
+        syn_b = TopicSynthesis(**yaml.safe_load(path_b.read_text()))
+        result = asyncio.run(compare_syntheses(
+            llm, syn_a, syn_b,
+            label_a=path_a.stem, label_b=path_b.stem,
+        ))
+        print(yaml.dump(result, default_flow_style=False))
+
+    else:
+        print("Usage: python -m nexus evaluate <synthesis|compare> [args...]")
+        sys.exit(1)
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -118,7 +198,7 @@ def main():
     )
 
     if len(sys.argv) < 2:
-        print("Usage: python -m nexus <engine|sources|setup>")
+        print("Usage: python -m nexus <engine|sources|evaluate|setup>")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -127,6 +207,8 @@ def main():
         run_engine()
     elif command == "sources":
         run_sources()
+    elif command == "evaluate":
+        run_evaluate()
     elif command == "setup":
         print("Setup wizard not yet implemented.")
     else:

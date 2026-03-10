@@ -21,9 +21,25 @@ class ContentItem(BaseModel):
     full_text: Optional[str] = None
     language: Optional[str] = None
     relevance_score: Optional[float] = None
+    # Source metadata (populated from registry)
+    source_language: Optional[str] = None
+    source_affiliation: Optional[str] = None
+    source_country: Optional[str] = None
+    source_tier: Optional[str] = None
+    # Post-ingestion metadata
+    detected_language: Optional[str] = None
+    extraction_status: str = "pending"
+    extraction_error: Optional[str] = None
 
 
-def poll_feed(url: str, source_id: str) -> list[ContentItem]:
+def poll_feed(
+    url: str,
+    source_id: str,
+    source_language: Optional[str] = None,
+    source_affiliation: Optional[str] = None,
+    source_country: Optional[str] = None,
+    source_tier: Optional[str] = None,
+) -> list[ContentItem]:
     """Fetch and parse a single RSS feed. Returns empty list on failure."""
     feed = feedparser.parse(url)
     if feed.bozo and not feed.entries:
@@ -42,14 +58,26 @@ def poll_feed(url: str, source_id: str) -> list[ContentItem]:
             source_id=source_id,
             snippet=entry.get("summary", ""),
             published=published,
+            language=source_language,
+            source_language=source_language,
+            source_affiliation=source_affiliation,
+            source_country=source_country,
+            source_tier=source_tier,
         ))
     return items
 
 
 def poll_all_feeds(sources: list[dict]) -> list[ContentItem]:
-    """Poll all feeds from a list of source dicts with 'url' and 'id' keys."""
+    """Poll all feeds from a list of source dicts."""
     all_items = []
     for source in sources:
-        items = poll_feed(source["url"], source["id"])
+        items = poll_feed(
+            source["url"],
+            source["id"],
+            source_language=source.get("language"),
+            source_affiliation=source.get("affiliation"),
+            source_country=source.get("country"),
+            source_tier=source.get("tier"),
+        )
         all_items.extend(items)
     return all_items
