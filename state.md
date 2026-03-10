@@ -1,18 +1,22 @@
 # Session State
 
 ## Current Phase
-Phase 0: Project Scaffolding
+Phase 1 complete (engine core, text only)
+
+## What's Built
+- Config: Pydantic models + YAML loader
+- LLM: Async Gemini client with config_key routing
+- Source polling: feedparser RSS, ContentItem model
+- Ingestion: trafilatura article extraction
+- Filtering: LLM relevance scoring per topic
+- Knowledge layer: Event extraction, YAML persistence, weekly compression
+- Synthesis: Context assembly + attributed briefing generation
+- Pipeline orchestrator: polls → ingests → filters → events → briefing
+- CLI: `python -m nexus engine`
+- 38 passing tests (all mocked)
 
 ## Next Steps
-1. Init git repo
-2. Create pyproject.toml with uv
-3. Set up project directory structure
-4. Build Pydantic config models
-5. Build config YAML loader
-6. Build LLM abstraction layer
-7. Create CLI entry point
-
-## Completed
-- Design review complete
-- claude.md populated
-- Build plan agreed
+1. Create real source registries for test topics
+2. Run pipeline with real Gemini API against real feeds
+3. Evaluate briefing quality, iterate on prompts
+4. Add topic backfill (web search for new topics)
