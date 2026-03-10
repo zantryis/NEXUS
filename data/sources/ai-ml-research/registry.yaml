@@ -1,0 +1,24 @@
+sources:
+  - id: "arxiv-cs-ai"
+    type: rss
+    url: "https://rss.arxiv.org/rss/cs.AI"
+    tier: A
+    language: en
+
+  - id: "techcrunch-ai"
+    type: rss
+    url: "https://techcrunch.com/category/artificial-intelligence/feed/"
+    tier: B
+    language: en
+
+  - id: "the-verge-ai"
+    type: rss
+    url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"
+    tier: B
+    language: en
+
+  - id: "ars-technica-ai"
+    type: rss
+    url: "https://feeds.arstechnica.com/arstechnica/technology-lab"
+    tier: B
+    language: en

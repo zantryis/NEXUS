@@ -8,6 +8,10 @@ Agentic news compiler. Self-hosted, model-agnostic, chat-first. Full spec: desig
 - Use git: commit at meaningful milestones with descriptive messages
 - Session state: read `state.md` at start, update concisely at end
 - Keep claude.md under 60 lines
+- Time accounting: before any long-running task (live pipeline, bulk API calls), estimate
+  wall-clock time and confirm with user. Break into smaller runs if >5 min.
+- Lightweight tests: use mocks/fixtures for LLM and network calls. Integration tests that
+  hit real APIs must be marked `@pytest.mark.integration` and skipped by default.
 
 ## LLM Usage (Development)
 - Fast/cheap: `gemini-3-flash-preview` (filtering, scoring, relevance)
@@ -37,6 +41,7 @@ data/               # Runtime data (gitignored except examples)
 tests/              # Mirrors src structure
 ```
 
-## Current Phase: 0 → 1 (Engine, text only)
-Steps: scaffolding → config → LLM layer → source polling → ingestion → filtering → knowledge layer → synthesis
+## Current Phase: 1 complete → 2 next
+Phase 1 done: config, LLM layer, polling, ingestion, batch filtering, knowledge (events), synthesis
+Next: knowledge compression (weekly/monthly rollups), scheduling, source health
 Deferred: audio, Telegram agent, PWA, breaking news, source discovery

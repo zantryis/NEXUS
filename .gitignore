@@ -7,5 +7,4 @@ dist/
 .venv/
 data/knowledge/
 data/artifacts/
-data/sources/
 data/config.yaml

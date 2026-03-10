@@ -1,0 +1,30 @@
+sources:
+  - id: "aljazeera"
+    type: rss
+    url: "https://www.aljazeera.com/xml/rss/all.xml"
+    tier: A
+    language: en
+
+  - id: "bbc-world"
+    type: rss
+    url: "https://feeds.bbci.co.uk/news/world/rss.xml"
+    tier: A
+    language: en
+
+  - id: "nyt-middleeast"
+    type: rss
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/MiddleEast.xml"
+    tier: A
+    language: en
+
+  - id: "guardian-world"
+    type: rss
+    url: "https://www.theguardian.com/world/rss"
+    tier: A
+    language: en
+
+  - id: "google-news-iran-us"
+    type: rss
+    url: "https://news.google.com/rss/search?q=iran+us+relations&hl=en-US&gl=US&ceid=US:en"
+    tier: B
+    language: en
