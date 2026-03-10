@@ -14,6 +14,11 @@ def test_resolve_anthropic():
     assert _resolve_provider("claude-opus-4-6") == "anthropic"
 
 
+def test_resolve_deepseek():
+    assert _resolve_provider("deepseek-chat") == "deepseek"
+    assert _resolve_provider("deepseek-reasoner") == "deepseek"
+
+
 def test_resolve_unknown():
     with pytest.raises(ValueError, match="Unknown model provider"):
         _resolve_provider("gpt-4o")

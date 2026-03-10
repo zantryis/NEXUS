@@ -1,4 +1,4 @@
-"""Provider-agnostic LLM client. Supports Gemini and Anthropic."""
+"""Provider-agnostic LLM client. Supports Gemini, Anthropic, and DeepSeek."""
 
 import logging
 from typing import Optional
@@ -14,6 +14,8 @@ def _resolve_provider(model_name: str) -> str:
         return "gemini"
     elif model_name.startswith("claude"):
         return "anthropic"
+    elif model_name.startswith("deepseek"):
+        return "deepseek"
     else:
         raise ValueError(f"Unknown model provider for: {model_name}")
 
@@ -24,10 +26,12 @@ class LLMClient:
         models_config: ModelsConfig,
         api_key: Optional[str] = None,
         anthropic_api_key: Optional[str] = None,
+        deepseek_api_key: Optional[str] = None,
     ):
         self._config = models_config
         self._gemini_client = None
         self._anthropic_client = None
+        self._deepseek_client = None
 
         # Lazy-init Gemini
         if api_key:
@@ -38,6 +42,14 @@ class LLMClient:
         if anthropic_api_key:
             import anthropic
             self._anthropic_client = anthropic.AsyncAnthropic(api_key=anthropic_api_key)
+
+        # Lazy-init DeepSeek (OpenAI-compatible)
+        if deepseek_api_key:
+            from openai import AsyncOpenAI
+            self._deepseek_client = AsyncOpenAI(
+                api_key=deepseek_api_key,
+                base_url="https://api.deepseek.com",
+            )
 
     def resolve_model(self, config_key: str) -> str:
         """Look up model name from config key (e.g. 'filtering' -> 'gemini-3-flash-preview')."""
@@ -60,6 +72,8 @@ class LLMClient:
             return await self._complete_gemini(model, system_prompt, user_prompt, json_response)
         elif provider == "anthropic":
             return await self._complete_anthropic(model, system_prompt, user_prompt, json_response)
+        elif provider == "deepseek":
+            return await self._complete_deepseek(model, system_prompt, user_prompt, json_response)
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -100,3 +114,26 @@ class LLMClient:
             messages=[{"role": "user", "content": user_prompt}],
         )
         return response.content[0].text
+
+    async def _complete_deepseek(
+        self, model: str, system_prompt: str, user_prompt: str, json_response: bool
+    ) -> str:
+        if not self._deepseek_client:
+            raise RuntimeError("DeepSeek client not initialized — set DEEPSEEK_API_KEY")
+
+        effective_system = system_prompt
+        if json_response:
+            effective_system += "\n\nIMPORTANT: Respond with valid JSON only. No markdown, no explanation."
+
+        kwargs = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": effective_system},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        if json_response:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        response = await self._deepseek_client.chat.completions.create(**kwargs)
+        return response.choices[0].message.content

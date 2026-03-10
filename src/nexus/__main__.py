@@ -40,9 +40,10 @@ def run_engine():
 
     api_key = os.getenv("GEMINI_API_KEY")
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+    deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
 
-    if not api_key and not anthropic_api_key:
-        print("Set GEMINI_API_KEY or ANTHROPIC_API_KEY in .env")
+    if not api_key and not anthropic_api_key and not deepseek_api_key:
+        print("Set GEMINI_API_KEY, ANTHROPIC_API_KEY, or DEEPSEEK_API_KEY in .env")
         sys.exit(1)
 
     config = load_config(config_path)
@@ -57,10 +58,26 @@ def run_engine():
             else:
                 print(f"  Warning: unknown model key '{key}'")
 
-    llm = LLMClient(config.models, api_key=api_key, anthropic_api_key=anthropic_api_key)
+    llm = LLMClient(
+        config.models, api_key=api_key,
+        anthropic_api_key=anthropic_api_key,
+        deepseek_api_key=deepseek_api_key,
+    )
 
-    briefing_path = asyncio.run(run_pipeline(config, llm, data_dir))
-    print(f"Briefing generated: {briefing_path}")
+    do_capture = "--capture" in sys.argv
+    do_backtest = "--backtest" in sys.argv
+
+    if do_backtest:
+        from nexus.engine.pipeline import run_backtest
+        label = None
+        if "--label" in sys.argv:
+            idx = sys.argv.index("--label")
+            if idx + 1 < len(sys.argv):
+                label = sys.argv[idx + 1]
+        asyncio.run(run_backtest(config, llm, data_dir, label=label))
+    else:
+        briefing_path = asyncio.run(run_pipeline(config, llm, data_dir, capture=do_capture))
+        print(f"Briefing generated: {briefing_path}")
 
 
 def run_sources():
@@ -149,8 +166,9 @@ def run_evaluate():
 
     api_key = os.getenv("GEMINI_API_KEY")
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key and not anthropic_api_key:
-        print("Set GEMINI_API_KEY or ANTHROPIC_API_KEY in .env")
+    deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
+    if not api_key and not anthropic_api_key and not deepseek_api_key:
+        print("Set GEMINI_API_KEY, ANTHROPIC_API_KEY, or DEEPSEEK_API_KEY in .env")
         sys.exit(1)
 
     models = ModelsConfig()
@@ -159,7 +177,11 @@ def run_evaluate():
         if hasattr(models, key):
             setattr(models, key, value)
 
-    llm = LLMClient(models, api_key=api_key, anthropic_api_key=anthropic_api_key)
+    llm = LLMClient(
+        models, api_key=api_key,
+        anthropic_api_key=anthropic_api_key,
+        deepseek_api_key=deepseek_api_key,
+    )
 
     subcommand = sys.argv[2] if len(sys.argv) > 2 else ""
 

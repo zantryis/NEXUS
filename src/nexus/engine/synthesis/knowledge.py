@@ -142,6 +142,10 @@ async def synthesize_topic(
         )
         data = json.loads(response)
 
+        # Handle LLM returning a list of threads directly instead of {"threads": [...]}
+        if isinstance(data, list):
+            data = {"threads": data}
+
         threads = []
         for t in data.get("threads", []):
             # Map event indices to actual events

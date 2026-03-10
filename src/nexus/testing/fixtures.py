@@ -12,6 +12,8 @@ from typing import Optional
 
 import yaml
 
+from collections import defaultdict
+
 from nexus.engine.sources.polling import ContentItem
 from nexus.engine.knowledge.events import Event
 
@@ -40,6 +42,12 @@ class FixtureCapture:
     def save_events(self, events: list[Event]) -> None:
         data = [e.model_dump(mode="json") for e in events]
         (self.dir / "events.json").write_text(json.dumps(data, indent=2, default=str))
+
+    def save_synthesis(self, synthesis) -> None:
+        """Save TopicSynthesis to YAML."""
+        (self.dir / "synthesis.yaml").write_text(
+            yaml.dump(synthesis.model_dump(), default_flow_style=False, allow_unicode=True)
+        )
 
     def save_llm_responses(self, responses: list[dict]) -> None:
         (self.dir / "llm_responses.json").write_text(json.dumps(responses, indent=2, default=str))
@@ -88,3 +96,15 @@ def list_captured_days(fixture_dir: Path, topic_slug: str) -> list[str]:
     if not topic_dir.exists():
         return []
     return sorted(d.name for d in topic_dir.iterdir() if d.is_dir())
+
+
+def partition_by_date(items: list[ContentItem]) -> dict[date, list[ContentItem]]:
+    """Group ContentItems by published date. Items without published date use today."""
+    groups: dict[date, list[ContentItem]] = defaultdict(list)
+    for item in items:
+        if item.published:
+            day = item.published.date() if hasattr(item.published, "date") else item.published
+        else:
+            day = date.today()
+        groups[day].append(item)
+    return dict(sorted(groups.items()))
