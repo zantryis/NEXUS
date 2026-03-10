@@ -46,7 +46,19 @@ async def concatenate_audio(
         silence = AudioSegment.silent(duration=silence_ms)
 
         for i, seg_bytes in enumerate(segments):
-            segment = AudioSegment.from_wav(io.BytesIO(seg_bytes))
+            try:
+                # Try WAV first
+                segment = AudioSegment.from_wav(io.BytesIO(seg_bytes))
+            except Exception:
+                try:
+                    # Gemini TTS returns raw PCM (24kHz, 16-bit, mono)
+                    segment = AudioSegment.from_raw(
+                        io.BytesIO(seg_bytes),
+                        sample_width=2, frame_rate=24000, channels=1,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to decode segment {i}: {e}")
+                    continue
             if i > 0:
                 combined += silence
             combined += segment

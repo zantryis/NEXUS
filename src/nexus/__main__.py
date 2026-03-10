@@ -100,7 +100,10 @@ def run_engine():
 
         asyncio.run(run_backtest(config, llm, data_dir, label=label, max_days=max_days))
     else:
-        briefing_path = asyncio.run(run_pipeline(config, llm, data_dir, capture=do_capture))
+        briefing_path = asyncio.run(run_pipeline(
+            config, llm, data_dir, capture=do_capture,
+            gemini_api_key=api_key,
+        ))
         print(f"Briefing generated: {briefing_path}")
 
 
