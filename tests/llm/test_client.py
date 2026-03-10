@@ -32,7 +32,7 @@ async def test_complete_calls_gemini(client):
     mock_response.text = "Test response"
 
     with patch.object(
-        client._client.models, "generate_content", new_callable=AsyncMock
+        client._client.aio.models, "generate_content", new_callable=AsyncMock
     ) as mock_gen:
         mock_gen.return_value = mock_response
         result = await client.complete(
@@ -50,7 +50,7 @@ async def test_complete_with_json_response(client):
     mock_response.text = '{"score": 8, "reason": "Highly relevant"}'
 
     with patch.object(
-        client._client.models, "generate_content", new_callable=AsyncMock
+        client._client.aio.models, "generate_content", new_callable=AsyncMock
     ) as mock_gen:
         mock_gen.return_value = mock_response
         result = await client.complete(

@@ -31,7 +31,7 @@ class LLMClient:
         if json_response:
             config.response_mime_type = "application/json"
 
-        response = await self._client.models.generate_content(
+        response = await self._client.aio.models.generate_content(
             model=model,
             contents=user_prompt,
             config=config,

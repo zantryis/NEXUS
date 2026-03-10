@@ -88,6 +88,8 @@ async def extract_event(
             json_response=True,
         )
         data = json.loads(response)
+        if isinstance(data, list):
+            data = data[0] if data else {}
         return Event(
             date=date.fromisoformat(data["date"]),
             summary=data["summary"],
@@ -100,6 +102,6 @@ async def extract_event(
             relation_to_prior=data.get("relation_to_prior", ""),
             significance=int(data.get("significance", 5)),
         )
-    except (json.JSONDecodeError, KeyError, ValueError) as e:
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
         logger.warning(f"Failed to extract event from {item.url}: {e}")
         return None

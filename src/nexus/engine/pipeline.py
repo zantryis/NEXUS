@@ -52,10 +52,16 @@ async def run_topic_pipeline(
     relevant = await filter_items(llm, ingested, topic)
     logger.info(f"[{topic.name}] {len(relevant)} passed relevance filter")
 
-    # Extract events
+    # Extract events — cap at top 20 by relevance to keep pipeline fast
+    MAX_EVENTS_PER_TOPIC = 20
+    top_relevant = sorted(
+        relevant, key=lambda x: x.relevance_score or 0, reverse=True
+    )[:MAX_EVENTS_PER_TOPIC]
+    logger.info(f"[{topic.name}] Extracting events for top {len(top_relevant)} articles")
+
     existing_events = load_events(knowledge_dir / "events.yaml")
     new_events = []
-    for item in relevant:
+    for item in top_relevant:
         event = await extract_event(llm, item, topic, existing_events + new_events)
         if event:
             new_events.append(event)

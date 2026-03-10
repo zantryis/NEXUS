@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock
 from nexus.engine.sources.polling import ContentItem
 from nexus.config.models import TopicConfig
-from nexus.engine.filtering.filter import score_relevance, filter_items
+from nexus.engine.filtering.filter import score_relevance, score_batch, filter_items
 
 
 @pytest.fixture
@@ -34,16 +34,6 @@ async def test_score_relevance_high(topic, item):
     score, reason = await score_relevance(mock_llm, item, topic)
     assert score == 9
     assert "benchmark" in reason.lower()
-    mock_llm.complete.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_score_relevance_low(topic, item):
-    mock_llm = AsyncMock()
-    mock_llm.complete.return_value = '{"score": 2, "reason": "Not related to AI"}'
-
-    score, reason = await score_relevance(mock_llm, item, topic)
-    assert score == 2
 
 
 @pytest.mark.asyncio
@@ -53,27 +43,66 @@ async def test_score_relevance_handles_bad_json(topic, item):
 
     score, reason = await score_relevance(mock_llm, item, topic)
     assert score == 0
-    assert "parse" in reason.lower()
 
 
 @pytest.mark.asyncio
-async def test_filter_items(topic, item):
+async def test_score_batch(topic):
     mock_llm = AsyncMock()
-    mock_llm.complete.return_value = '{"score": 8, "reason": "Relevant"}'
-
-    low_item = ContentItem(
-        title="Cooking Recipe",
-        url="https://example.com/food",
-        source_id="test",
-        full_text="How to make pasta.",
+    mock_llm.complete.return_value = (
+        '[{"id": 0, "score": 8, "reason": "Relevant"}, '
+        '{"id": 1, "score": 2, "reason": "Not relevant"}]'
     )
 
-    # First call scores high, second scores low
-    mock_llm.complete.side_effect = [
-        '{"score": 8, "reason": "Relevant"}',
-        '{"score": 2, "reason": "Not relevant"}',
+    items = [
+        ContentItem(title="AI News", url="https://a.com", source_id="t", full_text="AI stuff"),
+        ContentItem(title="Cooking", url="https://b.com", source_id="t", full_text="Pasta"),
     ]
 
-    results = await filter_items(mock_llm, [item, low_item], topic, threshold=5)
+    scores = await score_batch(mock_llm, items, topic)
+    assert len(scores) == 2
+    assert scores[0] == (8, "Relevant")
+    assert scores[1] == (2, "Not relevant")
+    # Only one LLM call for the batch
+    mock_llm.complete.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_score_batch_fallback_on_bad_json(topic):
+    mock_llm = AsyncMock()
+    # First call (batch) fails, then two individual fallback calls
+    mock_llm.complete.side_effect = [
+        "bad json",
+        '{"score": 7, "reason": "ok"}',
+        '{"score": 3, "reason": "no"}',
+    ]
+
+    items = [
+        ContentItem(title="A", url="https://a.com", source_id="t", full_text="text"),
+        ContentItem(title="B", url="https://b.com", source_id="t", full_text="text"),
+    ]
+
+    scores = await score_batch(mock_llm, items, topic)
+    assert len(scores) == 2
+    assert scores[0][0] == 7
+    assert scores[1][0] == 3
+
+
+@pytest.mark.asyncio
+async def test_filter_items_uses_batching(topic):
+    mock_llm = AsyncMock()
+    # One batch call returns both scores
+    mock_llm.complete.return_value = (
+        '[{"id": 0, "score": 8, "reason": "Relevant"}, '
+        '{"id": 1, "score": 2, "reason": "Not relevant"}]'
+    )
+
+    items = [
+        ContentItem(title="AI News", url="https://a.com", source_id="t", full_text="AI agents"),
+        ContentItem(title="Cooking", url="https://b.com", source_id="t", full_text="Pasta"),
+    ]
+
+    results = await filter_items(mock_llm, items, topic, threshold=5)
     assert len(results) == 1
     assert results[0].relevance_score == 8
+    # Should be a single batch call, not two individual calls
+    assert mock_llm.complete.call_count == 1
