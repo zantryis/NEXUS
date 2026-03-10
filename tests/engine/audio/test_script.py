@@ -88,7 +88,7 @@ async def test_generate_dialogue_script():
     config = _make_config()
     syntheses = _make_synthesis()
 
-    script = await generate_dialogue_script(llm, config, syntheses)
+    script = await generate_dialogue_script(llm, config, syntheses, report_date=date(2026, 3, 10))
 
     assert isinstance(script, DialogueScript)
     assert len(script.turns) == 4
@@ -98,6 +98,11 @@ async def test_generate_dialogue_script():
     call_kwargs = llm.complete.call_args
     assert call_kwargs.kwargs["config_key"] == "dialogue_script"
     assert call_kwargs.kwargs["json_response"] is True
+    # Verify date and host names are in the system prompt
+    system_prompt = call_kwargs.kwargs["system_prompt"]
+    assert "March 10, 2026" in system_prompt
+    assert "Nova" in system_prompt
+    assert "Atlas" in system_prompt
 
 
 async def test_generate_dialogue_script_includes_context():

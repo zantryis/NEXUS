@@ -1,11 +1,12 @@
 """Tests for briefing delivery."""
 
 import pytest
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 from pathlib import Path
 
 from nexus.agent.delivery import (
-    split_message, _md_to_telegram_html,
+    split_message, _md_to_telegram_html, _get_topic_emoji,
     deliver_briefing, deliver_breaking_alert,
     MAX_MESSAGE_LENGTH,
 )
@@ -33,20 +34,62 @@ def test_split_at_paragraph():
 
 def test_md_to_html_headers():
     text = "## Iran-US Relations\nSome content"
-    result = _md_to_telegram_html(text)
-    assert "<b>Iran-US Relations</b>" in result
+    result = _md_to_telegram_html(text, report_date=date(2026, 3, 10))
+    assert "<b>IRAN-US RELATIONS</b>" in result
     assert "Some content" in result
 
 
+def test_md_to_html_double_headers():
+    """The ## ## bug from LLM output should be cleaned up."""
+    text = "## ## Double Header\nContent"
+    result = _md_to_telegram_html(text, report_date=date(2026, 3, 10))
+    assert "<b>DOUBLE HEADER</b>" in result
+    # Should not have leftover ## in output
+    assert "## ##" not in result
+
+
+def test_md_to_html_sub_headers():
+    text = "### Operation Details\nContent"
+    result = _md_to_telegram_html(text, report_date=date(2026, 3, 10))
+    assert "<b>" in result
+    assert "Operation Details" in result
+
+
 def test_md_to_html_bold():
-    result = _md_to_telegram_html("**bold text**")
+    result = _md_to_telegram_html("**bold text**", report_date=date(2026, 3, 10))
     assert "<b>bold text</b>" in result
 
 
 def test_md_to_html_escapes_html():
-    result = _md_to_telegram_html("1 < 2 & 3 > 1")
+    result = _md_to_telegram_html("1 < 2 & 3 > 1", report_date=date(2026, 3, 10))
     assert "&lt;" in result
     assert "&amp;" in result
+
+
+def test_md_to_html_bullets():
+    result = _md_to_telegram_html("*   Item one\n*   Item two", report_date=date(2026, 3, 10))
+    assert "\u2022 Item one" in result
+    assert "\u2022 Item two" in result
+
+
+def test_md_to_html_newsletter_header():
+    result = _md_to_telegram_html("Hello", report_date=date(2026, 3, 10))
+    assert "NEXUS DAILY BRIEFING" in result
+    assert "March 10, 2026" in result
+
+
+def test_md_to_html_section_separators():
+    text = "## AI Research\nContent here"
+    result = _md_to_telegram_html(text, report_date=date(2026, 3, 10))
+    assert "\u2501" in result  # horizontal bar separator
+
+
+def test_get_topic_emoji():
+    assert _get_topic_emoji("Iran-US Relations") == "\U0001f30d"
+    assert _get_topic_emoji("AI/ML Research") == "\U0001f916"
+    assert _get_topic_emoji("Formula 1") == "\U0001f3ce\ufe0f"
+    assert _get_topic_emoji("Global Energy Transition") == "\u26a1"
+    assert _get_topic_emoji("Unknown Topic") == "\U0001f4cc"
 
 
 async def test_deliver_briefing_text_only():
@@ -64,6 +107,9 @@ async def test_deliver_briefing_multi_message():
     result = await deliver_briefing(bot, 123, long_text)
     assert result is True
     assert bot.send_message.call_count > 1
+    # Check page indicators present
+    last_call = bot.send_message.call_args_list[-1]
+    assert ")" in last_call.kwargs["text"]  # page number indicator
 
 
 async def test_deliver_briefing_with_audio(tmp_path):
@@ -75,6 +121,10 @@ async def test_deliver_briefing_with_audio(tmp_path):
     assert result is True
     bot.send_message.assert_called_once()
     bot.send_audio.assert_called_once()
+    # Check podcast branding
+    audio_kwargs = bot.send_audio.call_args.kwargs
+    assert "Nexus Report" in audio_kwargs["title"]
+    assert "Nova" in audio_kwargs["performer"]
 
 
 async def test_deliver_briefing_failure():

@@ -3,6 +3,7 @@
 import html
 import logging
 import re
+from datetime import date
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -10,23 +11,65 @@ logger = logging.getLogger(__name__)
 # Telegram message limit
 MAX_MESSAGE_LENGTH = 4096
 
+# Topic → emoji mapping for newsletter section headers
+_TOPIC_EMOJIS = {
+    "executive summary": "\U0001f4cb",
+    "iran": "\U0001f30d",
+    "energy": "\u26a1",
+    "ai": "\U0001f916",
+    "formula": "\U0001f3ce\ufe0f",
+    "climate": "\U0001f331",
+    "tech": "\U0001f4bb",
+    "economy": "\U0001f4c8",
+    "defense": "\U0001f6e1\ufe0f",
+    "politics": "\U0001f3db\ufe0f",
+    "china": "\U0001f1e8\U0001f1f3",
+    "russia": "\U0001f1f7\U0001f1fa",
+    "space": "\U0001f680",
+}
 
-def _md_to_telegram_html(text: str) -> str:
-    """Convert markdown briefing to Telegram-friendly HTML.
 
-    Telegram supports: <b>, <i>, <code>, <pre>, <a href="">.
+def _get_topic_emoji(header: str) -> str:
+    """Match a topic header to an emoji."""
+    header_lower = header.lower()
+    for keyword, emoji in _TOPIC_EMOJIS.items():
+        if keyword in header_lower:
+            return emoji
+    return "\U0001f4cc"
+
+
+def _md_to_telegram_html(text: str, report_date: date | None = None) -> str:
+    """Convert markdown briefing to Telegram newsletter HTML.
+
+    Produces a clean, readable newsletter format with visual section
+    separators, topic emojis, proper bullet points, and bold/italic/links.
     """
-    # Escape HTML entities in the raw text first
+    # Escape HTML entities first
     text = html.escape(text)
 
-    # Headers: ## Title → bold
-    text = re.sub(r'^#{1,3}\s+(.+)$', r'<b>\1</b>', text, flags=re.MULTILINE)
+    # Fix double headers: ## ## Topic → ## Topic (require space between hash groups)
+    text = re.sub(r'^(#{1,3})\s+#{1,3}\s+', r'\1 ', text, flags=re.MULTILINE)
+
+    # Convert markdown bullet points (* item) to bullet character
+    text = re.sub(r'^\*\s{1,4}', '\u2022 ', text, flags=re.MULTILINE)
+
+    # Sub-headers (### ...) → bold with arrow, no separator
+    def _format_sub(m):
+        return f"\n<b>\u25b8 {m.group(1)}</b>"
+    text = re.sub(r'^###\s+(.+)$', _format_sub, text, flags=re.MULTILINE)
+
+    # Main section headers (## ...) → emoji + separator + UPPERCASE
+    def _format_section(m):
+        header_text = m.group(1).strip()
+        emoji = _get_topic_emoji(header_text)
+        return f"\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n{emoji}  <b>{header_text.upper()}</b>\n"
+    text = re.sub(r'^##\s+(.+)$', _format_section, text, flags=re.MULTILINE)
 
     # Bold: **text** or __text__
     text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
     text = re.sub(r'__(.+?)__', r'<b>\1</b>', text)
 
-    # Italic: *text* or _text_ (but not inside bold tags)
+    # Italic: *text* or _text_ (not inside bold tags)
     text = re.sub(r'(?<!\w)\*([^*]+?)\*(?!\w)', r'<i>\1</i>', text)
     text = re.sub(r'(?<!\w)_([^_]+?)_(?!\w)', r'<i>\1</i>', text)
 
@@ -40,11 +83,20 @@ def _md_to_telegram_html(text: str) -> str:
         return f'<a href="{url}">{link_text}</a>'
     text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', _fix_link, text)
 
-    # Bullet points: keep as-is (Telegram renders them fine as plain text)
-    # Horizontal rules: --- → newline
+    # Remove horizontal rules (---)
     text = re.sub(r'^-{3,}$', '', text, flags=re.MULTILINE)
 
-    return text.strip()
+    # Clean up excessive blank lines
+    text = re.sub(r'\n{3,}', '\n\n', text)
+
+    # Add newsletter header
+    if report_date is None:
+        report_date = date.today()
+    date_str = report_date.strftime("%B %d, %Y")
+    header = f"\U0001f4f0  <b>NEXUS DAILY BRIEFING</b>\n<i>{date_str}</i>\n"
+
+    text = header + "\n" + text.strip()
+    return text
 
 
 def split_message(text: str, max_length: int = MAX_MESSAGE_LENGTH) -> list[str]:
@@ -92,14 +144,18 @@ async def deliver_briefing(
     Returns True if delivery succeeded.
     """
     try:
-        # Convert markdown to Telegram HTML
+        # Convert markdown to Telegram HTML newsletter
         html_text = _md_to_telegram_html(briefing_text)
 
         # Split into chunks
         chunks = split_message(html_text)
-        logger.info(f"Sending briefing in {len(chunks)} message(s)")
+        total = len(chunks)
+        logger.info(f"Sending briefing in {total} message(s)")
 
         for i, chunk in enumerate(chunks):
+            # Add page indicator for multi-part briefings
+            if total > 1:
+                chunk = f"{chunk}\n\n<i>({i + 1}/{total})</i>"
             try:
                 await bot.send_message(
                     chat_id=chat_id,
@@ -121,8 +177,8 @@ async def deliver_briefing(
                 await bot.send_audio(
                     chat_id=chat_id,
                     audio=f,
-                    title=f"Nexus Briefing — {audio_path.stem}",
-                    performer="Nexus Intelligence",
+                    title=f"The Nexus Report \u2014 {audio_path.stem}",
+                    performer="Nova & Atlas",
                 )
 
         logger.info(f"Briefing delivered to chat {chat_id}")

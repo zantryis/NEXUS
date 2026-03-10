@@ -40,7 +40,8 @@ async def main():
     text = briefing_path.read_text()
     audio = audio_path if audio_path.exists() else None
 
-    logger.info(f"Delivering briefing ({len(text)} chars) + audio ({audio.stat().st_size // 1024}KB) to {chat_id}")
+    audio_info = f"{audio.stat().st_size // 1024}KB" if audio else "none"
+    logger.info(f"Delivering briefing ({len(text)} chars) + audio ({audio_info}) to {chat_id}")
     success = await deliver_briefing(bot, chat_id, text, audio)
     logger.info(f"{'Success' if success else 'Failed'}!")
 

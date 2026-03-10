@@ -1,0 +1,16 @@
+.git
+.venv
+.env
+.pytest_cache
+__pycache__
+*.pyc
+data/artifacts/
+data/knowledge.db*
+data/evaluation/
+data/config.yaml
+tests/
+docs/
+scripts/
+*.md
+.claude/
+.vscode/

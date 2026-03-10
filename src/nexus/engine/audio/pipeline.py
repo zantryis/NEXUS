@@ -20,6 +20,7 @@ async def run_audio_pipeline(
     syntheses: list[TopicSynthesis],
     data_dir: Path,
     gemini_api_key: str | None = None,
+    report_date: date | None = None,
 ) -> Path | None:
     """Run the full audio pipeline: script → TTS → MP3.
 
@@ -28,9 +29,12 @@ async def run_audio_pipeline(
     if not config.audio.enabled:
         return None
 
+    if report_date is None:
+        report_date = date.today()
+
     # 1. Generate dialogue script
     logger.info("Generating dialogue script...")
-    script = await generate_dialogue_script(llm, config, syntheses)
+    script = await generate_dialogue_script(llm, config, syntheses, report_date=report_date)
 
     if not script.turns:
         logger.warning("Dialogue script has no turns, skipping audio.")
@@ -54,7 +58,7 @@ async def run_audio_pipeline(
         return None
 
     # 3. Concatenate and export
-    today = date.today().isoformat()
+    today = report_date.isoformat()
     output_path = data_dir / "artifacts" / "audio" / f"{today}.mp3"
     logger.info(f"Concatenating {len(segments)} segments → {output_path}")
 
