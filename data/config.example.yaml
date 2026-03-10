@@ -1,0 +1,41 @@
+user:
+  name: "Tristan"
+  timezone: "America/Denver"
+  output_language: "en"
+
+briefing:
+  schedule: "06:00"
+  format: "two-host-dialogue"
+  style: "analytical"
+  depth: "detailed"
+
+topics:
+  - name: "Iran-US Relations"
+    priority: high
+    subtopics: ["sanctions", "nuclear program", "regional proxies"]
+    source_languages: ["en", "fa"]
+    perspective_diversity: high
+
+  - name: "Renewable Energy Policy"
+    priority: medium
+    subtopics: ["US IRA implementation", "EU green deal", "grid storage"]
+    source_languages: ["en", "de"]
+    perspective_diversity: medium
+
+  - name: "AI/ML Research"
+    priority: low
+    subtopics: ["agents", "benchmarks", "open source models"]
+    source_languages: ["en"]
+    perspective_diversity: low
+
+models:
+  filtering: "gemini-3-flash-preview"
+  synthesis: "gemini-3.1-pro-preview"
+  knowledge_summary: "gemini-3-flash-preview"
+
+sources:
+  global_feeds:
+    - "https://feeds.reuters.com/reuters/topNews"
+    - "https://www.aljazeera.com/xml/rss/all.xml"
+  discover_new_sources: true
+  discovery_interval_days: 7
