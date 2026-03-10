@@ -1,61 +1,75 @@
 sources:
-- id: aljazeera-en
-  language: en
-  tier: A
-  type: rss
-  url: https://www.aljazeera.com/xml/rss/all.xml
-- id: bbc-middleeast
-  language: en
-  tier: A
-  type: rss
-  url: https://feeds.bbci.co.uk/news/world/middle_east/rss.xml
-- id: guardian-middleeast
-  language: en
-  tier: A
-  type: rss
-  url: https://www.theguardian.com/world/middleeast/rss
-- id: nyt-middleeast
-  language: en
-  tier: A
-  type: rss
-  url: https://rss.nytimes.com/services/xml/rss/nyt/MiddleEast.xml
-- id: bbc-persian
-  language: fa
-  tier: A
-  type: rss
-  url: https://feeds.bbci.co.uk/persian/rss.xml
-- id: bbc-world
-  language: en
-  tier: A
-  type: rss
-  url: https://feeds.bbci.co.uk/news/world/rss.xml
-- id: guardian-world
-  language: en
-  tier: A
-  type: rss
-  url: https://www.theguardian.com/world/rss
-- id: nyt-world
-  language: en
-  tier: A
-  type: rss
-  url: https://rss.nytimes.com/services/xml/rss/nyt/World.xml
-- id: france24-en
-  language: en
-  tier: A
-  type: rss
-  url: https://www.france24.com/en/rss
-- id: rfi-en
-  language: en
-  tier: A
-  type: rss
-  url: https://www.rfi.fr/en/rss
-- id: middleeasteye
-  language: en
-  tier: B
-  type: rss
-  url: https://www.middleeasteye.net/rss
-- id: dawn-pakistan
-  language: en
-  tier: B
-  type: rss
-  url: https://www.dawn.com/feeds/home
+  # Western private media
+  - id: nyt-middleeast
+    type: rss
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/MiddleEast.xml"
+    tier: A
+    language: en
+  - id: guardian-middleeast
+    type: rss
+    url: "https://www.theguardian.com/world/middleeast/rss"
+    tier: A
+    language: en
+  - id: haaretz
+    type: rss
+    url: "https://www.haaretz.com/srv/haaretz-latest-headlines"
+    tier: A
+    language: en
+  # Western public broadcasters
+  - id: bbc-middleeast
+    type: rss
+    url: "https://feeds.bbci.co.uk/news/world/middle_east/rss.xml"
+    tier: A
+    language: en
+  - id: france24-en
+    type: rss
+    url: "https://www.france24.com/en/rss"
+    tier: A
+    language: en
+  # Qatari state media
+  - id: aljazeera-en
+    type: rss
+    url: "https://www.aljazeera.com/xml/rss/all.xml"
+    tier: A
+    language: en
+  # Regional independent
+  - id: middleeasteye
+    type: rss
+    url: "https://www.middleeasteye.net/rss"
+    tier: A
+    language: en
+  # Turkish state media
+  - id: anadolu-en
+    type: rss
+    url: "https://www.aa.com.tr/en/rss/default?cat=world"
+    tier: A
+    language: en
+  # Russian state media
+  - id: tass-en
+    type: rss
+    url: "https://tass.com/rss/v2.xml"
+    tier: A
+    language: en
+  # Chinese state media
+  - id: cgtn
+    type: rss
+    url: "https://www.cgtn.com/subscribe/rss/section/world.xml"
+    tier: A
+    language: en
+  # Non-English: Farsi (Iranian domestic perspective via public broadcaster)
+  - id: bbc-persian
+    type: rss
+    url: "https://feeds.bbci.co.uk/persian/rss.xml"
+    tier: A
+    language: fa
+  # Non-English: Arabic (regional Arab perspective)
+  - id: aljazeera-ar
+    type: rss
+    url: "https://www.aljazeera.net/aljazeerarss/a7c186be-1baa-4bd4-9d80-a84db769f779/73d0e1b4-532f-45ef-b135-bfdeb769ecf0"
+    tier: A
+    language: ar
+  - id: bbc-arabic
+    type: rss
+    url: "https://feeds.bbci.co.uk/arabic/rss.xml"
+    tier: A
+    language: ar

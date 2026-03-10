@@ -13,13 +13,23 @@ logger = logging.getLogger(__name__)
 
 
 class GlobalSource(BaseModel):
-    """A source in the global registry."""
+    """A source in the global registry.
+
+    Affiliations:
+        state    — government-controlled editorial (CGTN, RT, TASS, Anadolu)
+        public   — publicly funded, editorially independent (BBC, NHK, DW)
+        private  — corporate/private ownership (NYT, Guardian, SCMP)
+        nonprofit — NGO or nonprofit (Carbon Brief)
+        academic — academic institution (arXiv)
+    """
     id: str
     name: str
     url: str
     language: str = "en"
     tier: str = "A"
     tags: list[str] = Field(default_factory=list)
+    affiliation: str = "private"
+    country: str = ""
 
 
 def load_global_registry(path: Path) -> list[GlobalSource]:

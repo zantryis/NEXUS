@@ -62,6 +62,19 @@ def test_load_global_registry(registry_path):
     assert sources[0].id == "bbc-world"
     assert sources[0].language == "en"
     assert "world" in sources[0].tags
+    # Defaults for affiliation/country
+    assert sources[0].affiliation == "private"
+    assert sources[0].country == ""
+
+
+def test_affiliation_and_country():
+    s = GlobalSource(
+        id="cgtn", name="CGTN", url="https://cgtn.com/rss",
+        language="en", tier="A", tags=["world"],
+        affiliation="state", country="CN",
+    )
+    assert s.affiliation == "state"
+    assert s.country == "CN"
 
 
 def test_load_global_registry_missing_file(tmp_path):

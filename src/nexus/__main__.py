@@ -103,7 +103,8 @@ def run_sources():
 
     elif subcommand == "list":
         for s in sources:
-            print(f"  [{s.language}] {s.tier} {s.id:25s} {','.join(s.tags)}")
+            affil = f"{s.affiliation}/{s.country}" if s.country else s.affiliation
+            print(f"  [{s.language}] {s.tier} {affil:12s} {s.id:25s} {','.join(s.tags)}")
 
     else:
         print(f"Unknown subcommand: {subcommand}. Use: check, build, list")
