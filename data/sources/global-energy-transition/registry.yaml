@@ -1,30 +1,36 @@
 sources:
-  - id: "guardian-energy"
-    type: rss
-    url: "https://www.theguardian.com/environment/energy/rss"
-    tier: A
-    language: en
-
-  - id: "carbon-brief"
-    type: rss
-    url: "https://www.carbonbrief.org/feed"
-    tier: B
-    language: en
-
-  - id: "cleanup-energy"
-    type: rss
-    url: "https://cleantechnica.com/feed/"
-    tier: B
-    language: en
-
-  - id: "bbc-science"
-    type: rss
-    url: "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"
-    tier: B
-    language: en
-
-  - id: "nyt-energy"
-    type: rss
-    url: "https://rss.nytimes.com/services/xml/rss/nyt/EnergyEnvironment.xml"
-    tier: A
-    language: en
+- id: guardian-energy
+  language: en
+  tier: A
+  type: rss
+  url: https://www.theguardian.com/environment/energy/rss
+- id: bbc-science
+  language: en
+  tier: A
+  type: rss
+  url: https://feeds.bbci.co.uk/news/science_and_environment/rss.xml
+- id: bbc-business
+  language: en
+  tier: A
+  type: rss
+  url: https://feeds.bbci.co.uk/news/business/rss.xml
+- id: nyt-energy
+  language: en
+  tier: A
+  type: rss
+  url: https://rss.nytimes.com/services/xml/rss/nyt/EnergyEnvironment.xml
+- id: carbon-brief
+  language: en
+  tier: A
+  type: rss
+  url: https://www.carbonbrief.org/feed
+- id: cleantechnica
+  language: en
+  tier: B
+  type: rss
+  url: https://cleantechnica.com/feed/
+- id: energy-monitor
+  language: en
+  tier: B
+  type: rss
+  url: https://www.energymonitor.ai/feed/

@@ -1,0 +1,259 @@
+# Global source registry — curated, verified RSS feeds.
+# All feeds tested and returning entries as of 2026-03-09.
+# Tags are freeform; used by `sources_for_topic()` to match topics.
+
+sources:
+  # ── Wire / Major (English) ──────────────────────────
+  - id: bbc-world
+    name: "BBC World News"
+    url: "https://feeds.bbci.co.uk/news/world/rss.xml"
+    language: en
+    tier: A
+    tags: [world, politics]
+
+  - id: bbc-middleeast
+    name: "BBC Middle East"
+    url: "https://feeds.bbci.co.uk/news/world/middle_east/rss.xml"
+    language: en
+    tier: A
+    tags: [middle-east, conflict, iran]
+
+  - id: bbc-science
+    name: "BBC Science & Environment"
+    url: "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"
+    language: en
+    tier: A
+    tags: [science, energy, climate]
+
+  - id: bbc-tech
+    name: "BBC Technology"
+    url: "https://feeds.bbci.co.uk/news/technology/rss.xml"
+    language: en
+    tier: A
+    tags: [tech, ai]
+
+  - id: bbc-business
+    name: "BBC Business"
+    url: "https://feeds.bbci.co.uk/news/business/rss.xml"
+    language: en
+    tier: A
+    tags: [business, energy, markets]
+
+  - id: aljazeera-en
+    name: "Al Jazeera English"
+    url: "https://www.aljazeera.com/xml/rss/all.xml"
+    language: en
+    tier: A
+    tags: [world, middle-east, politics, conflict]
+
+  - id: guardian-world
+    name: "The Guardian World"
+    url: "https://www.theguardian.com/world/rss"
+    language: en
+    tier: A
+    tags: [world, politics]
+
+  - id: guardian-middleeast
+    name: "The Guardian Middle East"
+    url: "https://www.theguardian.com/world/middleeast/rss"
+    language: en
+    tier: A
+    tags: [middle-east, conflict, iran]
+
+  - id: guardian-energy
+    name: "The Guardian Energy"
+    url: "https://www.theguardian.com/environment/energy/rss"
+    language: en
+    tier: A
+    tags: [energy, climate, renewables]
+
+  - id: guardian-tech
+    name: "The Guardian Technology"
+    url: "https://www.theguardian.com/technology/rss"
+    language: en
+    tier: A
+    tags: [tech, ai]
+
+  - id: nyt-world
+    name: "New York Times World"
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"
+    language: en
+    tier: A
+    tags: [world, politics]
+
+  - id: nyt-middleeast
+    name: "New York Times Middle East"
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/MiddleEast.xml"
+    language: en
+    tier: A
+    tags: [middle-east, conflict, iran]
+
+  - id: nyt-energy
+    name: "New York Times Energy & Environment"
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/EnergyEnvironment.xml"
+    language: en
+    tier: A
+    tags: [energy, climate, policy]
+
+  - id: nyt-tech
+    name: "New York Times Technology"
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml"
+    language: en
+    tier: A
+    tags: [tech, ai]
+
+  - id: france24-en
+    name: "France 24 English"
+    url: "https://www.france24.com/en/rss"
+    language: en
+    tier: A
+    tags: [world, politics, europe, africa]
+
+  - id: rfi-en
+    name: "RFI English"
+    url: "https://www.rfi.fr/en/rss"
+    language: en
+    tier: A
+    tags: [world, africa, politics]
+
+  # ── Tech / AI ───────────────────────────────────────
+  - id: arxiv-cs-ai
+    name: "arXiv CS.AI"
+    url: "https://rss.arxiv.org/rss/cs.AI"
+    language: en
+    tier: A
+    tags: [ai, research]
+
+  - id: techcrunch-ai
+    name: "TechCrunch AI"
+    url: "https://techcrunch.com/category/artificial-intelligence/feed/"
+    language: en
+    tier: B
+    tags: [ai, tech, startups]
+
+  - id: verge-ai
+    name: "The Verge AI"
+    url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"
+    language: en
+    tier: B
+    tags: [ai, tech]
+
+  - id: ars-technica
+    name: "Ars Technica"
+    url: "https://feeds.arstechnica.com/arstechnica/technology-lab"
+    language: en
+    tier: B
+    tags: [tech, ai, science]
+
+  - id: mit-tech-review
+    name: "MIT Technology Review"
+    url: "https://www.technologyreview.com/feed/"
+    language: en
+    tier: A
+    tags: [ai, tech, research]
+
+  - id: wired
+    name: "WIRED"
+    url: "https://www.wired.com/feed/rss"
+    language: en
+    tier: B
+    tags: [tech, ai, science]
+
+  # ── Energy / Climate ────────────────────────────────
+  - id: carbon-brief
+    name: "Carbon Brief"
+    url: "https://www.carbonbrief.org/feed"
+    language: en
+    tier: A
+    tags: [climate, energy, policy]
+
+  - id: cleantechnica
+    name: "CleanTechnica"
+    url: "https://cleantechnica.com/feed/"
+    language: en
+    tier: B
+    tags: [energy, evs, renewables]
+
+  - id: energy-monitor
+    name: "Energy Monitor"
+    url: "https://www.energymonitor.ai/feed/"
+    language: en
+    tier: B
+    tags: [energy, markets, policy]
+
+  # ── Middle East / Geopolitics ───────────────────────
+  - id: middleeasteye
+    name: "Middle East Eye"
+    url: "https://www.middleeasteye.net/rss"
+    language: en
+    tier: B
+    tags: [middle-east, conflict, politics]
+
+  - id: dawn-pakistan
+    name: "Dawn (Pakistan)"
+    url: "https://www.dawn.com/feeds/home"
+    language: en
+    tier: B
+    tags: [south-asia, world, politics]
+
+  # ── Non-English: Farsi ──────────────────────────────
+  - id: bbc-persian
+    name: "BBC Persian"
+    url: "https://feeds.bbci.co.uk/persian/rss.xml"
+    language: fa
+    tier: A
+    tags: [world, middle-east, iran]
+
+  # ── Non-English: Arabic ─────────────────────────────
+  - id: aljazeera-ar
+    name: "Al Jazeera Arabic"
+    url: "https://www.aljazeera.net/aljazeerarss/a7c186be-1baa-4bd4-9d80-a84db769f779/73d0e1b4-532f-45ef-b135-bfdeb769ecf0"
+    language: ar
+    tier: A
+    tags: [world, middle-east, politics]
+
+  - id: bbc-arabic
+    name: "BBC Arabic"
+    url: "https://feeds.bbci.co.uk/arabic/rss.xml"
+    language: ar
+    tier: A
+    tags: [world, middle-east]
+
+  - id: dw-arabic
+    name: "Deutsche Welle Arabic"
+    url: "https://rss.dw.com/xml/rss-ar-all"
+    language: ar
+    tier: A
+    tags: [world, middle-east]
+
+  # ── Non-English: French ─────────────────────────────
+  - id: lemonde
+    name: "Le Monde"
+    url: "https://www.lemonde.fr/rss/une.xml"
+    language: fr
+    tier: A
+    tags: [world, europe, politics]
+
+  # ── Non-English: Spanish ────────────────────────────
+  - id: bbc-mundo
+    name: "BBC Mundo"
+    url: "https://feeds.bbci.co.uk/mundo/rss.xml"
+    language: es
+    tier: A
+    tags: [world, americas]
+
+  # ── Non-English: German ─────────────────────────────
+  - id: dw-german
+    name: "Deutsche Welle German"
+    url: "https://rss.dw.com/xml/rss-de-all"
+    language: de
+    tier: A
+    tags: [world, europe]
+
+  # ── Non-English: Chinese ────────────────────────────
+  - id: bbc-chinese
+    name: "BBC Chinese"
+    url: "https://feeds.bbci.co.uk/zhongwen/simp/rss.xml"
+    language: zh
+    tier: A
+    tags: [world, china, asia]

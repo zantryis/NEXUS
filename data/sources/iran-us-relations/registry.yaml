@@ -1,30 +1,61 @@
 sources:
-  - id: "aljazeera"
-    type: rss
-    url: "https://www.aljazeera.com/xml/rss/all.xml"
-    tier: A
-    language: en
-
-  - id: "bbc-world"
-    type: rss
-    url: "https://feeds.bbci.co.uk/news/world/rss.xml"
-    tier: A
-    language: en
-
-  - id: "nyt-middleeast"
-    type: rss
-    url: "https://rss.nytimes.com/services/xml/rss/nyt/MiddleEast.xml"
-    tier: A
-    language: en
-
-  - id: "guardian-world"
-    type: rss
-    url: "https://www.theguardian.com/world/rss"
-    tier: A
-    language: en
-
-  - id: "google-news-iran-us"
-    type: rss
-    url: "https://news.google.com/rss/search?q=iran+us+relations&hl=en-US&gl=US&ceid=US:en"
-    tier: B
-    language: en
+- id: aljazeera-en
+  language: en
+  tier: A
+  type: rss
+  url: https://www.aljazeera.com/xml/rss/all.xml
+- id: bbc-middleeast
+  language: en
+  tier: A
+  type: rss
+  url: https://feeds.bbci.co.uk/news/world/middle_east/rss.xml
+- id: guardian-middleeast
+  language: en
+  tier: A
+  type: rss
+  url: https://www.theguardian.com/world/middleeast/rss
+- id: nyt-middleeast
+  language: en
+  tier: A
+  type: rss
+  url: https://rss.nytimes.com/services/xml/rss/nyt/MiddleEast.xml
+- id: bbc-persian
+  language: fa
+  tier: A
+  type: rss
+  url: https://feeds.bbci.co.uk/persian/rss.xml
+- id: bbc-world
+  language: en
+  tier: A
+  type: rss
+  url: https://feeds.bbci.co.uk/news/world/rss.xml
+- id: guardian-world
+  language: en
+  tier: A
+  type: rss
+  url: https://www.theguardian.com/world/rss
+- id: nyt-world
+  language: en
+  tier: A
+  type: rss
+  url: https://rss.nytimes.com/services/xml/rss/nyt/World.xml
+- id: france24-en
+  language: en
+  tier: A
+  type: rss
+  url: https://www.france24.com/en/rss
+- id: rfi-en
+  language: en
+  tier: A
+  type: rss
+  url: https://www.rfi.fr/en/rss
+- id: middleeasteye
+  language: en
+  tier: B
+  type: rss
+  url: https://www.middleeasteye.net/rss
+- id: dawn-pakistan
+  language: en
+  tier: B
+  type: rss
+  url: https://www.dawn.com/feeds/home

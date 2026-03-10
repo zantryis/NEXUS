@@ -1,24 +1,46 @@
 sources:
-  - id: "arxiv-cs-ai"
-    type: rss
-    url: "https://rss.arxiv.org/rss/cs.AI"
-    tier: A
-    language: en
-
-  - id: "techcrunch-ai"
-    type: rss
-    url: "https://techcrunch.com/category/artificial-intelligence/feed/"
-    tier: B
-    language: en
-
-  - id: "the-verge-ai"
-    type: rss
-    url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"
-    tier: B
-    language: en
-
-  - id: "ars-technica-ai"
-    type: rss
-    url: "https://feeds.arstechnica.com/arstechnica/technology-lab"
-    tier: B
-    language: en
+- id: mit-tech-review
+  language: en
+  tier: A
+  type: rss
+  url: https://www.technologyreview.com/feed/
+- id: bbc-tech
+  language: en
+  tier: A
+  type: rss
+  url: https://feeds.bbci.co.uk/news/technology/rss.xml
+- id: guardian-tech
+  language: en
+  tier: A
+  type: rss
+  url: https://www.theguardian.com/technology/rss
+- id: nyt-tech
+  language: en
+  tier: A
+  type: rss
+  url: https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml
+- id: arxiv-cs-ai
+  language: en
+  tier: A
+  type: rss
+  url: https://rss.arxiv.org/rss/cs.AI
+- id: techcrunch-ai
+  language: en
+  tier: B
+  type: rss
+  url: https://techcrunch.com/category/artificial-intelligence/feed/
+- id: verge-ai
+  language: en
+  tier: B
+  type: rss
+  url: https://www.theverge.com/rss/ai-artificial-intelligence/index.xml
+- id: ars-technica
+  language: en
+  tier: B
+  type: rss
+  url: https://feeds.arstechnica.com/arstechnica/technology-lab
+- id: wired
+  language: en
+  tier: B
+  type: rss
+  url: https://www.wired.com/feed/rss
