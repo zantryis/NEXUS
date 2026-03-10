@@ -1,13 +1,39 @@
+# Secrets
 .env
+
+# Python
 __pycache__/
 *.pyc
-.pytest_cache/
+*.pyo
 *.egg-info/
 dist/
+build/
 .venv/
-data/knowledge/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+tests/fixtures/*/
+
+# Runtime data (user-specific)
+data/config.yaml
+data/knowledge.db
+data/knowledge.db-shm
+data/knowledge.db-wal
 data/artifacts/
 data/backtest/
 data/metrics/
-data/config.yaml
-tests/fixtures/*/
+data/knowledge/
+data/evaluation/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

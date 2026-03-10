@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ slug }} — Nexus{% endblock %}
+{% block content %}
+<h2>{{ slug }}</h2>
+
+{% if backstory %}
+<p><a href="/pages/backstory:{{ slug }}">Backstory</a></p>
+{% endif %}
+
+{% if active_threads %}
+<section>
+    <h3>Active Threads</h3>
+    {% for t in active_threads %}
+    <article class="thread-card">
+        <a href="/threads/{{ t.slug }}">{{ t.headline }}</a>
+        <small>
+            <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
+            sig: {{ t.significance }}
+        </small>
+    </article>
+    {% endfor %}
+</section>
+{% endif %}
+
+{% if recent_events %}
+<section>
+    <h3>Recent Events (7 days)</h3>
+    {% for e in recent_events %}
+    <div class="event-row">
+        <small>{{ e.date }}</small>
+        {{ e.summary }}
+        <small class="sig">sig: {{ e.significance }}</small>
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
+
+{% if filter_stats and filter_stats.get('total', 0) > 0 %}
+<p><a href="/filters/{{ slug }}/{{ today }}">Filter log</a>:
+    {{ filter_stats.get('accepted', 0) }} accepted,
+    {{ filter_stats.total - filter_stats.get('accepted', 0) }} rejected
+</p>
+{% endif %}
+
+<p><a href="/entities/?topic={{ slug }}">View entities</a></p>
+{% endblock %}

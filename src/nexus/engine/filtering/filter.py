@@ -8,6 +8,7 @@ Two-pass filtering:
 
 import json
 import logging
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Optional
 
@@ -47,6 +48,13 @@ PASS2_SYSTEM_PROMPT = (
 )
 
 PASS2_BATCH_SIZE = 5  # Smaller batches — more text per article
+
+
+@dataclass
+class FilterResult:
+    """Result of filter_items() — accepted items + full decision log."""
+    accepted: list[ContentItem] = field(default_factory=list)
+    log_entries: list[dict] = field(default_factory=list)
 
 
 async def score_relevance(
@@ -258,15 +266,43 @@ async def filter_items(
     topic: TopicConfig,
     threshold: float | None = None,
     recent_events: Optional[list] = None,
-) -> list[ContentItem]:
+) -> FilterResult:
     """Two-pass filter: relevance batch → significance+novelty with context.
 
     Pass 1: Batch relevance scoring against topic (cheap, uses topic.filter_threshold).
     Pass 2: Significance + novelty for survivors (uses full text + event context).
 
-    Items that pass both passes get a composite score stored in relevance_score.
+    Returns FilterResult with accepted items and full decision log for all items.
     """
     effective_threshold = threshold if threshold is not None else topic.filter_threshold
+    slug = topic.name.lower().replace(" ", "-").replace("/", "-")
+    today = date.today().isoformat()
+
+    # Track all items through the pipeline
+    log_entries: list[dict] = []
+
+    # Initialize log entry for every item
+    item_logs: dict[str, dict] = {}
+    for item in items:
+        entry = {
+            "run_date": today,
+            "topic_slug": slug,
+            "url": item.url,
+            "title": item.title or "",
+            "source_id": item.source_id or "",
+            "source_affiliation": item.source_affiliation or "",
+            "source_country": item.source_country or "",
+            "relevance_score": None,
+            "relevance_reason": "",
+            "passed_pass1": False,
+            "significance_score": None,
+            "is_novel": None,
+            "significance_reason": "",
+            "passed_pass2": None,
+            "final_score": None,
+            "outcome": "rejected_relevance",
+        }
+        item_logs[item.url] = entry
 
     # --- Pass 1: Relevance ---
     pass1_results = []
@@ -276,20 +312,32 @@ async def filter_items(
 
         for item, (score, reason) in zip(batch, scores):
             item.relevance_score = score
+            log = item_logs[item.url]
+            log["relevance_score"] = score
+            log["relevance_reason"] = reason
+
             if score >= effective_threshold:
+                log["passed_pass1"] = True
                 pass1_results.append(item)
             else:
+                log["outcome"] = "rejected_relevance"
                 logger.debug(f"Pass 1 filtered out (score={score}): {item.title}")
 
     logger.info(f"Pass 1: {len(pass1_results)}/{len(items)} passed relevance filter (threshold={effective_threshold})")
 
     if not pass1_results:
-        return []
+        log_entries = list(item_logs.values())
+        return FilterResult(accepted=[], log_entries=log_entries)
 
     # --- Pass 2: Significance + Novelty (only if we have events for context) ---
     if recent_events is None:
-        # No event context available — skip pass 2, return pass 1 results
-        return pass1_results
+        # No event context available — skip pass 2, mark pass1 survivors as accepted
+        for item in pass1_results:
+            log = item_logs[item.url]
+            log["final_score"] = item.relevance_score
+            log["outcome"] = "accepted"
+        log_entries = list(item_logs.values())
+        return FilterResult(accepted=pass1_results, log_entries=log_entries)
 
     event_context = _format_event_context(recent_events)
     pass2_results = []
@@ -301,6 +349,12 @@ async def filter_items(
         for item, assessment in zip(batch, assessments):
             sig = assessment["significance"]
             is_novel = assessment["is_novel"]
+            reason = assessment.get("reason", "")
+
+            log = item_logs[item.url]
+            log["significance_score"] = sig
+            log["is_novel"] = is_novel
+            log["significance_reason"] = reason
 
             # Composite score: relevance (from pass 1) weighted with significance
             # Novel articles get a boost
@@ -311,11 +365,27 @@ async def filter_items(
 
             # Keep if significance >= 4 or novel
             if sig >= 4 or is_novel:
+                log["passed_pass2"] = True
+                log["final_score"] = item.relevance_score
                 pass2_results.append(item)
             else:
+                log["passed_pass2"] = False
+                log["outcome"] = "rejected_significance"
                 logger.debug(f"Pass 2 filtered out (sig={sig}, novel={is_novel}): {item.title}")
 
     logger.info(f"Pass 2: {len(pass2_results)}/{len(pass1_results)} passed significance+novelty filter")
 
     # --- Perspective diversity selection ---
-    return apply_perspective_diversity(pass2_results, topic)
+    selected = apply_perspective_diversity(pass2_results, topic)
+
+    # Mark diversity-rejected items
+    selected_urls = {item.url for item in selected}
+    for item in pass2_results:
+        log = item_logs[item.url]
+        if item.url in selected_urls:
+            log["outcome"] = "accepted"
+        else:
+            log["outcome"] = "rejected_diversity"
+
+    log_entries = list(item_logs.values())
+    return FilterResult(accepted=selected, log_entries=log_entries)

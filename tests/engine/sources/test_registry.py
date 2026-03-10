@@ -7,6 +7,7 @@ from nexus.engine.sources.registry import (
     load_global_registry,
     sources_for_topic,
     check_feed_health,
+    build_topic_registry,
 )
 from nexus.config.models import TopicConfig
 
@@ -146,6 +147,29 @@ def test_check_feed_health_with_mock(monkeypatch):
     result = check_feed_health(source)
     assert result["status"] == "ok"
     assert result["entries"] == 10
+
+
+def test_build_topic_registry_includes_metadata():
+    """build_topic_registry must propagate affiliation and country."""
+    sources = [
+        GlobalSource(
+            id="aljazeera", name="Al Jazeera", url="https://aljazeera.com/rss",
+            language="en", tier="A", tags=["world"],
+            affiliation="state", country="QA",
+        ),
+        GlobalSource(
+            id="bbc-world", name="BBC World", url="https://bbc.com/rss",
+            language="en", tier="A", tags=["world"],
+            affiliation="public", country="GB",
+        ),
+    ]
+    registry = build_topic_registry(sources)
+    entries = registry["sources"]
+    assert len(entries) == 2
+    assert entries[0]["affiliation"] == "state"
+    assert entries[0]["country"] == "QA"
+    assert entries[1]["affiliation"] == "public"
+    assert entries[1]["country"] == "GB"
 
 
 def test_check_feed_health_failure(monkeypatch):

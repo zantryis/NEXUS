@@ -87,7 +87,65 @@ async def test_extract_event(topic):
         language="en",
     )
 
-    event = await extract_event(mock_llm, item, topic, existing_events=[])
+    event = await extract_event(mock_llm, item, topic, existing_events=[],
+                                current_date=date(2026, 3, 10))
     assert event.summary == "Researchers release new benchmark"
     assert event.significance == 8
     assert event.sources[0]["url"] == "https://example.com/bench"
+    assert event.date == date(2026, 3, 9)
+
+
+@pytest.mark.asyncio
+async def test_extract_event_clamps_future_date(topic):
+    """LLM returns a future date — it gets clamped to current_date."""
+    mock_llm = AsyncMock()
+    mock_llm.complete.return_value = '''{
+        "date": "2026-04-15",
+        "summary": "Speculative future event",
+        "entities": ["Iran"],
+        "relation_to_prior": "",
+        "significance": 7
+    }'''
+
+    item = ContentItem(
+        title="Analysis",
+        url="https://example.com/analysis",
+        source_id="test-feed",
+        full_text="Next month, negotiations will...",
+        language="en",
+    )
+
+    event = await extract_event(mock_llm, item, topic, existing_events=[],
+                                current_date=date(2026, 3, 10))
+    assert event is not None
+    assert event.date == date(2026, 3, 10)  # Clamped to current_date
+
+
+@pytest.mark.asyncio
+async def test_extract_event_passes_date_to_prompt(topic):
+    """Verify current_date appears in the system prompt sent to LLM."""
+    mock_llm = AsyncMock()
+    mock_llm.complete.return_value = '''{
+        "date": "2026-03-10",
+        "summary": "Test event",
+        "entities": [],
+        "significance": 5
+    }'''
+
+    item = ContentItem(
+        title="Test",
+        url="https://example.com/test",
+        source_id="test-feed",
+        full_text="Test article text",
+        language="en",
+    )
+
+    await extract_event(mock_llm, item, topic, existing_events=[],
+                        current_date=date(2026, 3, 10))
+
+    call_args = mock_llm.complete.call_args
+    system_prompt = call_args.kwargs.get("system_prompt", call_args[1].get("system_prompt", ""))
+    user_prompt = call_args.kwargs.get("user_prompt", call_args[1].get("user_prompt", ""))
+
+    assert "2026-03-10" in system_prompt
+    assert "2026-03-10" in user_prompt

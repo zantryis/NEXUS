@@ -59,13 +59,18 @@ def _format_synthesis_for_judge(synthesis: TopicSynthesis) -> str:
         if thread.convergence:
             parts.append("Convergence:")
             for c in thread.convergence:
-                parts.append(f"  - {c}")
+                if isinstance(c, dict):
+                    sources = ", ".join(c.get("confirmed_by", []))
+                    parts.append(f"  - {c.get('fact', '?')} (confirmed by: {sources})")
+                else:
+                    parts.append(f"  - {c}")
 
         if thread.divergence:
             parts.append("Divergence:")
             for d in thread.divergence:
+                shared = d.get("shared_event", d.get("claim", "?"))
                 parts.append(
-                    f"  - {d.get('claim', '?')}: "
+                    f"  - {shared}: "
                     f"{d.get('source_a', '?')} vs {d.get('source_b', '?')}"
                 )
 

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Nexus — Today's Feed{% endblock %}
+{% block content %}
+<h2>{{ today }}</h2>
+
+{% if source_balance %}
+<p class="source-balance">
+    {% for affil, count in source_balance.items() %}
+    <span class="badge badge-{{ affil }}">{{ count }} {{ affil }}</span>
+    {% endfor %}
+</p>
+{% endif %}
+
+{% if active_threads %}
+<section>
+    <h3>Active Threads</h3>
+    {% for t in active_threads %}
+    <article class="thread-card">
+        <a href="/threads/{{ t.slug }}">{{ t.headline }}</a>
+        <small>
+            <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
+            sig: {{ t.significance }}
+            {% if t.key_entities %}
+             &mdash; {{ t.key_entities[:3] | join(', ') }}
+            {% endif %}
+        </small>
+    </article>
+    {% endfor %}
+</section>
+{% endif %}
+
+{% if topic_stats %}
+<section>
+    <h3>Topics</h3>
+    {% for ts in topic_stats %}
+    <article>
+        <a href="/topics/{{ ts.topic_slug }}"><strong>{{ ts.topic_slug }}</strong></a>
+        &mdash; {{ ts.event_count }} events, {{ ts.entity_count }} entities, {{ ts.thread_count }} threads
+        {% if filter_stats.get(ts.topic_slug) %}
+        <br><small>
+            <a href="/filters/{{ ts.topic_slug }}/{{ today }}">
+                Filter: {{ filter_stats[ts.topic_slug].get('accepted', 0) }} accepted,
+                {{ filter_stats[ts.topic_slug].total - filter_stats[ts.topic_slug].get('accepted', 0) }} rejected
+            </a>
+        </small>
+        {% endif %}
+    </article>
+    {% endfor %}
+</section>
+{% endif %}
+
+{% if not active_threads and not topic_stats %}
+<p>No data yet. Run the pipeline first: <code>python -m nexus engine</code></p>
+{% endif %}
+{% endblock %}

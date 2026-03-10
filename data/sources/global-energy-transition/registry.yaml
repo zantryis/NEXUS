@@ -1,35 +1,49 @@
 sources:
-- id: guardian-energy
+- affiliation: private
+  country: GB
+  id: guardian-energy
   language: en
   tier: A
   type: rss
   url: https://www.theguardian.com/environment/energy/rss
-- id: bbc-science
-  language: en
-  tier: A
-  type: rss
-  url: https://feeds.bbci.co.uk/news/science_and_environment/rss.xml
-- id: bbc-business
-  language: en
-  tier: A
-  type: rss
-  url: https://feeds.bbci.co.uk/news/business/rss.xml
-- id: nyt-energy
+- affiliation: private
+  country: US
+  id: nyt-energy
   language: en
   tier: A
   type: rss
   url: https://rss.nytimes.com/services/xml/rss/nyt/EnergyEnvironment.xml
-- id: carbon-brief
+- affiliation: nonprofit
+  country: GB
+  id: carbon-brief
   language: en
   tier: A
   type: rss
   url: https://www.carbonbrief.org/feed
-- id: cleantechnica
+- affiliation: public
+  country: GB
+  id: bbc-science
+  language: en
+  tier: A
+  type: rss
+  url: https://feeds.bbci.co.uk/news/science_and_environment/rss.xml
+- affiliation: public
+  country: GB
+  id: bbc-business
+  language: en
+  tier: A
+  type: rss
+  url: https://feeds.bbci.co.uk/news/business/rss.xml
+- affiliation: private
+  country: US
+  id: cleantechnica
   language: en
   tier: B
   type: rss
   url: https://cleantechnica.com/feed/
-- id: energy-monitor
+- affiliation: private
+  country: GB
+  id: energy-monitor
   language: en
   tier: B
   type: rss

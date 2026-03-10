@@ -5,7 +5,7 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import AsyncMock, patch, MagicMock
 from nexus.config.models import NexusConfig, UserConfig, TopicConfig
-from nexus.engine.pipeline import run_pipeline
+from nexus.engine.pipeline import run_pipeline, _event_cap_for_topic
 
 
 @pytest.fixture
@@ -47,7 +47,8 @@ async def test_pipeline_produces_briefing(config, data_dir):
         )
         mock_poll.return_value = [item]
         mock_ingest.return_value = [item]
-        mock_filter.return_value = [item]
+        from nexus.engine.filtering.filter import FilterResult
+        mock_filter.return_value = FilterResult(accepted=[item], log_entries=[])
         mock_extract.return_value = Event(
             date=date(2026, 3, 9), summary="AI event", significance=8,
         )
@@ -64,3 +65,28 @@ async def test_pipeline_produces_briefing(config, data_dir):
         assert "AI Research" in briefing_path.read_text()
         mock_poll.assert_called_once()
         mock_render.assert_called_once()
+
+
+def test_event_cap_for_narrow_topic():
+    topic = TopicConfig(name="Iran-US", scope="narrow")
+    assert _event_cap_for_topic(topic) == 15
+
+
+def test_event_cap_for_medium_topic():
+    topic = TopicConfig(name="Energy", scope="medium")
+    assert _event_cap_for_topic(topic) == 20
+
+
+def test_event_cap_for_broad_topic():
+    topic = TopicConfig(name="AI/ML", scope="broad")
+    assert _event_cap_for_topic(topic) == 35
+
+
+def test_event_cap_default_scope():
+    topic = TopicConfig(name="Test")
+    assert _event_cap_for_topic(topic) == 20
+
+
+def test_event_cap_max_events_override():
+    topic = TopicConfig(name="Test", scope="narrow", max_events=50)
+    assert _event_cap_for_topic(topic) == 50

@@ -101,7 +101,13 @@ EXTRACT_SYSTEM_PROMPT = (
     "Given an article and topic context, output JSON with: "
     "date (YYYY-MM-DD), summary (1-2 sentences in the user's language), "
     "entities (key actors/organizations), relation_to_prior (how this connects to recent events), "
-    "significance (1-10)."
+    "significance (1-10).\n\n"
+    "CRITICAL DATE RULES:\n"
+    "- The date field is WHEN THE EVENT HAPPENED, not when it might happen in the future.\n"
+    "- Today's date is {current_date}. The event date MUST be on or before today.\n"
+    "- If the article discusses future plans or speculation, use the article's publication date.\n"
+    "- If you cannot determine the exact date, use the article's publication date.\n"
+    "- NEVER output a date after {current_date}."
 )
 
 
@@ -110,13 +116,21 @@ async def extract_event(
     item: ContentItem,
     topic: TopicConfig,
     existing_events: list[Event],
+    current_date: date | None = None,
 ) -> Optional[Event]:
-    """Extract a structured event from a content item via LLM."""
+    """Extract a structured event from a content item via LLM.
+
+    Args:
+        current_date: The processing date (e.g. backtest day). Defaults to today.
+            Used to anchor the LLM's date extraction and clamp future dates.
+    """
+    processing_date = current_date or date.today()
+
     # Wider event window: last 7 days, up to 30 events
     recent_context = ""
     if existing_events:
         from datetime import timedelta
-        cutoff = date.today() - timedelta(days=7)
+        cutoff = processing_date - timedelta(days=7)
         recent = [e for e in existing_events if e.date >= cutoff][-30:]
         recent_context = "\n".join(
             f"- [{e.date}] {e.summary}" for e in recent
@@ -128,28 +142,48 @@ async def extract_event(
     if item.source_affiliation or item.source_country:
         source_meta = f"\nSource affiliation: {item.source_affiliation or 'unknown'}, Country: {item.source_country or 'unknown'}"
 
+    # Article publication date as fallback anchor
+    pub_date = ""
+    if item.published:
+        pub_day = item.published.date() if hasattr(item.published, "date") else item.published
+        pub_date = f"\nArticle publication date: {pub_day}"
+
     user_prompt = (
         f"Topic: {topic.name}\n"
         f"Subtopics: {', '.join(topic.subtopics)}\n\n"
+        f"Today's date: {processing_date}\n"
         f"Recent events:\n{recent_context or 'None yet'}\n\n"
-        f"Article language: {article_lang}{source_meta}\n"
+        f"Article language: {article_lang}{source_meta}{pub_date}\n"
         f"Write the summary in English.\n\n"
         f"Article title: {item.title}\n"
         f"Article text: {(item.full_text or '')[:3000]}"
     )
 
+    system_prompt = EXTRACT_SYSTEM_PROMPT.format(current_date=processing_date)
+
     try:
         response = await llm.complete(
             config_key="knowledge_summary",
-            system_prompt=EXTRACT_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             json_response=True,
         )
         data = json.loads(response)
         if isinstance(data, list):
             data = data[0] if data else {}
+
+        event_date = date.fromisoformat(data["date"])
+
+        # Hard clamp: never allow future dates
+        if event_date > processing_date:
+            logger.warning(
+                f"Clamped future date {event_date} → {processing_date} "
+                f"for article: {item.url}"
+            )
+            event_date = processing_date
+
         return Event(
-            date=date.fromisoformat(data["date"]),
+            date=event_date,
             summary=data["summary"],
             sources=[{
                 "url": item.url,

@@ -1,41 +1,53 @@
+# Nexus configuration — copy to data/config.yaml and customize
+
 user:
-  name: "Tristan"
-  timezone: "America/Denver"
-  output_language: "en"
+  name: "Your Name"
+  timezone: "America/New_York"    # Used for scheduling
+  output_language: "en"           # Briefing output language
 
 briefing:
-  schedule: "06:00"
+  schedule: "06:00"               # Daily pipeline time (HH:MM in your timezone)
   format: "two-host-dialogue"
-  style: "analytical"
-  depth: "detailed"
+  style: "analytical"             # Style directive passed to LLM
+  depth: "detailed"               # "brief" | "detailed"
 
+# Define your intelligence topics
 topics:
-  - name: "Iran-US Relations"
-    priority: high
-    subtopics: ["sanctions", "nuclear program", "regional proxies"]
-    source_languages: ["en", "fa"]
-    perspective_diversity: high
+  - name: "Your Topic"
+    priority: high                # high | medium | low
+    subtopics: ["subtopic1", "subtopic2", "subtopic3"]
+    source_languages: ["en"]      # ISO 639-1 codes
+    perspective_diversity: medium  # low | medium | high (min source affiliation balance)
+    filter_threshold: 6.0         # 1-10, lower = more articles pass
+    scope: medium                 # narrow | medium | broad (affects event extraction cap)
 
-  - name: "Renewable Energy Policy"
-    priority: medium
-    subtopics: ["US IRA implementation", "EU green deal", "grid storage"]
-    source_languages: ["en", "de"]
-    perspective_diversity: medium
-
-  - name: "AI/ML Research"
-    priority: low
-    subtopics: ["agents", "benchmarks", "open source models"]
-    source_languages: ["en"]
-    perspective_diversity: low
-
+# LLM model assignments per pipeline stage
 models:
   filtering: "gemini-3-flash-preview"
   synthesis: "gemini-3.1-pro-preview"
   knowledge_summary: "gemini-3-flash-preview"
+  dialogue_script: "gemini-3.1-pro-preview"
+  breaking_news: "gemini-3-flash-preview"
+  agent: "gemini-3.1-pro-preview"
+
+# Audio podcast generation
+audio:
+  enabled: true
+  tts_backend: "gemini"                       # "gemini" | "openai"
+  tts_model: "gemini-2.5-flash-preview-tts"
+  voice_host_a: "Kore"                        # Female voice (Host A)
+  voice_host_b: "Puck"                        # Male voice (Host B)
+
+# Breaking news alerts
+breaking_news:
+  enabled: true
+  poll_interval_hours: 3
+  threshold: 7                    # 1-10, only alert above this
+
+# Telegram delivery
+telegram:
+  enabled: true
+  # chat_id is set automatically on first /start
 
 sources:
-  global_feeds:
-    - "https://feeds.reuters.com/reuters/topNews"
-    - "https://www.aljazeera.com/xml/rss/all.xml"
-  discover_new_sources: true
-  discovery_interval_days: 7
+  discover_new_sources: false

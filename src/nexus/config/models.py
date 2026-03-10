@@ -1,5 +1,7 @@
 """Pydantic models for nexus configuration."""
 
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -24,6 +26,8 @@ class TopicConfig(BaseModel):
     source_languages: list[str] = Field(default_factory=lambda: ["en"])
     perspective_diversity: str = "low"
     filter_threshold: float = 6.0
+    scope: str = "medium"  # "narrow" | "medium" | "broad"
+    max_events: Optional[int] = None  # override auto-calculated event cap
 
 
 class ModelsConfig(BaseModel):
@@ -34,6 +38,25 @@ class ModelsConfig(BaseModel):
     knowledge_summary: str = "gemini-3-flash-preview"
     breaking_news: str = "gemini-3-flash-preview"
     agent: str = "gemini-3.1-pro-preview"
+
+
+class AudioConfig(BaseModel):
+    enabled: bool = True
+    tts_backend: str = "gemini"  # "gemini" | "openai" | "kokoro"
+    tts_model: str = "gemini-2.5-flash-preview-tts"
+    voice_host_a: str = "Kore"
+    voice_host_b: str = "Puck"
+
+
+class BreakingNewsConfig(BaseModel):
+    enabled: bool = True
+    poll_interval_hours: int = 3
+    threshold: int = 7
+
+
+class TelegramConfig(BaseModel):
+    enabled: bool = True
+    chat_id: Optional[int] = None
 
 
 class SourcesConfig(BaseModel):
@@ -48,4 +71,7 @@ class NexusConfig(BaseModel):
     briefing: BriefingConfig = Field(default_factory=BriefingConfig)
     topics: list[TopicConfig] = Field(default_factory=list)
     models: ModelsConfig = Field(default_factory=ModelsConfig)
+    audio: AudioConfig = Field(default_factory=AudioConfig)
+    breaking_news: BreakingNewsConfig = Field(default_factory=BreakingNewsConfig)
+    telegram: TelegramConfig = Field(default_factory=TelegramConfig)
     sources: SourcesConfig = Field(default_factory=SourcesConfig)

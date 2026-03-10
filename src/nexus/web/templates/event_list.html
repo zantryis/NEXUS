@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Events — Nexus{% endblock %}
+{% block content %}
+<h2>Events
+    {% if filter_topic %}<small>in {{ filter_topic }}</small>{% endif %}
+</h2>
+
+{% if events %}
+{% for e in events %}
+<div class="event-row">
+    <small>{{ e.date }}</small>
+    {{ e.summary }}
+    <small class="sig">sig: {{ e.significance }}</small>
+    {% if e.sources %}
+    <small>
+        {% for s in e.sources %}
+        <span class="badge badge-{{ s.affiliation }}">{{ s.outlet }}/{{ s.country }}</span>
+        {% endfor %}
+    </small>
+    {% endif %}
+</div>
+{% endfor %}
+{% else %}
+<p>No events found.</p>
+{% endif %}
+{% endblock %}

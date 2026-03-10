@@ -111,10 +111,43 @@ def test_partition_by_date():
 
 
 def test_partition_by_date_no_published():
-    """Items without published date fall into today's bucket."""
+    """Items without published date fall into reference date bucket."""
     items = [
         ContentItem(title="A", url="https://a.com", source_id="s1"),
     ]
-    groups = partition_by_date(items)
-    assert date.today() in groups
-    assert len(groups[date.today()]) == 1
+    ref = date(2026, 3, 10)
+    groups = partition_by_date(items, reference_date=ref)
+    assert ref in groups
+    assert len(groups[ref]) == 1
+
+
+def test_partition_by_date_drops_stale_articles():
+    """Articles older than max_age_days are dropped."""
+    ref = date(2026, 3, 10)
+    items = [
+        ContentItem(title="Current", url="https://a.com", source_id="s1",
+                    published=datetime(2026, 3, 9, 10, 0)),
+        ContentItem(title="Stale 2017", url="https://b.com", source_id="s2",
+                    published=datetime(2017, 3, 30, 12, 0)),
+        ContentItem(title="Old 30 days", url="https://c.com", source_id="s3",
+                    published=datetime(2026, 2, 8, 12, 0)),
+    ]
+    groups = partition_by_date(items, max_age_days=14, reference_date=ref)
+    # Only the current article should remain
+    assert len(groups) == 1
+    assert date(2026, 3, 9) in groups
+    assert groups[date(2026, 3, 9)][0].title == "Current"
+
+
+def test_partition_by_date_drops_future_articles():
+    """Articles with future dates are dropped."""
+    ref = date(2026, 3, 10)
+    items = [
+        ContentItem(title="Today", url="https://a.com", source_id="s1",
+                    published=datetime(2026, 3, 10, 8, 0)),
+        ContentItem(title="Future", url="https://b.com", source_id="s2",
+                    published=datetime(2026, 3, 15, 12, 0)),
+    ]
+    groups = partition_by_date(items, reference_date=ref)
+    assert len(groups) == 1
+    assert date(2026, 3, 10) in groups

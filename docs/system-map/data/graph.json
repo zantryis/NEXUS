@@ -1,0 +1,1174 @@
+{
+  "meta": {
+    "title": "Nexus System Map",
+    "kicker": "Single-page semantic map",
+    "subtitle": "As-built architecture first, with roadmap layers annotated separately",
+    "summary": "This page models the repo as it exists today: a Python batch engine that reads YAML configuration and source registries, polls RSS feeds, extracts article text, filters for relevance, logs per-topic events, and writes daily markdown briefings. Planned Shell, Agent, discovery, and audio capabilities are shown as roadmap overlays rather than current implementation.",
+    "snapshot_date": "2026-03-10",
+    "layers": [
+      {
+        "id": "control",
+        "label": "Control plane",
+        "description": "CLI entrypoints and configuration define what runs and which topics exist."
+      },
+      {
+        "id": "sources",
+        "label": "Source intake",
+        "description": "Topic registries feed RSS polling, then URL normalization removes duplicate items."
+      },
+      {
+        "id": "engine",
+        "label": "Runtime engine",
+        "description": "The daily pipeline executes ingestion, filtering, and synthesis over each topic."
+      },
+      {
+        "id": "knowledge",
+        "label": "Knowledge store",
+        "description": "Topic-scoped YAML artifacts hold events and optional summaries for continuity."
+      },
+      {
+        "id": "outputs",
+        "label": "Outputs",
+        "description": "Today the engine emits markdown briefings. Future surfaces consume those artifacts."
+      },
+      {
+        "id": "external",
+        "label": "External model boundary",
+        "description": "LLM-backed stages cross an explicit provider boundary through a single client abstraction."
+      },
+      {
+        "id": "roadmap",
+        "label": "Roadmap overlay",
+        "description": "Target-system components from design.md that are not implemented in this repo yet."
+      }
+    ],
+    "legend": {
+      "statuses": [
+        {
+          "label": "Implemented",
+          "meaning": "Present in code and used by the current runtime path."
+        },
+        {
+          "label": "Partial",
+          "meaning": "Exists in code or storage shape, but is not fully wired through the runtime."
+        },
+        {
+          "label": "Planned",
+          "meaning": "Specified in design.md but not implemented in the repo."
+        }
+      ]
+    }
+  },
+  "nodes": [
+    {
+      "id": "cli_entry",
+      "label": "CLI engine entrypoint",
+      "kind": "interface",
+      "status": "implemented",
+      "layer": "control",
+      "summary": "The runtime starts through `python -m nexus engine`, which loads config, resolves the LLM client, and invokes the pipeline orchestrator.",
+      "tags": ["runtime", "entrypoint"],
+      "source_refs": ["main_cli"]
+    },
+    {
+      "id": "nexus_config",
+      "label": "NexusConfig",
+      "kind": "entity",
+      "status": "implemented",
+      "layer": "control",
+      "summary": "Pydantic configuration defines the user, briefing parameters, topics, model assignments, and source behavior that drive the engine.",
+      "tags": ["config", "yaml"],
+      "source_refs": ["config_models", "config_loader", "data_config"]
+    },
+    {
+      "id": "topic_registries",
+      "label": "Topic source registries",
+      "kind": "artifact",
+      "status": "implemented",
+      "layer": "sources",
+      "summary": "Each topic has a YAML registry under `data/sources/<topic>/registry.yaml` listing feed ids, URLs, tiers, and languages used during polling.",
+      "tags": ["sources", "yaml", "storage"],
+      "source_refs": ["pipeline", "topic_registry_example"]
+    },
+    {
+      "id": "global_registry",
+      "label": "Global source registry",
+      "kind": "artifact",
+      "status": "implemented",
+      "layer": "sources",
+      "summary": "A curated global feed pool exists separately and supports topic-registry generation through the `sources` CLI commands.",
+      "tags": ["sources", "curation", "storage"],
+      "source_refs": ["registry_module", "global_registry_data", "main_cli"]
+    },
+    {
+      "id": "rss_polling",
+      "label": "RSS polling",
+      "kind": "pipeline_stage",
+      "status": "implemented",
+      "layer": "sources",
+      "summary": "The engine fetches and parses registered RSS feeds into `ContentItem` records with basic source metadata attached.",
+      "tags": ["feeds", "http"],
+      "source_refs": ["polling", "pipeline"]
+    },
+    {
+      "id": "dedup_stage",
+      "label": "URL deduplication",
+      "kind": "pipeline_stage",
+      "status": "implemented",
+      "layer": "engine",
+      "summary": "Tracked parameters and fragments are stripped so duplicate articles from feed variants collapse to one canonical item.",
+      "tags": ["normalization", "quality"],
+      "source_refs": ["dedup", "pipeline"]
+    },
+    {
+      "id": "ingestion_stage",
+      "label": "Article ingestion",
+      "kind": "pipeline_stage",
+      "status": "implemented",
+      "layer": "engine",
+      "summary": "Trafilatura fetches article HTML and extracts full text, upgrading feed snippets into analyzable documents.",
+      "tags": ["trafilatura", "content"],
+      "source_refs": ["ingest", "pipeline"]
+    },
+    {
+      "id": "filter_stage",
+      "label": "Relevance filtering",
+      "kind": "pipeline_stage",
+      "status": "implemented",
+      "layer": "engine",
+      "summary": "Batched LLM scoring applies topic definitions to ingested items and retains only relevant articles.",
+      "tags": ["llm", "ranking", "llm-boundary"],
+      "source_refs": ["filter", "pipeline"]
+    },
+    {
+      "id": "engine_pipeline",
+      "label": "Pipeline orchestrator",
+      "kind": "component",
+      "status": "implemented",
+      "layer": "engine",
+      "summary": "The orchestrator coordinates per-topic polling, ingestion, filtering, event extraction, summary loading, and briefing generation.",
+      "tags": ["async", "daily-run"],
+      "source_refs": ["pipeline"]
+    },
+    {
+      "id": "event_stage",
+      "label": "Event extraction",
+      "kind": "pipeline_stage",
+      "status": "implemented",
+      "layer": "knowledge",
+      "summary": "Relevant articles become structured `Event` entries with dates, entities, significance, and relation-to-prior fields.",
+      "tags": ["llm", "knowledge", "llm-boundary"],
+      "source_refs": ["events", "pipeline"]
+    },
+    {
+      "id": "knowledge_store",
+      "label": "Per-topic knowledge store",
+      "kind": "artifact",
+      "status": "partial",
+      "layer": "knowledge",
+      "summary": "Knowledge is persisted as YAML under `data/knowledge/<topic>/`; events are actively written, while weekly/monthly summaries are only loaded if present.",
+      "tags": ["yaml", "timeline", "storage"],
+      "source_refs": ["events", "compression", "pipeline"]
+    },
+    {
+      "id": "summary_rollups",
+      "label": "Weekly and monthly rollups",
+      "kind": "pipeline_stage",
+      "status": "partial",
+      "layer": "knowledge",
+      "summary": "Compression utilities exist and the pipeline reads rollup files for synthesis context, but the current runtime does not generate them automatically.",
+      "tags": ["summaries", "llm", "llm-boundary"],
+      "source_refs": ["compression", "pipeline", "state_doc"]
+    },
+    {
+      "id": "briefing_stage",
+      "label": "Briefing synthesis",
+      "kind": "pipeline_stage",
+      "status": "implemented",
+      "layer": "outputs",
+      "summary": "Topic contexts combine recent events, summary rollups, and top articles before an LLM writes the attributed daily markdown briefing.",
+      "tags": ["llm", "markdown", "llm-boundary"],
+      "source_refs": ["briefing", "pipeline"]
+    },
+    {
+      "id": "briefing_artifact",
+      "label": "Daily briefing artifact",
+      "kind": "artifact",
+      "status": "implemented",
+      "layer": "outputs",
+      "summary": "The current end product is a dated markdown file under `data/artifacts/briefings/`.",
+      "tags": ["markdown", "artifact", "storage"],
+      "source_refs": ["pipeline", "briefing_example"]
+    },
+    {
+      "id": "llm_client",
+      "label": "LLMClient boundary",
+      "kind": "interface",
+      "status": "implemented",
+      "layer": "external",
+      "summary": "All model-backed stages route through a single provider abstraction that currently targets the Gemini SDK.",
+      "tags": ["provider", "llm-boundary"],
+      "source_refs": ["llm_client"]
+    },
+    {
+      "id": "shell_pwa",
+      "label": "Shell / PWA",
+      "kind": "roadmap_component",
+      "status": "planned",
+      "layer": "roadmap",
+      "summary": "The design spec calls for a lightweight web shell that renders briefings, timelines, chat, and audio playback, but this repo has no web runtime yet.",
+      "tags": ["frontend", "planned"],
+      "source_refs": ["design_shell", "claude_doc"]
+    },
+    {
+      "id": "chat_agent",
+      "label": "Interactive agent",
+      "kind": "roadmap_component",
+      "status": "planned",
+      "layer": "roadmap",
+      "summary": "A chat-first agent is planned to answer questions, edit config, and perform live lookups using shared state from the engine.",
+      "tags": ["agent", "planned"],
+      "source_refs": ["design_agent", "claude_doc"]
+    },
+    {
+      "id": "source_discovery",
+      "label": "Active source discovery",
+      "kind": "roadmap_component",
+      "status": "planned",
+      "layer": "roadmap",
+      "summary": "The design spec includes periodic source discovery and quality scoring, but the current repo only supports curated registries and manual topic-registry building.",
+      "tags": ["sources", "planned"],
+      "source_refs": ["design_discovery", "claude_doc"]
+    },
+    {
+      "id": "audio_rss",
+      "label": "Audio + private RSS",
+      "kind": "roadmap_component",
+      "status": "planned",
+      "layer": "roadmap",
+      "summary": "Podcast scripting, TTS, and private RSS publishing are specified in the design document but absent from the codebase.",
+      "tags": ["audio", "planned"],
+      "source_refs": ["design_audio", "claude_doc"]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "cli_entry",
+      "to": "nexus_config",
+      "kind": "reads",
+      "label": "loads YAML config",
+      "status": "implemented",
+      "source_refs": ["main_cli", "config_loader"]
+    },
+    {
+      "id": "e2",
+      "from": "cli_entry",
+      "to": "engine_pipeline",
+      "kind": "calls",
+      "label": "runs daily pipeline",
+      "status": "implemented",
+      "source_refs": ["main_cli", "pipeline"]
+    },
+    {
+      "id": "e3",
+      "from": "nexus_config",
+      "to": "engine_pipeline",
+      "kind": "depends_on",
+      "label": "topic + model configuration",
+      "status": "implemented",
+      "source_refs": ["config_models", "pipeline"]
+    },
+    {
+      "id": "e4",
+      "from": "global_registry",
+      "to": "topic_registries",
+      "kind": "transforms",
+      "label": "sources build command",
+      "status": "implemented",
+      "source_refs": ["registry_module", "main_cli"]
+    },
+    {
+      "id": "e5",
+      "from": "topic_registries",
+      "to": "rss_polling",
+      "kind": "reads",
+      "label": "per-topic feed list",
+      "status": "implemented",
+      "source_refs": ["pipeline", "polling"]
+    },
+    {
+      "id": "e6",
+      "from": "rss_polling",
+      "to": "dedup_stage",
+      "kind": "transforms",
+      "label": "raw content items",
+      "status": "implemented",
+      "source_refs": ["polling", "dedup", "pipeline"]
+    },
+    {
+      "id": "e7",
+      "from": "dedup_stage",
+      "to": "ingestion_stage",
+      "kind": "transforms",
+      "label": "unique content items",
+      "status": "implemented",
+      "source_refs": ["dedup", "ingest", "pipeline"]
+    },
+    {
+      "id": "e8",
+      "from": "ingestion_stage",
+      "to": "filter_stage",
+      "kind": "transforms",
+      "label": "full article text",
+      "status": "implemented",
+      "source_refs": ["ingest", "filter", "pipeline"]
+    },
+    {
+      "id": "e9",
+      "from": "filter_stage",
+      "to": "event_stage",
+      "kind": "transforms",
+      "label": "relevant articles",
+      "status": "implemented",
+      "source_refs": ["filter", "events", "pipeline"]
+    },
+    {
+      "id": "e10",
+      "from": "event_stage",
+      "to": "knowledge_store",
+      "kind": "writes",
+      "label": "append events.yaml",
+      "status": "implemented",
+      "source_refs": ["events", "pipeline"]
+    },
+    {
+      "id": "e11",
+      "from": "summary_rollups",
+      "to": "knowledge_store",
+      "kind": "writes",
+      "label": "weekly/monthly summaries",
+      "status": "partial",
+      "source_refs": ["compression", "pipeline"]
+    },
+    {
+      "id": "e12",
+      "from": "knowledge_store",
+      "to": "briefing_stage",
+      "kind": "reads",
+      "label": "recent events + optional summaries",
+      "status": "implemented",
+      "source_refs": ["pipeline", "briefing"]
+    },
+    {
+      "id": "e13",
+      "from": "filter_stage",
+      "to": "briefing_stage",
+      "kind": "reads",
+      "label": "top relevant articles",
+      "status": "implemented",
+      "source_refs": ["pipeline", "briefing"]
+    },
+    {
+      "id": "e14",
+      "from": "briefing_stage",
+      "to": "briefing_artifact",
+      "kind": "writes",
+      "label": "writes markdown briefing",
+      "status": "implemented",
+      "source_refs": ["pipeline", "briefing_example"]
+    },
+    {
+      "id": "e15",
+      "from": "filter_stage",
+      "to": "llm_client",
+      "kind": "depends_on",
+      "label": "config_key=filtering",
+      "status": "implemented",
+      "source_refs": ["filter", "llm_client"]
+    },
+    {
+      "id": "e16",
+      "from": "event_stage",
+      "to": "llm_client",
+      "kind": "depends_on",
+      "label": "config_key=knowledge_summary",
+      "status": "implemented",
+      "source_refs": ["events", "llm_client"]
+    },
+    {
+      "id": "e17",
+      "from": "summary_rollups",
+      "to": "llm_client",
+      "kind": "depends_on",
+      "label": "config_key=knowledge_summary",
+      "status": "partial",
+      "source_refs": ["compression", "llm_client"]
+    },
+    {
+      "id": "e18",
+      "from": "briefing_stage",
+      "to": "llm_client",
+      "kind": "depends_on",
+      "label": "config_key=synthesis",
+      "status": "implemented",
+      "source_refs": ["briefing", "llm_client"]
+    },
+    {
+      "id": "e19",
+      "from": "knowledge_store",
+      "to": "chat_agent",
+      "kind": "planned_flow",
+      "label": "shared context for Q&A",
+      "status": "planned",
+      "source_refs": ["design_agent"]
+    },
+    {
+      "id": "e20",
+      "from": "briefing_artifact",
+      "to": "shell_pwa",
+      "kind": "planned_flow",
+      "label": "render daily brief",
+      "status": "planned",
+      "source_refs": ["design_shell"]
+    },
+    {
+      "id": "e21",
+      "from": "briefing_artifact",
+      "to": "audio_rss",
+      "kind": "planned_flow",
+      "label": "script/audio distribution",
+      "status": "planned",
+      "source_refs": ["design_audio"]
+    },
+    {
+      "id": "e22",
+      "from": "source_discovery",
+      "to": "global_registry",
+      "kind": "planned_flow",
+      "label": "discover and score new feeds",
+      "status": "planned",
+      "source_refs": ["design_discovery"]
+    }
+  ],
+  "pipelines": [
+    {
+      "id": "daily_engine",
+      "label": "Daily engine pipeline",
+      "status": "implemented",
+      "source_refs": ["pipeline"],
+      "stages": [
+        {
+          "id": "load_registries",
+          "label": "Load topic source registry",
+          "status": "implemented",
+          "summary": "Resolve the topic slug and load `data/sources/<topic>/registry.yaml` for each configured topic.",
+          "inputs": ["TopicConfig", "data/sources/<topic>/registry.yaml"],
+          "outputs": ["source metadata dicts"],
+          "writes": [],
+          "llm_config_key": null,
+          "related_nodes": ["NexusConfig scopes topics.", "Topic registries are required inputs for polling."],
+          "source_refs": ["pipeline", "topic_registry_example"]
+        },
+        {
+          "id": "poll_feeds",
+          "label": "Poll all feeds",
+          "status": "implemented",
+          "summary": "Fetch RSS entries and build `ContentItem` records with feed-level metadata.",
+          "inputs": ["topic source registries"],
+          "outputs": ["raw ContentItem list"],
+          "writes": [],
+          "llm_config_key": null,
+          "related_nodes": ["Uses poll_all_feeds from the sources layer."],
+          "source_refs": ["polling", "pipeline"]
+        },
+        {
+          "id": "dedup_urls",
+          "label": "Deduplicate URLs",
+          "status": "implemented",
+          "summary": "Normalize URLs to strip tracking parameters and keep the first canonical instance.",
+          "inputs": ["raw ContentItem list"],
+          "outputs": ["unique ContentItem list"],
+          "writes": [],
+          "llm_config_key": null,
+          "related_nodes": ["Prevents repeated downstream ingestion work."],
+          "source_refs": ["dedup", "pipeline"]
+        },
+        {
+          "id": "ingest_articles",
+          "label": "Ingest article text",
+          "status": "implemented",
+          "summary": "Fetch article HTML and extract full text. Items without extracted text are dropped from the pipeline.",
+          "inputs": ["unique ContentItem list"],
+          "outputs": ["ingested ContentItem list"],
+          "writes": [],
+          "llm_config_key": null,
+          "related_nodes": ["Uses Trafilatura for text extraction."],
+          "source_refs": ["ingest", "pipeline"]
+        },
+        {
+          "id": "filter_relevance",
+          "label": "Filter by topic relevance",
+          "status": "implemented",
+          "summary": "Run batched scoring against the topic definition and keep items at or above the threshold.",
+          "inputs": ["ingested ContentItem list", "TopicConfig"],
+          "outputs": ["relevant ContentItem list"],
+          "writes": [],
+          "llm_config_key": "filtering",
+          "related_nodes": ["Batched LLM scoring is the first model-backed stage."],
+          "source_refs": ["filter", "pipeline", "llm_client"]
+        },
+        {
+          "id": "load_existing_events",
+          "label": "Load prior events",
+          "status": "implemented",
+          "summary": "Read the existing topic event log to give event extraction narrative continuity.",
+          "inputs": ["data/knowledge/<topic>/events.yaml"],
+          "outputs": ["existing Event list"],
+          "writes": [],
+          "llm_config_key": null,
+          "related_nodes": ["Grounds extraction against recent history."],
+          "source_refs": ["events", "pipeline"]
+        },
+        {
+          "id": "extract_events",
+          "label": "Extract top events",
+          "status": "implemented",
+          "summary": "Take the top relevant articles, ask the model for structured event objects, and collect only successful parses.",
+          "inputs": ["top relevant articles", "existing Event list", "TopicConfig"],
+          "outputs": ["new Event list"],
+          "writes": [],
+          "llm_config_key": "knowledge_summary",
+          "related_nodes": ["Caps extraction at 20 articles per topic."],
+          "source_refs": ["events", "pipeline", "llm_client"]
+        },
+        {
+          "id": "append_events",
+          "label": "Append event log",
+          "status": "implemented",
+          "summary": "Persist newly extracted events back into the topic knowledge directory.",
+          "inputs": ["new Event list"],
+          "outputs": ["updated events.yaml"],
+          "writes": ["data/knowledge/<topic>/events.yaml"],
+          "llm_config_key": null,
+          "related_nodes": ["This is the main persisted knowledge artifact today."],
+          "source_refs": ["events", "pipeline"]
+        },
+        {
+          "id": "load_rollups",
+          "label": "Load summary rollups",
+          "status": "partial",
+          "summary": "Read weekly and monthly summary YAML files if they already exist; generation is not wired into the run path.",
+          "inputs": ["weekly_summaries.yaml", "monthly_summaries.yaml"],
+          "outputs": ["weekly summary list", "monthly summary list"],
+          "writes": [],
+          "llm_config_key": null,
+          "related_nodes": ["Compression utilities exist, but orchestration is incomplete."],
+          "source_refs": ["compression", "pipeline", "state_doc"]
+        },
+        {
+          "id": "build_topic_context",
+          "label": "Assemble TopicContext",
+          "status": "implemented",
+          "summary": "Combine config, summaries, recent events, and top articles into a synthesis-ready topic bundle.",
+          "inputs": ["TopicConfig", "events", "summaries", "top articles"],
+          "outputs": ["TopicContext"],
+          "writes": [],
+          "llm_config_key": null,
+          "related_nodes": ["This is an in-memory handoff to synthesis."],
+          "source_refs": ["briefing", "pipeline"]
+        },
+        {
+          "id": "generate_briefing",
+          "label": "Generate attributed briefing",
+          "status": "implemented",
+          "summary": "Build a long synthesis prompt from all topic contexts and ask the configured synthesis model for final markdown.",
+          "inputs": ["NexusConfig", "TopicContext list"],
+          "outputs": ["briefing markdown"],
+          "writes": [],
+          "llm_config_key": "synthesis",
+          "related_nodes": ["This is the current terminal LLM stage."],
+          "source_refs": ["briefing", "pipeline", "llm_client"]
+        },
+        {
+          "id": "write_briefing",
+          "label": "Write briefing artifact",
+          "status": "implemented",
+          "summary": "Store the final output under `data/artifacts/briefings/<today>.md` and return its path.",
+          "inputs": ["briefing markdown"],
+          "outputs": ["briefing path"],
+          "writes": ["data/artifacts/briefings/<date>.md"],
+          "llm_config_key": null,
+          "related_nodes": ["Current output surface is markdown on disk."],
+          "source_refs": ["pipeline", "briefing_example"]
+        }
+      ]
+    }
+  ],
+  "data_models": [
+    {
+      "id": "model_nexus_config",
+      "label": "NexusConfig",
+      "status": "implemented",
+      "summary": "Top-level runtime config used by the CLI and pipeline.",
+      "fields": [
+        { "name": "user", "type": "UserConfig" },
+        { "name": "briefing", "type": "BriefingConfig" },
+        { "name": "topics", "type": "list[TopicConfig]" },
+        { "name": "models", "type": "ModelsConfig" },
+        { "name": "sources", "type": "SourcesConfig" }
+      ],
+      "relationships": [
+        "Loaded from data/config.yaml through the YAML loader.",
+        "Supplies topics and model routing for the daily pipeline."
+      ],
+      "source_refs": ["config_models", "config_loader", "data_config"]
+    },
+    {
+      "id": "model_global_source",
+      "label": "GlobalSource",
+      "status": "implemented",
+      "summary": "Curated feed definition used to build topic registries.",
+      "fields": [
+        { "name": "id", "type": "str" },
+        { "name": "name", "type": "str" },
+        { "name": "url", "type": "str" },
+        { "name": "language", "type": "str" },
+        { "name": "tier", "type": "str" },
+        { "name": "tags", "type": "list[str]" },
+        { "name": "affiliation", "type": "str" },
+        { "name": "country", "type": "str" }
+      ],
+      "relationships": [
+        "Lives in the global registry and can be transformed into per-topic registry entries.",
+        "Drives source-health checks and manual source selection."
+      ],
+      "source_refs": ["registry_module", "global_registry_data"]
+    },
+    {
+      "id": "model_content_item",
+      "label": "ContentItem",
+      "status": "implemented",
+      "summary": "Core article transport record passed across polling, ingestion, filtering, and synthesis selection.",
+      "fields": [
+        { "name": "title", "type": "str" },
+        { "name": "url", "type": "str" },
+        { "name": "source_id", "type": "str" },
+        { "name": "snippet", "type": "str" },
+        { "name": "published", "type": "datetime | None" },
+        { "name": "full_text", "type": "str | None" },
+        { "name": "relevance_score", "type": "float | None" },
+        { "name": "source_language", "type": "str | None" }
+      ],
+      "relationships": [
+        "Created during polling and enriched through ingestion and relevance filtering.",
+        "Top-scoring instances feed event extraction and briefing synthesis."
+      ],
+      "source_refs": ["polling", "ingest", "filter"]
+    },
+    {
+      "id": "model_event",
+      "label": "Event",
+      "status": "implemented",
+      "summary": "Structured knowledge unit representing a news development within a topic timeline.",
+      "fields": [
+        { "name": "date", "type": "date" },
+        { "name": "summary", "type": "str" },
+        { "name": "sources", "type": "list[dict]" },
+        { "name": "entities", "type": "list[str]" },
+        { "name": "relation_to_prior", "type": "str" },
+        { "name": "significance", "type": "int" }
+      ],
+      "relationships": [
+        "Persisted to per-topic `events.yaml` files.",
+        "Used as narrative continuity during future extraction and synthesis."
+      ],
+      "source_refs": ["events", "knowledge_example"]
+    },
+    {
+      "id": "model_summary",
+      "label": "Summary",
+      "status": "partial",
+      "summary": "Compression artifact intended to roll multiple events into weekly or monthly narrative summaries.",
+      "fields": [
+        { "name": "period_start", "type": "date" },
+        { "name": "period_end", "type": "date" },
+        { "name": "text", "type": "str" },
+        { "name": "event_count", "type": "int" }
+      ],
+      "relationships": [
+        "The runtime reads summary files when present.",
+        "The compression module can generate them, but the current daily run path does not persist them."
+      ],
+      "source_refs": ["compression", "pipeline"]
+    },
+    {
+      "id": "model_topic_context",
+      "label": "TopicContext",
+      "status": "implemented",
+      "summary": "In-memory synthesis bundle combining per-topic config, summaries, events, and top articles.",
+      "fields": [
+        { "name": "topic", "type": "TopicConfig" },
+        { "name": "monthly_summaries", "type": "list[Summary]" },
+        { "name": "weekly_summaries", "type": "list[Summary]" },
+        { "name": "recent_events", "type": "list[Event]" },
+        { "name": "top_articles", "type": "list[ContentItem]" }
+      ],
+      "relationships": [
+        "Built inside the pipeline for each topic.",
+        "Consumed directly by briefing synthesis."
+      ],
+      "source_refs": ["briefing", "pipeline"]
+    }
+  ],
+  "storage_map": [
+    {
+      "id": "storage_config",
+      "label": "Runtime config file",
+      "path": "data/config.yaml",
+      "kind": "yaml",
+      "status": "implemented",
+      "summary": "User-owned configuration file defining topics, models, and briefing preferences.",
+      "reads_by": ["CLI engine entrypoint"],
+      "writes_by": [],
+      "relationships": [
+        "Loaded before any engine work begins.",
+        "Acts as the root of the logical data model."
+      ],
+      "source_refs": ["data_config", "main_cli", "config_loader"]
+    },
+    {
+      "id": "storage_global_registry",
+      "label": "Global source registry file",
+      "path": "data/sources/global_registry.yaml",
+      "kind": "yaml",
+      "status": "implemented",
+      "summary": "Curated feed pool used by `python -m nexus sources` commands.",
+      "reads_by": ["sources CLI commands"],
+      "writes_by": [],
+      "relationships": [
+        "Supports topic-registry generation but is not read by the daily engine path directly."
+      ],
+      "source_refs": ["global_registry_data", "registry_module", "main_cli"]
+    },
+    {
+      "id": "storage_topic_registries",
+      "label": "Per-topic registry files",
+      "path": "data/sources/<topic>/registry.yaml",
+      "kind": "yaml",
+      "status": "implemented",
+      "summary": "Resolved per topic and read by the pipeline orchestrator before feed polling.",
+      "reads_by": ["pipeline orchestrator", "RSS polling"],
+      "writes_by": ["sources build command"],
+      "relationships": [
+        "Bridges curated source selection and the live engine run."
+      ],
+      "source_refs": ["topic_registry_example", "pipeline", "registry_module"]
+    },
+    {
+      "id": "storage_events",
+      "label": "Topic event logs",
+      "path": "data/knowledge/<topic>/events.yaml",
+      "kind": "yaml",
+      "status": "implemented",
+      "summary": "Main persisted knowledge artifact, storing event timelines by topic.",
+      "reads_by": ["event extraction", "briefing synthesis"],
+      "writes_by": ["append events stage"],
+      "relationships": [
+        "Provides history for continuity and recent context for the daily brief."
+      ],
+      "source_refs": ["events", "knowledge_example", "pipeline"]
+    },
+    {
+      "id": "storage_weekly",
+      "label": "Weekly summary rollups",
+      "path": "data/knowledge/<topic>/weekly_summaries.yaml",
+      "kind": "yaml",
+      "status": "partial",
+      "summary": "Optional summary layer that the pipeline can read if present.",
+      "reads_by": ["briefing synthesis"],
+      "writes_by": ["compression utilities (not orchestrated)"],
+      "relationships": [
+        "Represents a partially integrated storage shape."
+      ],
+      "source_refs": ["compression", "pipeline"]
+    },
+    {
+      "id": "storage_monthly",
+      "label": "Monthly summary rollups",
+      "path": "data/knowledge/<topic>/monthly_summaries.yaml",
+      "kind": "yaml",
+      "status": "partial",
+      "summary": "Longer-horizon compression layer referenced by the synthesis prompt builder when available.",
+      "reads_by": ["briefing synthesis"],
+      "writes_by": ["compression utilities (not orchestrated)"],
+      "relationships": [
+        "Parallel to weekly summaries but currently only a load path."
+      ],
+      "source_refs": ["compression", "pipeline"]
+    },
+    {
+      "id": "storage_briefings",
+      "label": "Daily briefing artifacts",
+      "path": "data/artifacts/briefings/<date>.md",
+      "kind": "markdown",
+      "status": "implemented",
+      "summary": "Final output files emitted by the engine after synthesis.",
+      "reads_by": ["human readers", "future shell or RSS surfaces"],
+      "writes_by": ["write briefing stage"],
+      "relationships": [
+        "Today these markdown files are the only user-facing artifact produced by code in the repo."
+      ],
+      "source_refs": ["pipeline", "briefing_example"]
+    }
+  ],
+  "architect_notes": [
+    {
+      "id": "note_batch_first",
+      "label": "Current product is batch-first, not interface-first",
+      "status": "implemented",
+      "scope": "runtime shape",
+      "summary": "The actual repo is centered on a daily engine and file outputs. The chat-first shell described in the design doc is still aspirational.",
+      "tags": ["runtime", "surface"],
+      "points": [
+        "There is no FastAPI, messaging bot, or browser runtime in the codebase.",
+        "The only implemented end-to-end surface is markdown briefing generation.",
+        "Architecturally, the code behaves like a backend compiler with local artifacts."
+      ],
+      "source_refs": ["main_cli", "claude_doc", "design_shell"]
+    },
+    {
+      "id": "note_storage",
+      "label": "Database design is a structured filesystem",
+      "status": "implemented",
+      "scope": "data persistence",
+      "summary": "The repo stores state in YAML and markdown partitioned by topic and date. That is the current database design and should be visualized as such.",
+      "tags": ["storage", "persistence"],
+      "points": [
+        "No relational schema or ORM exists in the repo.",
+        "The logical model is still explicit through Pydantic types and YAML shapes.",
+        "Topic isolation comes from directory structure rather than tables or collections."
+      ],
+      "source_refs": ["config_models", "events", "compression", "briefing_example"]
+    },
+    {
+      "id": "note_partial_rollups",
+      "label": "Knowledge compression is present but not orchestrated",
+      "status": "partial",
+      "scope": "knowledge lifecycle",
+      "summary": "The repo has a compression module and synthesis expects summaries, but the daily run path only loads rollups if they already exist.",
+      "tags": ["knowledge", "partial"],
+      "points": [
+        "This is the main partial subsystem in the current design.",
+        "Architecturally it means the knowledge layer has a richer intended shape than the runtime guarantees.",
+        "The visualization should separate event logging from summary compression."
+      ],
+      "source_refs": ["compression", "pipeline", "state_doc"]
+    },
+    {
+      "id": "note_roadmap_gap",
+      "label": "Roadmap breadth exceeds implemented depth",
+      "status": "planned",
+      "scope": "future system",
+      "summary": "The design document specifies discovery, breaking news, agent chat, web shell, RSS, and audio, but they are not represented in the runtime code yet.",
+      "tags": ["roadmap", "scope"],
+      "points": [
+        "The site should help an architect distinguish code truth from target-state ambition.",
+        "Roadmap components should be treated as adjacent planned systems, not hidden assumptions inside the current graph."
+      ],
+      "source_refs": ["design_shell", "design_agent", "design_discovery", "design_audio", "claude_doc"]
+    }
+  ],
+  "source_refs": {
+    "main_cli": {
+      "id": "main_cli",
+      "label": "CLI entrypoints",
+      "path": "src/nexus/__main__.py",
+      "type": "code",
+      "status": "implemented",
+      "summary": "Defines `engine` and `sources` commands, config loading, LLM initialization, and pipeline invocation.",
+      "covers": [
+        "Daily engine bootstrap",
+        "Source-registry management commands"
+      ]
+    },
+    "config_models": {
+      "id": "config_models",
+      "label": "Config models",
+      "path": "src/nexus/config/models.py",
+      "type": "code",
+      "status": "implemented",
+      "summary": "Pydantic configuration and runtime typing surface.",
+      "covers": [
+        "UserConfig, TopicConfig, ModelsConfig, NexusConfig"
+      ]
+    },
+    "config_loader": {
+      "id": "config_loader",
+      "label": "Config loader",
+      "path": "src/nexus/config/loader.py",
+      "type": "code",
+      "status": "implemented",
+      "summary": "Loads YAML from disk and validates it into `NexusConfig`.",
+      "covers": [
+        "Config deserialization"
+      ]
+    },
+    "data_config": {
+      "id": "data_config",
+      "label": "Runtime config example",
+      "path": "data/config.yaml",
+      "type": "data",
+      "status": "implemented",
+      "summary": "Current instance configuration with three tracked topics and model assignments.",
+      "covers": [
+        "Actual configured topics",
+        "User timezone and output language"
+      ]
+    },
+    "pipeline": {
+      "id": "pipeline",
+      "label": "Pipeline orchestrator",
+      "path": "src/nexus/engine/pipeline.py",
+      "type": "code",
+      "status": "implemented",
+      "summary": "Defines per-topic execution order and the final briefing write path.",
+      "covers": [
+        "Daily execution order",
+        "TopicContext assembly",
+        "Briefing artifact persistence"
+      ]
+    },
+    "polling": {
+      "id": "polling",
+      "label": "RSS polling",
+      "path": "src/nexus/engine/sources/polling.py",
+      "type": "code",
+      "status": "implemented",
+      "summary": "Parses feeds into `ContentItem` objects with source metadata.",
+      "covers": [
+        "ContentItem model",
+        "poll_feed and poll_all_feeds"
+      ]
+    },
+    "dedup": {
+      "id": "dedup",
+      "label": "Deduplication",
+      "path": "src/nexus/engine/ingestion/dedup.py",
+      "type": "code",
+      "status": "implemented",
+      "summary": "Normalizes URLs and removes duplicates before ingestion.",
+      "covers": [
+        "Tracking-parameter stripping",
+        "Canonical URL selection"
+      ]
+    },
+    "ingest": {
+      "id": "ingest",
+      "label": "Article ingestion",
+      "path": "src/nexus/engine/ingestion/ingest.py",
+      "type": "code",
+      "status": "implemented",
+      "summary": "Fetches pages and extracts full text with Trafilatura.",
+      "covers": [
+        "HTML fetch",
+        "Text extraction"
+      ]
+    },
+    "filter": {
+      "id": "filter",
+      "label": "Relevance filtering",
+      "path": "src/nexus/engine/filtering/filter.py",
+      "type": "code",
+      "status": "implemented",
+      "summary": "Runs batch and fallback scoring through the LLM client.",
+      "covers": [
+        "Batched relevance scoring",
+        "Threshold filtering"
+      ]
+    },
+    "events": {
+      "id": "events",
+      "label": "Event logging",
+      "path": "src/nexus/engine/knowledge/events.py",
+      "type": "code",
+      "status": "implemented",
+      "summary": "Defines `Event`, YAML persistence, and model-backed extraction.",
+      "covers": [
+        "Knowledge persistence",
+        "Relation-to-prior extraction"
+      ]
+    },
+    "compression": {
+      "id": "compression",
+      "label": "Knowledge compression",
+      "path": "src/nexus/engine/knowledge/compression.py",
+      "type": "code",
+      "status": "partial",
+      "summary": "Defines summary rollup structures and LLM compression helpers.",
+      "covers": [
+        "Summary model",
+        "Weekly grouping",
+        "Rollup generation helpers"
+      ]
+    },
+    "briefing": {
+      "id": "briefing",
+      "label": "Briefing synthesis",
+      "path": "src/nexus/engine/synthesis/briefing.py",
+      "type": "code",
+      "status": "implemented",
+      "summary": "Builds TopicContext prompt material and generates the final markdown briefing.",
+      "covers": [
+        "TopicContext model",
+        "Context assembly",
+        "Synthesis prompt"
+      ]
+    },
+    "llm_client": {
+      "id": "llm_client",
+      "label": "LLM boundary",
+      "path": "src/nexus/llm/client.py",
+      "type": "code",
+      "status": "implemented",
+      "summary": "Provider abstraction currently backed by the Gemini SDK and keyed by model roles.",
+      "covers": [
+        "Model resolution",
+        "JSON-mode completions"
+      ]
+    },
+    "registry_module": {
+      "id": "registry_module",
+      "label": "Source registry module",
+      "path": "src/nexus/engine/sources/registry.py",
+      "type": "code",
+      "status": "implemented",
+      "summary": "Loads curated global sources, filters them by topic, and builds per-topic registries.",
+      "covers": [
+        "GlobalSource model",
+        "sources_for_topic",
+        "build_topic_registry"
+      ]
+    },
+    "global_registry_data": {
+      "id": "global_registry_data",
+      "label": "Global registry data",
+      "path": "data/sources/global_registry.yaml",
+      "type": "data",
+      "status": "implemented",
+      "summary": "Curated multilingual source catalog with tiers, tags, affiliation, and country.",
+      "covers": [
+        "Source taxonomy",
+        "Language coverage"
+      ]
+    },
+    "topic_registry_example": {
+      "id": "topic_registry_example",
+      "label": "Topic registry example",
+      "path": "data/sources/iran-us-relations/registry.yaml",
+      "type": "data",
+      "status": "implemented",
+      "summary": "Concrete example of a topic-specific feed registry used by the live engine.",
+      "covers": [
+        "Per-topic feed shape",
+        "Language distribution"
+      ]
+    },
+    "knowledge_example": {
+      "id": "knowledge_example",
+      "label": "Knowledge artifact example",
+      "path": "data/knowledge/iran-us-relations/events.yaml",
+      "type": "data",
+      "status": "implemented",
+      "summary": "Shows the actual persisted event log shape with summaries, entities, sources, and significance.",
+      "covers": [
+        "Filesystem-backed knowledge timeline"
+      ]
+    },
+    "briefing_example": {
+      "id": "briefing_example",
+      "label": "Briefing artifact example",
+      "path": "data/artifacts/briefings/2026-03-09.md",
+      "type": "data",
+      "status": "implemented",
+      "summary": "Real generated markdown output demonstrating the current product surface.",
+      "covers": [
+        "User-facing artifact",
+        "Attributed markdown structure"
+      ]
+    },
+    "design_shell": {
+      "id": "design_shell",
+      "label": "Shell / PWA roadmap",
+      "path": "design.md",
+      "type": "design",
+      "status": "planned",
+      "summary": "Design document sections describing the web shell, dashboard, and topic timelines.",
+      "covers": [
+        "PWA",
+        "Dashboard",
+        "Topic timelines"
+      ]
+    },
+    "design_agent": {
+      "id": "design_agent",
+      "label": "Agent roadmap",
+      "path": "design.md",
+      "type": "design",
+      "status": "planned",
+      "summary": "Design document sections describing chat-first interaction, config edits, and contextual Q&A.",
+      "covers": [
+        "Interactive agent",
+        "Chat-first operating model"
+      ]
+    },
+    "design_discovery": {
+      "id": "design_discovery",
+      "label": "Source discovery roadmap",
+      "path": "design.md",
+      "type": "design",
+      "status": "planned",
+      "summary": "Design document sections describing active source discovery and tiered source architecture.",
+      "covers": [
+        "Source discovery",
+        "Tiered source model"
+      ]
+    },
+    "design_audio": {
+      "id": "design_audio",
+      "label": "Audio and RSS roadmap",
+      "path": "design.md",
+      "type": "design",
+      "status": "planned",
+      "summary": "Design document sections describing dialogue scripts, TTS, audio publishing, and private RSS delivery.",
+      "covers": [
+        "Podcast generation",
+        "Private RSS"
+      ]
+    },
+    "claude_doc": {
+      "id": "claude_doc",
+      "label": "Project state notes",
+      "path": "claude.md",
+      "type": "doc",
+      "status": "implemented",
+      "summary": "Documents the current phase and explicitly marks PWA, Telegram agent, audio, and discovery as deferred.",
+      "covers": [
+        "Current phase",
+        "Deferred capabilities"
+      ]
+    },
+    "state_doc": {
+      "id": "state_doc",
+      "label": "Session state",
+      "path": "state.md",
+      "type": "doc",
+      "status": "implemented",
+      "summary": "Summarizes what has been built and the next implementation steps.",
+      "covers": [
+        "Current built surface",
+        "Near-term next steps"
+      ]
+    }
+  }
+}

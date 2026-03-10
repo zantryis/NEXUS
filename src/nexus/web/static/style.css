@@ -1,0 +1,66 @@
+/* Nexus Dashboard — minimal custom styles */
+
+.thread-card {
+    padding: 0.5rem 1rem;
+    margin-bottom: 0.25rem;
+}
+.thread-card small {
+    margin-left: 0.5rem;
+}
+
+.event-row {
+    padding: 0.25rem 0;
+    border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.event-row small.sig {
+    margin-left: 0.5rem;
+    opacity: 0.7;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+.badge-state { background: #c0392b; color: white; }
+.badge-public { background: #2980b9; color: white; }
+.badge-private { background: #7f8c8d; color: white; }
+.badge-academic, .badge-nonprofit { background: #27ae60; color: white; }
+.badge-unknown { background: #95a5a6; color: white; }
+
+.badge-emerging { background: #f39c12; color: white; }
+.badge-active { background: #27ae60; color: white; }
+.badge-resolved { background: #7f8c8d; color: white; }
+
+.badge-accepted { background: #27ae60; color: white; }
+.badge-rejected { background: #c0392b; color: white; }
+
+.filter-accepted { background: rgba(39, 174, 96, 0.1); }
+.filter-rejected_relevance,
+.filter-rejected_significance,
+.filter-rejected_diversity { background: rgba(192, 57, 43, 0.05); }
+
+.source-balance .badge {
+    margin-right: 0.5rem;
+}
+
+.convergence-item, .divergence-item {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.framing {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 0.25rem;
+}
+
+.source-item {
+    padding: 0.25rem 0;
+}
+
+.page-content {
+    line-height: 1.7;
+}

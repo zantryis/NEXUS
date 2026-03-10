@@ -78,7 +78,8 @@ def build_topic_registry(matched: list[GlobalSource]) -> dict:
     """Convert matched global sources to a topic registry format."""
     return {
         "sources": [
-            {"id": s.id, "type": "rss", "url": s.url, "tier": s.tier, "language": s.language}
+            {"id": s.id, "type": "rss", "url": s.url, "tier": s.tier, "language": s.language,
+             "affiliation": s.affiliation, "country": s.country}
             for s in matched
         ]
     }

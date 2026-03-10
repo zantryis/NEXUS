@@ -118,3 +118,90 @@ def test_topic_synthesis_model():
     assert syn.topic_name == "Test"
     assert len(syn.threads) == 1
     assert syn.threads[0].significance == 7
+
+
+@pytest.mark.asyncio
+async def test_synthesize_new_convergence_format(topic, events, articles):
+    """New convergence format with fact + confirmed_by is parsed correctly."""
+    mock_llm = AsyncMock()
+    mock_llm.complete.return_value = json.dumps({
+        "threads": [{
+            "headline": "Sanctions thread",
+            "event_indices": [0, 1],
+            "convergence": [
+                {"fact": "New sanctions were announced", "confirmed_by": ["nyt", "tass"]}
+            ],
+            "divergence": [{
+                "shared_event": "US sanctions announcement",
+                "source_a": "nyt", "framing_a": "Targeted response",
+                "source_b": "tass", "framing_b": "Economic warfare",
+            }],
+            "key_entities": ["US", "Iran"],
+            "significance": 8,
+        }]
+    })
+
+    result = await synthesize_topic(mock_llm, topic, events, articles, [], [])
+    thread = result.threads[0]
+    assert len(thread.convergence) == 1
+    assert isinstance(thread.convergence[0], dict)
+    assert thread.convergence[0]["fact"] == "New sanctions were announced"
+    assert "nyt" in thread.convergence[0]["confirmed_by"]
+    assert thread.divergence[0]["shared_event"] == "US sanctions announcement"
+
+
+@pytest.mark.asyncio
+async def test_synthesize_single_source_empty_convergence(topic, articles):
+    """When LLM correctly returns empty convergence for single-source thread."""
+    single_source_events = [
+        Event(
+            date=date(2026, 3, 9),
+            summary="BBC reports on sanctions",
+            entities=["US", "Iran"],
+            sources=[{"url": "https://bbc.com/1", "outlet": "bbc", "affiliation": "public", "country": "GB"}],
+            significance=7,
+        ),
+    ]
+    mock_llm = AsyncMock()
+    mock_llm.complete.return_value = json.dumps({
+        "threads": [{
+            "headline": "Single source thread",
+            "event_indices": [0],
+            "convergence": [],
+            "divergence": [],
+            "key_entities": ["US", "Iran"],
+            "significance": 7,
+        }]
+    })
+
+    result = await synthesize_topic(mock_llm, topic, single_source_events, articles, [], [])
+    assert result.threads[0].convergence == []
+    assert result.threads[0].divergence == []
+
+
+def test_build_synthesis_prompt_narrow():
+    from nexus.engine.synthesis.knowledge import _build_synthesis_prompt
+    topic = TopicConfig(name="Iran-US", scope="narrow", subtopics=["sanctions"])
+    prompt = _build_synthesis_prompt(topic)
+    assert "FOCUSED" in prompt
+    assert "causal chains" in prompt
+
+
+def test_build_synthesis_prompt_broad():
+    from nexus.engine.synthesis.knowledge import _build_synthesis_prompt
+    topic = TopicConfig(name="AI/ML", scope="broad", subtopics=["agents", "reasoning"])
+    prompt = _build_synthesis_prompt(topic)
+    assert "BROAD" in prompt
+    assert "agents, reasoning" in prompt
+    assert "Do NOT merge unrelated subfields" in prompt
+
+
+def test_build_synthesis_prompt_medium():
+    from nexus.engine.synthesis.knowledge import _build_synthesis_prompt
+    topic = TopicConfig(name="Energy", scope="medium")
+    prompt = _build_synthesis_prompt(topic)
+    # Medium scope should not have the scope-specific instructions
+    assert "BROAD" not in prompt
+    assert "FOCUSED" not in prompt
+    # But should still have the base content
+    assert "knowledge synthesis engine" in prompt

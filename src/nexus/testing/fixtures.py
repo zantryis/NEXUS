@@ -98,13 +98,36 @@ def list_captured_days(fixture_dir: Path, topic_slug: str) -> list[str]:
     return sorted(d.name for d in topic_dir.iterdir() if d.is_dir())
 
 
-def partition_by_date(items: list[ContentItem]) -> dict[date, list[ContentItem]]:
-    """Group ContentItems by published date. Items without published date use today."""
+def partition_by_date(
+    items: list[ContentItem],
+    max_age_days: int = 14,
+    reference_date: date | None = None,
+) -> dict[date, list[ContentItem]]:
+    """Group ContentItems by published date, dropping stale articles.
+
+    Args:
+        items: Articles to partition.
+        max_age_days: Drop articles older than this many days from reference_date.
+        reference_date: Anchor date (defaults to today). Articles with published
+            date > reference_date are also dropped (future dates from bad RSS).
+    """
+    ref = reference_date or date.today()
+    from datetime import timedelta
+    cutoff = ref - timedelta(days=max_age_days)
+
     groups: dict[date, list[ContentItem]] = defaultdict(list)
+    dropped = 0
     for item in items:
         if item.published:
             day = item.published.date() if hasattr(item.published, "date") else item.published
         else:
-            day = date.today()
+            day = ref  # Missing date → use reference date
+        if day < cutoff or day > ref:
+            dropped += 1
+            continue
         groups[day].append(item)
+
+    if dropped:
+        logger.info(f"partition_by_date: dropped {dropped}/{len(items)} articles outside [{cutoff}, {ref}]")
+
     return dict(sorted(groups.items()))

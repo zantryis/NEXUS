@@ -72,3 +72,59 @@ def test_sources_config_defaults():
     assert sources.blocked_sources == []
     assert sources.discover_new_sources is True
     assert sources.discovery_interval_days == 7
+
+
+def test_topic_scope_defaults():
+    topic = TopicConfig(name="Test")
+    assert topic.scope == "medium"
+    assert topic.max_events is None
+
+
+def test_topic_scope_values():
+    narrow = TopicConfig(name="Iran-US", scope="narrow")
+    broad = TopicConfig(name="AI/ML", scope="broad")
+    assert narrow.scope == "narrow"
+    assert broad.scope == "broad"
+
+
+def test_topic_max_events_override():
+    topic = TopicConfig(name="Test", max_events=50)
+    assert topic.max_events == 50
+
+
+def test_audio_config_defaults():
+    from nexus.config.models import AudioConfig
+    audio = AudioConfig()
+    assert audio.enabled is True
+    assert audio.tts_backend == "gemini"
+    assert audio.tts_model == "gemini-2.5-flash-preview-tts"
+    assert audio.voice_host_a == "Kore"
+    assert audio.voice_host_b == "Puck"
+
+
+def test_breaking_news_config_defaults():
+    from nexus.config.models import BreakingNewsConfig
+    bn = BreakingNewsConfig()
+    assert bn.enabled is True
+    assert bn.poll_interval_hours == 3
+    assert bn.threshold == 7
+
+
+def test_telegram_config_defaults():
+    from nexus.config.models import TelegramConfig
+    tg = TelegramConfig()
+    assert tg.enabled is True
+    assert tg.chat_id is None
+
+
+def test_nexus_config_with_new_sections():
+    config = NexusConfig(
+        user=UserConfig(name="Tristan"),
+        audio={"tts_backend": "openai", "voice_host_a": "nova"},
+        breaking_news={"threshold": 8},
+        telegram={"chat_id": 12345},
+    )
+    assert config.audio.tts_backend == "openai"
+    assert config.audio.voice_host_a == "nova"
+    assert config.breaking_news.threshold == 8
+    assert config.telegram.chat_id == 12345

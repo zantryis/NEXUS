@@ -12,17 +12,18 @@ from nexus.config.models import NexusConfig, TopicConfig
 from nexus.engine.filtering.filter import filter_items
 from nexus.engine.ingestion.dedup import dedup_items
 from nexus.engine.ingestion.ingest import async_ingest_items
-from nexus.engine.knowledge.compression import (
-    compress_to_weekly, load_summaries, save_summaries,
-)
+from nexus.engine.knowledge.compression import compress_to_weekly
+from nexus.engine.knowledge.entities import resolve_entities
 from nexus.engine.knowledge.events import (
-    Event, append_events, extract_event, load_events,
-    is_duplicate_event, merge_events,
+    Event, extract_event, is_duplicate_event, merge_events,
 )
+from nexus.engine.knowledge.pages import refresh_stale_pages
 from nexus.engine.sources.polling import ContentItem, poll_all_feeds
 from nexus.engine.synthesis.knowledge import TopicSynthesis, synthesize_topic
 from nexus.engine.synthesis.renderers import render_text_briefing
+from nexus.engine.audio.pipeline import run_audio_pipeline
 from nexus.engine.evaluation.metrics import compute_run_metrics, save_metrics
+from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.llm.client import LLMClient, _resolve_provider
 from nexus.testing.fixtures import FixtureCapture, FixtureReplay, partition_by_date
 
@@ -42,14 +43,14 @@ def load_source_registry(data_dir: Path, topic: TopicConfig) -> list[dict]:
 
 
 async def maybe_compress(
-    llm: LLMClient, knowledge_dir: Path, topic_name: str, events: list[Event]
+    llm: LLMClient, store: KnowledgeStore, topic_slug: str,
+    topic_name: str, events: list[Event],
 ) -> None:
     """Compress old weeks into weekly summaries if not already done."""
     if not events:
         return
 
-    weekly_path = knowledge_dir / "weekly_summaries.yaml"
-    existing_summaries = load_summaries(weekly_path)
+    existing_summaries = await store.get_summaries(topic_slug, "weekly")
     summarized_dates = set()
     for s in existing_summaries:
         iso = s.period_start.isocalendar()
@@ -70,17 +71,24 @@ async def maybe_compress(
 
     logger.info(f"[{topic_name}] Compressing {len(unsummarized)} old weeks")
     try:
-        # Flatten unsummarized events for compression
         events_to_compress = []
         for week_events in unsummarized.values():
             events_to_compress.extend(week_events)
 
         new_summaries = await compress_to_weekly(llm, events_to_compress, topic_name)
-        all_summaries = existing_summaries + new_summaries
-        save_summaries(weekly_path, all_summaries)
+        for s in new_summaries:
+            await store.add_summary(s, topic_slug, "weekly")
+
         logger.info(f"[{topic_name}] Saved {len(new_summaries)} new weekly summaries")
     except Exception as e:
         logger.warning(f"[{topic_name}] Compression failed (non-blocking): {e}")
+
+
+def _event_cap_for_topic(topic: TopicConfig) -> int:
+    """Calculate event extraction cap based on topic scope."""
+    if topic.max_events is not None:
+        return topic.max_events
+    return {"narrow": 15, "medium": 20, "broad": 35}.get(topic.scope, 20)
 
 
 async def run_topic_pipeline(
@@ -88,12 +96,11 @@ async def run_topic_pipeline(
     topic: TopicConfig,
     data_dir: Path,
     sources: list[dict],
+    store: KnowledgeStore,
     capture: FixtureCapture | None = None,
 ) -> TopicSynthesis:
     """Run the pipeline for a single topic: poll → ingest → filter → events → synthesize."""
     slug = topic.name.lower().replace(" ", "-").replace("/", "-")
-    knowledge_dir = data_dir / "knowledge" / slug
-    knowledge_dir.mkdir(parents=True, exist_ok=True)
     timings: dict[str, float] = {}
 
     # Poll, dedup, and ingest
@@ -116,8 +123,8 @@ async def run_topic_pipeline(
     if capture:
         capture.save_ingested(ingested)
 
-    # Load existing events for filter pass 2 context and event extraction
-    existing_events = load_events(knowledge_dir / "events.yaml")
+    # Load existing events from store
+    existing_events = await store.get_events(slug)
 
     # Recent events = last 7 days (up to 30) for novelty assessment
     cutoff = date.today() - timedelta(days=7)
@@ -125,17 +132,23 @@ async def run_topic_pipeline(
 
     # Filter (two-pass: relevance → significance+novelty)
     t0 = time.monotonic()
-    relevant = await filter_items(llm, ingested, topic, recent_events=recent_events)
+    filter_result = await filter_items(llm, ingested, topic, recent_events=recent_events)
+    relevant = filter_result.accepted
     timings["filter"] = time.monotonic() - t0
     logger.info(f"[{topic.name}] {len(relevant)} passed two-pass filter")
+
+    # Persist filter decisions
+    if filter_result.log_entries:
+        await store.add_filter_log(filter_result.log_entries)
+
     if capture:
         capture.save_filtered(relevant)
 
-    # Extract events — cap at top 20 by relevance to keep pipeline fast
-    MAX_EVENTS_PER_TOPIC = 20
+    # Extract events — cap by topic scope
+    event_cap = _event_cap_for_topic(topic)
     top_relevant = sorted(
         relevant, key=lambda x: x.relevance_score or 0, reverse=True
-    )[:MAX_EVENTS_PER_TOPIC]
+    )[:event_cap]
     logger.info(f"[{topic.name}] Extracting events for top {len(top_relevant)} articles")
 
     t0 = time.monotonic()
@@ -143,7 +156,7 @@ async def run_topic_pipeline(
 
     async def _extract(item):
         async with extraction_sem:
-            return await extract_event(llm, item, topic, existing_events)
+            return await extract_event(llm, item, topic, existing_events, current_date=date.today())
 
     raw_events = await asyncio.gather(*[_extract(item) for item in top_relevant])
     extracted_events = [e for e in raw_events if e is not None]
@@ -171,8 +184,37 @@ async def run_topic_pipeline(
     if capture:
         capture.save_events(extracted_events)
 
+    # Entity resolution: canonicalize entity strings into graph nodes
+    resolve_map: dict[str, tuple[int, str]] = {}
     if new_events:
-        append_events(knowledge_dir / "events.yaml", new_events)
+        t0 = time.monotonic()
+        all_raw = list({e_name for event in new_events for e_name in event.entities})
+        known = await store.get_all_entities(slug)
+        resolutions = await resolve_entities(llm, all_raw, known)
+
+        for r in resolutions:
+            aliases = [r.raw] if r.raw != r.canonical else []
+            eid = await store.upsert_entity(r.canonical, r.entity_type, aliases)
+            resolve_map[r.raw] = (eid, r.canonical)
+
+        timings["entity_resolution"] = time.monotonic() - t0
+        logger.info(
+            f"[{topic.name}] Resolved {len(all_raw)} entities "
+            f"({sum(1 for r in resolutions if r.is_new)} new)"
+        )
+
+    if new_events:
+        event_ids = await store.add_events(new_events, slug)
+        # Link events to resolved entities
+        if resolve_map:
+            for event_id, event in zip(event_ids, new_events):
+                entity_ids = [
+                    resolve_map[e_name][0]
+                    for e_name in event.entities
+                    if e_name in resolve_map
+                ]
+                if entity_ids:
+                    await store.link_event_entities(event_id, entity_ids)
         logger.info(
             f"[{topic.name}] Logged {len(new_events)} new events "
             f"({len(extracted_events)} extracted, {len(extracted_events) - len(new_events)} merged)"
@@ -180,11 +222,11 @@ async def run_topic_pipeline(
 
     # Compression (non-blocking): compress old weeks
     all_events = existing_events + new_events
-    await maybe_compress(llm, knowledge_dir, topic.name, all_events)
+    await maybe_compress(llm, store, slug, topic.name, all_events)
 
     # Load summaries for synthesis context
-    weekly = load_summaries(knowledge_dir / "weekly_summaries.yaml")
-    monthly = load_summaries(knowledge_dir / "monthly_summaries.yaml")
+    weekly = await store.get_summaries(slug, "weekly")
+    monthly = await store.get_summaries(slug, "monthly")
 
     # Knowledge synthesis: build TopicSynthesis (X)
     t0 = time.monotonic()
@@ -194,6 +236,8 @@ async def run_topic_pipeline(
         articles=relevant,
         weekly_summaries=weekly,
         monthly_summaries=monthly,
+        store=store,
+        topic_slug=slug,
     )
     timings["synthesis"] = time.monotonic() - t0
     if capture:
@@ -210,6 +254,7 @@ async def run_topic_pipeline(
 async def run_pipeline(
     config: NexusConfig, llm: LLMClient, data_dir: Path,
     capture: bool = False, fixture_dir: Path | None = None,
+    gemini_api_key: str | None = None,
 ) -> Path:
     """Run the full daily engine pipeline. Returns path to generated briefing."""
     pipeline_start = time.monotonic()
@@ -222,54 +267,81 @@ async def run_pipeline(
     if capture and fixture_dir is None:
         fixture_dir = Path("tests/fixtures")
 
-    for topic in config.topics:
-        sources = load_source_registry(data_dir, topic)
-        cap = None
-        if capture:
+    # Initialize knowledge store
+    store = KnowledgeStore(data_dir / "knowledge.db")
+    await store.initialize()
+
+    try:
+        for topic in config.topics:
+            sources = load_source_registry(data_dir, topic)
+            cap = None
+            if capture:
+                slug = topic.name.lower().replace(" ", "-").replace("/", "-")
+                cap = FixtureCapture(fixture_dir, slug)
+            syn = await run_topic_pipeline(llm, topic, data_dir, sources,
+                                           store=store, capture=cap)
+            syntheses.append(syn)
+
+        # Save each TopicSynthesis to disk and store
+        today = date.today().isoformat()
+        synth_dir = data_dir / "artifacts" / "syntheses" / today
+        synth_dir.mkdir(parents=True, exist_ok=True)
+        for syn in syntheses:
+            slug = syn.topic_name.lower().replace(" ", "-").replace("/", "-")
+            synth_path = synth_dir / f"{slug}.yaml"
+            synth_path.write_text(
+                yaml.dump(syn.model_dump(), default_flow_style=False, allow_unicode=True)
+            )
+            await store.save_synthesis(syn.model_dump(), slug, date.today())
+            logger.info(f"Saved synthesis: {synth_path}")
+
+        # Compute and save run metrics
+        for topic in config.topics:
             slug = topic.name.lower().replace(" ", "-").replace("/", "-")
-            cap = FixtureCapture(fixture_dir, slug)
-        syn = await run_topic_pipeline(llm, topic, data_dir, sources, capture=cap)
-        syntheses.append(syn)
+            topic_events = await store.get_events(slug)
+            all_events.extend(topic_events)
 
-    # Save each TopicSynthesis to disk
-    today = date.today().isoformat()
-    synth_dir = data_dir / "artifacts" / "syntheses" / today
-    synth_dir.mkdir(parents=True, exist_ok=True)
-    for syn in syntheses:
-        slug = syn.topic_name.lower().replace(" ", "-").replace("/", "-")
-        synth_path = synth_dir / f"{slug}.yaml"
-        synth_path.write_text(
-            yaml.dump(syn.model_dump(), default_flow_style=False, allow_unicode=True)
-        )
-        logger.info(f"Saved synthesis: {synth_path}")
+        metrics = compute_run_metrics(syntheses, all_articles, all_events, extracted_event_count)
+        metrics_path = save_metrics(data_dir, metrics)
+        logger.info(f"Saved metrics: {metrics_path}")
 
-    # Compute and save run metrics
-    # Gather all articles/events across topics for metrics
-    for topic in config.topics:
-        slug = topic.name.lower().replace(" ", "-").replace("/", "-")
-        knowledge_dir = data_dir / "knowledge" / slug
-        topic_events = load_events(knowledge_dir / "events.yaml")
-        all_events.extend(topic_events)
+        # Refresh stale narrative pages
+        topic_slugs = [_topic_slug(t.name) for t in config.topics]
+        topic_names = {_topic_slug(t.name): t.name for t in config.topics}
+        refreshed = await refresh_stale_pages(store, llm, topic_slugs, topic_names)
+        if refreshed:
+            logger.info(f"Refreshed {refreshed} stale narrative pages")
 
-    metrics = compute_run_metrics(syntheses, all_articles, all_events, extracted_event_count)
-    metrics_path = save_metrics(data_dir, metrics)
-    logger.info(f"Saved metrics: {metrics_path}")
+        # Render briefing from TopicSynthesis objects
+        t0 = time.monotonic()
+        briefing_text = await render_text_briefing(llm, config, syntheses)
+        render_time = time.monotonic() - t0
+        logger.info(f"Briefing rendered in {render_time:.1f}s")
 
-    # Render briefing from TopicSynthesis objects
-    t0 = time.monotonic()
-    briefing_text = await render_text_briefing(llm, config, syntheses)
-    render_time = time.monotonic() - t0
-    logger.info(f"Briefing rendered in {render_time:.1f}s")
+        # Save artifact
+        briefing_dir = data_dir / "artifacts" / "briefings"
+        briefing_dir.mkdir(parents=True, exist_ok=True)
+        briefing_path = briefing_dir / f"{today}.md"
+        briefing_path.write_text(briefing_text)
 
-    # Save artifact
-    briefing_dir = data_dir / "artifacts" / "briefings"
-    briefing_dir.mkdir(parents=True, exist_ok=True)
-    briefing_path = briefing_dir / f"{today}.md"
-    briefing_path.write_text(briefing_text)
+        # Audio pipeline (if enabled)
+        audio_path = None
+        if config.audio.enabled:
+            try:
+                audio_path = await run_audio_pipeline(
+                    llm, config, syntheses, data_dir,
+                    gemini_api_key=gemini_api_key,
+                )
+                if audio_path:
+                    logger.info(f"Audio saved to {audio_path}")
+            except Exception as e:
+                logger.warning(f"Audio pipeline failed (non-blocking): {e}")
 
-    total_time = time.monotonic() - pipeline_start
-    logger.info(f"Briefing saved to {briefing_path} (total pipeline: {total_time:.1f}s)")
-    return briefing_path
+        total_time = time.monotonic() - pipeline_start
+        logger.info(f"Briefing saved to {briefing_path} (total pipeline: {total_time:.1f}s)")
+        return briefing_path
+    finally:
+        await store.close()
 
 
 def _topic_slug(name: str) -> str:
@@ -279,8 +351,13 @@ def _topic_slug(name: str) -> str:
 async def run_backtest(
     config: NexusConfig, llm: LLMClient, data_dir: Path,
     label: str | None = None, fixture_dir: Path | None = None,
+    max_days: int | None = None,
 ) -> None:
-    """Replay captured fixtures day-by-day with real LLM calls. Evaluates pipeline quality."""
+    """Replay captured fixtures day-by-day with real LLM calls. Evaluates pipeline quality.
+
+    Args:
+        max_days: If set, only process the last N days of fixture data.
+    """
     if fixture_dir is None:
         fixture_dir = Path("tests/fixtures")
 
@@ -292,13 +369,15 @@ async def run_backtest(
     bt_data = data_dir / "backtest" / label
     bt_data.mkdir(parents=True, exist_ok=True)
 
+    # Initialize backtest knowledge store
+    bt_store = KnowledgeStore(bt_data / "knowledge.db")
+    await bt_store.initialize()
+
     backtest_start = time.monotonic()
     logger.info(f"=== Backtest started (label={label}) ===")
 
     for topic in config.topics:
         slug = _topic_slug(topic.name)
-        knowledge_dir = bt_data / "knowledge" / slug
-        knowledge_dir.mkdir(parents=True, exist_ok=True)
 
         # Load all captured polled items across all capture days
         all_polled: list[ContentItem] = []
@@ -321,9 +400,16 @@ async def run_backtest(
             logger.warning(f"[{topic.name}] No polled items found in fixtures")
             continue
 
-        # Partition by published date
+        # Partition by published date (drops stale/future articles)
         days = partition_by_date(all_polled)
-        logger.info(f"[{topic.name}] {len(all_polled)} articles across {len(days)} days")
+
+        # --days: restrict to last N days
+        if max_days and len(days) > max_days:
+            all_dates = sorted(days.keys())
+            keep = all_dates[-max_days:]
+            days = {d: days[d] for d in keep}
+
+        logger.info(f"[{topic.name}] {sum(len(v) for v in days.values())} articles across {len(days)} days")
 
         consecutive_failures = 0
 
@@ -344,20 +430,21 @@ async def run_backtest(
                     logger.info(f"[{topic.name}] Ingested {len(ingested)} articles via network")
 
                 # Load accumulated events for context
-                existing_events = load_events(knowledge_dir / "events.yaml")
+                existing_events = await bt_store.get_events(slug)
                 cutoff = day_date - timedelta(days=7)
                 recent_events = [e for e in existing_events if e.date >= cutoff][-30:]
 
                 # Filter with real LLM
-                relevant = await filter_items(llm, ingested, topic, recent_events=recent_events)
+                filter_result = await filter_items(llm, ingested, topic, recent_events=recent_events)
+                relevant = filter_result.accepted
                 logger.info(f"[{topic.name}] {len(relevant)} passed filter")
 
                 # Extract events with real LLM
                 extraction_sem = asyncio.Semaphore(5)
 
-                async def _extract(item):
+                async def _extract(item, _day=day_date):
                     async with extraction_sem:
-                        return await extract_event(llm, item, topic, existing_events)
+                        return await extract_event(llm, item, topic, existing_events, current_date=_day)
 
                 top_relevant = sorted(
                     relevant, key=lambda x: x.relevance_score or 0, reverse=True
@@ -384,13 +471,34 @@ async def run_backtest(
                     if not merged:
                         new_events.append(event)
 
+                # Entity resolution for backtest
+                resolve_map: dict[str, tuple[int, str]] = {}
                 if new_events:
-                    append_events(knowledge_dir / "events.yaml", new_events)
+                    all_raw = list({e_name for ev in new_events for e_name in ev.entities})
+                    known = await bt_store.get_all_entities(slug)
+                    resolutions = await resolve_entities(llm, all_raw, known)
+                    for r in resolutions:
+                        aliases = [r.raw] if r.raw != r.canonical else []
+                        eid = await bt_store.upsert_entity(r.canonical, r.entity_type, aliases)
+                        resolve_map[r.raw] = (eid, r.canonical)
+
+                if new_events:
+                    event_ids = await bt_store.add_events(new_events, slug)
+                    # Link events to resolved entities
+                    if resolve_map:
+                        for event_id, event in zip(event_ids, new_events):
+                            entity_ids = [
+                                resolve_map[e_name][0]
+                                for e_name in event.entities
+                                if e_name in resolve_map
+                            ]
+                            if entity_ids:
+                                await bt_store.link_event_entities(event_id, entity_ids)
 
                 # Synthesize with real LLM
                 all_events = existing_events + new_events
-                weekly = load_summaries(knowledge_dir / "weekly_summaries.yaml")
-                monthly = load_summaries(knowledge_dir / "monthly_summaries.yaml")
+                weekly = await bt_store.get_summaries(slug, "weekly")
+                monthly = await bt_store.get_summaries(slug, "monthly")
 
                 synthesis = await synthesize_topic(
                     llm, topic,
@@ -398,6 +506,8 @@ async def run_backtest(
                     articles=relevant,
                     weekly_summaries=weekly,
                     monthly_summaries=monthly,
+                    store=bt_store,
+                    topic_slug=slug,
                 )
 
                 # Save synthesis artifact
@@ -407,6 +517,7 @@ async def run_backtest(
                 synth_path.write_text(
                     yaml.dump(synthesis.model_dump(), default_flow_style=False, allow_unicode=True)
                 )
+                await bt_store.save_synthesis(synthesis.model_dump(), slug, day_date)
 
                 # Save metrics
                 metrics = compute_run_metrics([synthesis], relevant, all_events, len(extracted_events))
@@ -444,4 +555,22 @@ async def run_backtest(
                 break
 
     total_time = time.monotonic() - backtest_start
+    usage = llm.usage.summary()
     logger.info(f"=== Backtest complete (label={label}) in {total_time:.1f}s ===")
+    logger.info(
+        f"LLM usage: {usage['total_calls']} calls, "
+        f"{usage['total_input_tokens']} in / {usage['total_output_tokens']} out tokens, "
+        f"{usage['total_elapsed_s']:.1f}s LLM time"
+    )
+    for provider, stats in usage.get("by_provider", {}).items():
+        logger.info(
+            f"  {provider}: {stats['calls']} calls, "
+            f"{stats['input_tokens']} in / {stats['output_tokens']} out, "
+            f"{stats['elapsed_s']:.1f}s"
+        )
+
+    # Save usage summary alongside metrics
+    usage_path = bt_data / "usage_summary.yaml"
+    usage_path.write_text(yaml.dump(usage, default_flow_style=False))
+
+    await bt_store.close()

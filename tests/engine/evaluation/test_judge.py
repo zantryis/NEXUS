@@ -58,6 +58,32 @@ async def test_judge_synthesis(synthesis):
     assert len(scores["strengths"]) == 1
 
 
+def test_format_synthesis_new_convergence_format():
+    """New dict-based convergence/divergence renders correctly."""
+    syn = TopicSynthesis(
+        topic_name="Test",
+        threads=[
+            NarrativeThread(
+                headline="Thread",
+                convergence=[{"fact": "Sanctions announced", "confirmed_by": ["nyt", "bbc"]}],
+                divergence=[{
+                    "shared_event": "US sanctions",
+                    "source_a": "nyt", "framing_a": "Targeted",
+                    "source_b": "tass", "framing_b": "Warfare",
+                }],
+                key_entities=["US"],
+                significance=8,
+            ),
+        ],
+        source_balance={"private": 2, "state": 1},
+        languages_represented=["en"],
+    )
+    text = _format_synthesis_for_judge(syn)
+    assert "Sanctions announced" in text
+    assert "nyt, bbc" in text
+    assert "US sanctions" in text
+
+
 @pytest.mark.asyncio
 async def test_judge_synthesis_bad_json(synthesis):
     mock_llm = AsyncMock()

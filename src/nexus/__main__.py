@@ -74,7 +74,31 @@ def run_engine():
             idx = sys.argv.index("--label")
             if idx + 1 < len(sys.argv):
                 label = sys.argv[idx + 1]
-        asyncio.run(run_backtest(config, llm, data_dir, label=label))
+
+        # --topic: restrict to a single topic
+        if "--topic" in sys.argv:
+            idx = sys.argv.index("--topic")
+            if idx + 1 < len(sys.argv):
+                slug = sys.argv[idx + 1]
+                matched = [t for t in config.topics
+                           if t.name.lower().replace(" ", "-").replace("/", "-") == slug]
+                if not matched:
+                    print(f"Topic '{slug}' not found. Available:")
+                    for t in config.topics:
+                        print(f"  {t.name.lower().replace(' ', '-').replace('/', '-')}")
+                    sys.exit(1)
+                config.topics = matched
+                print(f"  Backtest restricted to topic: {matched[0].name}")
+
+        # --days: restrict to last N days of fixture data
+        max_days = None
+        if "--days" in sys.argv:
+            idx = sys.argv.index("--days")
+            if idx + 1 < len(sys.argv):
+                max_days = int(sys.argv[idx + 1])
+                print(f"  Backtest restricted to last {max_days} days")
+
+        asyncio.run(run_backtest(config, llm, data_dir, label=label, max_days=max_days))
     else:
         briefing_path = asyncio.run(run_pipeline(config, llm, data_dir, capture=do_capture))
         print(f"Briefing generated: {briefing_path}")
@@ -213,6 +237,59 @@ def run_evaluate():
         sys.exit(1)
 
 
+def run_serve():
+    """Start the dashboard web server."""
+    import uvicorn
+    from nexus.web.app import create_app
+
+    db_path = Path("data/knowledge.db")
+    host = "127.0.0.1"
+    port = 8080
+
+    # Parse --port and --host from argv
+    if "--port" in sys.argv:
+        idx = sys.argv.index("--port")
+        if idx + 1 < len(sys.argv):
+            port = int(sys.argv[idx + 1])
+    if "--host" in sys.argv:
+        idx = sys.argv.index("--host")
+        if idx + 1 < len(sys.argv):
+            host = sys.argv[idx + 1]
+
+    app = create_app(db_path)
+    print(f"Starting Nexus dashboard at http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port)
+
+
+def run_all_services():
+    """Run the unified always-on service: dashboard + scheduler + Telegram bot."""
+    load_dotenv()
+    from nexus.config.loader import load_config
+    from nexus.runner import run_all
+
+    data_dir = Path("data")
+    config_path = data_dir / "config.yaml"
+
+    if not config_path.exists():
+        print(f"Config not found at {config_path}.")
+        sys.exit(1)
+
+    config = load_config(config_path)
+
+    host = "0.0.0.0"
+    port = 8080
+    if "--port" in sys.argv:
+        idx = sys.argv.index("--port")
+        if idx + 1 < len(sys.argv):
+            port = int(sys.argv[idx + 1])
+    if "--host" in sys.argv:
+        idx = sys.argv.index("--host")
+        if idx + 1 < len(sys.argv):
+            host = sys.argv[idx + 1]
+
+    asyncio.run(run_all(config, data_dir, host=host, port=port))
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -220,17 +297,21 @@ def main():
     )
 
     if len(sys.argv) < 2:
-        print("Usage: python -m nexus <engine|sources|evaluate|setup>")
+        print("Usage: python -m nexus <engine|run|sources|evaluate|serve|setup>")
         sys.exit(1)
 
     command = sys.argv[1]
 
     if command == "engine":
         run_engine()
+    elif command == "run":
+        run_all_services()
     elif command == "sources":
         run_sources()
     elif command == "evaluate":
         run_evaluate()
+    elif command == "serve":
+        run_serve()
     elif command == "setup":
         print("Setup wizard not yet implemented.")
     else:

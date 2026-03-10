@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nexus System Map</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <div class="topbar__brand">
+          <span class="eyebrow">Architect View</span>
+          <h1 id="page-title">Nexus System Map</h1>
+        </div>
+        <nav class="topbar__nav" aria-label="Section navigation">
+          <a href="#overview">Overview</a>
+          <a href="#pipeline">Pipeline</a>
+          <a href="#data-design">Data Design</a>
+          <a href="#evidence">Evidence</a>
+          <a href="#notes">Architect Notes</a>
+        </nav>
+      </header>
+
+      <main class="layout">
+        <div class="content">
+          <section class="hero panel" id="overview">
+            <div class="hero__copy">
+              <p class="eyebrow" id="page-kicker">Single-page semantic map</p>
+              <h2 id="page-subtitle">Loading system synopsis...</h2>
+              <p id="page-summary" class="lede"></p>
+            </div>
+            <div class="hero__meta">
+              <div class="hero__fact">
+                <span class="hero__fact-label">Snapshot</span>
+                <strong id="snapshot-date">-</strong>
+              </div>
+              <div class="hero__fact">
+                <span class="hero__fact-label">Primary truth</span>
+                <strong>Current codebase</strong>
+              </div>
+              <div class="hero__fact">
+                <span class="hero__fact-label">Storage posture</span>
+                <strong>File-backed knowledge store</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel toolbar-panel" aria-label="Graph controls">
+            <div class="toolbar-panel__block">
+              <h3>Legend</h3>
+              <div id="legend" class="legend"></div>
+            </div>
+            <div class="toolbar-panel__block">
+              <h3>Filters</h3>
+              <div class="filters">
+                <button class="filter-pill is-active" data-filter="implementedOnly" type="button">
+                  Implemented only
+                </button>
+                <button class="filter-pill is-active" data-filter="showRoadmap" type="button">
+                  Include roadmap
+                </button>
+                <button class="filter-pill is-active" data-filter="showStorage" type="button">
+                  Show storage
+                </button>
+                <button class="filter-pill is-active" data-filter="showLlm" type="button">
+                  Show LLM boundaries
+                </button>
+              </div>
+            </div>
+            <div class="toolbar-panel__block">
+              <h3>Fast facts</h3>
+              <div id="facts-grid" class="facts-grid"></div>
+            </div>
+          </section>
+
+          <section class="panel" aria-labelledby="system-map-heading">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Current architecture</p>
+                <h2 id="system-map-heading">System map</h2>
+              </div>
+              <p class="section-heading__note">
+                Solid elements are grounded in code. Planned elements are annotated from
+                <code>design.md</code>.
+              </p>
+            </div>
+            <div class="system-map" id="system-map">
+              <svg class="system-map__edges" id="graph-edges" aria-hidden="true"></svg>
+              <div class="system-map__layers" id="graph-layers"></div>
+            </div>
+          </section>
+
+          <section class="panel" id="pipeline" aria-labelledby="pipeline-heading">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Runtime flow</p>
+                <h2 id="pipeline-heading">Daily pipeline</h2>
+              </div>
+              <p class="section-heading__note">
+                Ordered from the actual execution path in <code>src/nexus/engine/pipeline.py</code>.
+              </p>
+            </div>
+            <div id="pipeline-flow" class="pipeline-flow"></div>
+          </section>
+
+          <section class="panel" id="data-design" aria-labelledby="data-heading">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Logical + physical</p>
+                <h2 id="data-heading">Data model and storage</h2>
+              </div>
+              <p class="section-heading__note">
+                The repo has no relational database. Persistence is YAML and markdown arranged by topic.
+              </p>
+            </div>
+            <div class="data-grid">
+              <div>
+                <h3 class="subheading">Logical entities</h3>
+                <div id="data-models" class="card-grid"></div>
+              </div>
+              <div>
+                <h3 class="subheading">File-backed storage map</h3>
+                <div id="storage-map" class="storage-list"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" id="evidence" aria-labelledby="evidence-heading">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Provenance</p>
+                <h2 id="evidence-heading">Evidence and source references</h2>
+              </div>
+              <p class="section-heading__note">
+                Every major element ties back to a code path or an explicit roadmap section.
+              </p>
+            </div>
+            <div id="evidence-list" class="evidence-list"></div>
+          </section>
+
+          <section class="panel" id="notes" aria-labelledby="notes-heading">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Interpretation</p>
+                <h2 id="notes-heading">Architect notes</h2>
+              </div>
+              <p class="section-heading__note">
+                Key implementation gaps between the existing repo and the broader target system.
+              </p>
+            </div>
+            <div id="architect-notes" class="notes-list"></div>
+          </section>
+        </div>
+
+        <aside class="detail-panel panel" id="detail-panel">
+          <div class="detail-panel__header">
+            <p class="eyebrow">Selection</p>
+            <h2 id="detail-title">System briefing</h2>
+            <span id="detail-status" class="status-badge">Overview</span>
+          </div>
+          <p id="detail-summary" class="detail-panel__summary">
+            Select a node, pipeline stage, data model, storage artifact, or note to inspect its role,
+            boundaries, and provenance.
+          </p>
+          <div class="detail-panel__section">
+            <h3>Attributes</h3>
+            <dl id="detail-attributes" class="detail-attributes"></dl>
+          </div>
+          <div class="detail-panel__section">
+            <h3>Relationships</h3>
+            <ul id="detail-relations" class="detail-list"></ul>
+          </div>
+          <div class="detail-panel__section">
+            <h3>Evidence</h3>
+            <ul id="detail-sources" class="detail-list"></ul>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <template id="empty-template">
+      <div class="empty-state">
+        <p>No items match the active filters.</p>
+      </div>
+    </template>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

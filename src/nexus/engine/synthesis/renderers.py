@@ -60,13 +60,18 @@ def _build_synthesis_context(syntheses: list[TopicSynthesis]) -> str:
                 if thread.convergence:
                     parts.append("Convergence (confirmed by multiple sources):")
                     for c in thread.convergence:
-                        parts.append(f"  ✓ {c}")
+                        if isinstance(c, dict):
+                            sources = ", ".join(c.get("confirmed_by", []))
+                            parts.append(f"  ✓ {c.get('fact', '?')} (confirmed by: {sources})")
+                        else:
+                            parts.append(f"  ✓ {c}")
 
                 if thread.divergence:
                     parts.append("Divergence (different framings):")
                     for d in thread.divergence:
+                        shared = d.get("shared_event", d.get("claim", "?"))
                         parts.append(
-                            f"  ⟷ {d.get('claim', '?')}: "
+                            f"  ⟷ {shared}: "
                             f"{d.get('source_a', '?')} says \"{d.get('framing_a', '?')}\" vs "
                             f"{d.get('source_b', '?')} says \"{d.get('framing_b', '?')}\""
                         )

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 from nexus.engine.sources.polling import ContentItem
 from nexus.config.models import TopicConfig
 from nexus.engine.filtering.filter import (
-    score_relevance, score_batch, filter_items,
+    score_relevance, score_batch, filter_items, FilterResult,
     score_significance_batch, _format_event_context,
 )
 
@@ -104,10 +104,13 @@ async def test_filter_items_pass1_only(topic):
         ContentItem(title="Cooking", url="https://b.com", source_id="t", full_text="Pasta"),
     ]
 
-    results = await filter_items(mock_llm, items, topic, threshold=5)
-    assert len(results) == 1
-    assert results[0].relevance_score == 8
+    result = await filter_items(mock_llm, items, topic, threshold=5)
+    assert isinstance(result, FilterResult)
+    assert len(result.accepted) == 1
+    assert result.accepted[0].relevance_score == 8
     assert mock_llm.complete.call_count == 1
+    # Log should have entries for both items
+    assert len(result.log_entries) == 2
 
 
 @pytest.mark.asyncio
@@ -128,9 +131,9 @@ async def test_filter_items_uses_topic_threshold():
         ContentItem(title="B", url="https://b.com", source_id="t", full_text="text"),
     ]
 
-    results = await filter_items(mock_llm, items, topic)
-    assert len(results) == 1
-    assert results[0].title == "B"
+    result = await filter_items(mock_llm, items, topic)
+    assert len(result.accepted) == 1
+    assert result.accepted[0].title == "B"
 
     # Explicit threshold overrides
     mock_llm.complete.return_value = (
@@ -141,8 +144,8 @@ async def test_filter_items_uses_topic_threshold():
         ContentItem(title="A", url="https://a.com", source_id="t", full_text="text"),
         ContentItem(title="B", url="https://b.com", source_id="t", full_text="text"),
     ]
-    results2 = await filter_items(mock_llm, items2, topic, threshold=5)
-    assert len(results2) == 2
+    result2 = await filter_items(mock_llm, items2, topic, threshold=5)
+    assert len(result2.accepted) == 2
 
 
 @pytest.mark.asyncio
@@ -166,13 +169,15 @@ async def test_filter_items_two_pass(topic):
     ]
 
     recent = [Event(date=date(2026, 3, 8), summary="Previous AI event", significance=7)]
-    results = await filter_items(mock_llm, items, topic, threshold=5, recent_events=recent)
+    result = await filter_items(mock_llm, items, topic, threshold=5, recent_events=recent)
 
     # Article 0 passes (novel + significant), article 1 filtered (sig=3, not novel)
-    assert len(results) == 1
-    assert results[0].title == "New AI breakthrough"
+    assert len(result.accepted) == 1
+    assert result.accepted[0].title == "New AI breakthrough"
     # Two LLM calls: pass 1 batch + pass 2 batch
     assert mock_llm.complete.call_count == 2
+    # Log should have entries for both items with pass 2 data
+    assert len(result.log_entries) == 2
 
 
 @pytest.mark.asyncio

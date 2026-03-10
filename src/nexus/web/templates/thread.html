@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ thread.headline }} — Nexus{% endblock %}
+{% block content %}
+<h2>{{ thread.headline }}</h2>
+<p>
+    <span class="badge badge-{{ thread.status }}">{{ thread.status }}</span>
+    Significance: {{ thread.significance }}
+</p>
+
+{% if thread.key_entities %}
+<p>Entities:
+    {% for e in thread.key_entities %}
+    <a href="/entities/?q={{ e }}">{{ e }}</a>{% if not loop.last %}, {% endif %}
+    {% endfor %}
+</p>
+{% endif %}
+
+{% if events %}
+<section>
+    <h3>Events</h3>
+    {% for e in events %}
+    <div class="event-row">
+        <small>{{ e.date }}</small>
+        {{ e.summary }}
+        <small class="sig">sig: {{ e.significance }}</small>
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
+
+{% if convergence %}
+<section>
+    <h3>Convergence</h3>
+    {% for c in convergence %}
+    <div class="convergence-item">
+        {{ c.fact_text }}
+        {% if c.confirmed_by %}
+        <small>Confirmed by: {{ c.confirmed_by | join(', ') }}</small>
+        {% endif %}
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
+
+{% if divergence %}
+<section>
+    <h3>Divergence</h3>
+    {% for d in divergence %}
+    <div class="divergence-item">
+        <strong>{{ d.shared_event }}</strong>
+        <div class="framing">
+            <div class="framing-a">
+                <small>{{ d.source_a }}:</small> {{ d.framing_a }}
+            </div>
+            <div class="framing-b">
+                <small>{{ d.source_b }}:</small> {{ d.framing_b }}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
+
+{% if page %}
+<p><a href="/pages/thread:{{ thread.slug }}">Deep dive</a></p>
+{% endif %}
+{% endblock %}

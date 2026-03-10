@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Threads — Nexus{% endblock %}
+{% block content %}
+<h2>Threads
+    {% if filter_status %}<small>({{ filter_status }})</small>{% endif %}
+    {% if filter_topic %}<small>in {{ filter_topic }}</small>{% endif %}
+</h2>
+
+{% if threads %}
+{% for t in threads %}
+<article class="thread-card">
+    <a href="/threads/{{ t.slug }}">{{ t.headline }}</a>
+    <small>
+        <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
+        sig: {{ t.significance }}
+        {% if t.key_entities %}
+         &mdash; {{ t.key_entities[:3] | join(', ') }}
+        {% endif %}
+    </small>
+</article>
+{% endfor %}
+{% else %}
+<p>No threads found.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Event {{ event_id }} — Nexus{% endblock %}
+{% block content %}
+<h2>{{ event.summary }}</h2>
+<p>{{ event.date }} &mdash; Significance: {{ event.significance }}</p>
+
+{% if event.entities %}
+<p>Entities:
+    {% for e in event.entities %}
+    <a href="/entities/?q={{ e }}">{{ e }}</a>{% if not loop.last %}, {% endif %}
+    {% endfor %}
+</p>
+{% endif %}
+
+{% if event.sources %}
+<section>
+    <h3>Sources</h3>
+    {% for s in event.sources %}
+    <div class="source-item">
+        <span class="badge badge-{{ s.affiliation }}">{{ s.affiliation }}/{{ s.country }}</span>
+        <strong>{{ s.outlet }}</strong>
+        {% if s.url %}
+        <a href="{{ s.url }}" target="_blank" rel="noopener">article</a>
+        {% endif %}
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
+{% endblock %}
