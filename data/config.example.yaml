@@ -1,10 +1,12 @@
 # Nexus configuration — copy to data/config.yaml and customize
-# Or run: python -m nexus setup
+# Or run: python -m nexus setup (easier!)
 
-# Model preset — pick one: free | cheap | balanced | quality
+# Model preset — determines which LLM provider + models to use
+# Available: free | cheap | balanced | quality | openai-cheap | openai-balanced | anthropic
 # "free" uses Ollama (local, no API key), "cheap" uses DeepSeek (~$0.01/day),
-# "balanced" uses Gemini Flash (~$0.05/day), "quality" uses Gemini Pro (~$0.15/day)
-# preset: balanced
+# "balanced" uses Gemini Flash+Pro (~$0.05/day), "quality" uses Gemini Pro (~$0.15/day)
+# "openai-cheap" uses GPT-4.1 Nano/Mini (~$0.03/day), "anthropic" uses Claude Haiku/Sonnet (~$0.10/day)
+preset: balanced
 
 user:
   name: "Your Name"
@@ -18,31 +20,35 @@ briefing:
   depth: "detailed"               # "brief" | "detailed"
 
 # Define your intelligence topics
+# Pre-built source registries exist for: iran-us-relations, ai-ml-research,
+# formula-1, global-energy-transition. For custom topics, run:
+#   python -m nexus sources discover <topic-slug>
 topics:
-  - name: "Your Topic"
+  - name: "AI/ML Research"
     priority: high                # high | medium | low
-    subtopics: ["subtopic1", "subtopic2", "subtopic3"]
+    subtopics: ["LLM", "computer vision", "AI safety"]
     source_languages: ["en"]      # ISO 639-1 codes
     perspective_diversity: medium  # low | medium | high (min source affiliation balance)
     filter_threshold: 6.0         # 1-10, lower = more articles pass
     scope: medium                 # narrow | medium | broad (affects event extraction cap)
 
 # LLM model assignments per pipeline stage (overrides preset if set)
-models:
-  filtering: "gemini-3-flash-preview"
-  synthesis: "gemini-3.1-pro-preview"
-  knowledge_summary: "gemini-3-flash-preview"
-  dialogue_script: "gemini-3.1-pro-preview"
-  breaking_news: "gemini-3-flash-preview"
-  agent: "gemini-3.1-pro-preview"
+# Uncomment to override specific stages:
+# models:
+#   filtering: "gemini-3-flash-preview"
+#   synthesis: "gemini-3.1-pro-preview"
+#   knowledge_summary: "gemini-3-flash-preview"
+#   dialogue_script: "gemini-3.1-pro-preview"
+#   breaking_news: "gemini-3-flash-preview"
+#   agent: "gemini-3.1-pro-preview"
 
 # Audio podcast generation
 audio:
   enabled: true
-  tts_backend: "gemini"                       # "gemini" | "openai"
+  tts_backend: "gemini"                       # "gemini" | "openai" | "elevenlabs"
   tts_model: "gemini-2.5-flash-preview-tts"
-  voice_host_a: "Kore"                        # Female voice (Host A)
-  voice_host_b: "Puck"                        # Male voice (Host B)
+  voice_host_a: "Kore"                        # Host A voice name
+  voice_host_b: "Puck"                        # Host B voice name
 
 # Breaking news alerts
 breaking_news:
@@ -53,9 +59,6 @@ breaking_news:
   #   - type: rss
   #     url: "https://feeds.reuters.com/reuters/topNews"
   #     id: reuters-wire
-  #   - type: telegram_channel
-  #     channel: "@reuters"
-  #     id: reuters-telegram
 
 # Telegram delivery
 telegram:
@@ -69,4 +72,4 @@ budget:
   degradation_strategy: "skip_expensive"  # "skip_expensive" | "stop_all"
 
 sources:
-  discover_new_sources: false
+  discover_new_sources: false     # Auto-discover new feeds for topics

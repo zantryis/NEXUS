@@ -35,7 +35,9 @@ def run_engine():
     config_path = data_dir / "config.yaml"
 
     if not config_path.exists():
-        print(f"Config not found at {config_path}. Copy data/config.example.yaml to get started.")
+        print(f"Config not found at {config_path}.")
+        print(f"  Run: python -m nexus setup")
+        print(f"  Or:  cp data/config.example.yaml data/config.yaml")
         sys.exit(1)
 
     api_key = os.getenv("GEMINI_API_KEY")
@@ -44,7 +46,9 @@ def run_engine():
     openai_api_key = os.getenv("OPENAI_API_KEY")
 
     if not api_key and not anthropic_api_key and not deepseek_api_key and not openai_api_key:
-        print("Set GEMINI_API_KEY, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, or OPENAI_API_KEY in .env")
+        print("No API key found. Set one in .env:")
+        print("  GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, or DEEPSEEK_API_KEY")
+        print("  Or run: python -m nexus setup")
         sys.exit(1)
 
     config = load_config(config_path)
@@ -343,6 +347,8 @@ def run_all_services():
 
     if not config_path.exists():
         print(f"Config not found at {config_path}.")
+        print(f"  Run: python -m nexus setup")
+        print(f"  Or:  cp data/config.example.yaml data/config.yaml")
         sys.exit(1)
 
     config = load_config(config_path)
@@ -368,8 +374,14 @@ def main():
     )
 
     if len(sys.argv) < 2:
-        print("Usage: python -m nexus <engine|run|sources|evaluate|serve|setup>\n"
-              "  sources check|build|list|discover")
+        print("Usage: python -m nexus <command>\n\n"
+              "Commands:\n"
+              "  setup     Interactive setup wizard (start here)\n"
+              "  run       Start all services (dashboard + scheduler + Telegram)\n"
+              "  engine    Run the pipeline once\n"
+              "  serve     Start dashboard only\n"
+              "  sources   Manage feeds (check | list | build | discover)\n"
+              "  evaluate  Judge synthesis quality\n")
         sys.exit(1)
 
     command = sys.argv[1]
