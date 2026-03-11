@@ -1,5 +1,6 @@
 """Telegram bot — main bot class with command handlers."""
 
+import asyncio
 import logging
 from datetime import date
 from pathlib import Path
@@ -147,6 +148,8 @@ class NexusBot:
             "\n".join(lines), parse_mode="HTML",
         )
 
+    _SPINNER = ["\u280b", "\u2819", "\u2839", "\u2838", "\u283c", "\u2834", "\u2826", "\u2827", "\u2807", "\u280f"]
+
     async def _handle_message(self, update, context):
         """Handle text messages — route to Q&A."""
         chat_id = update.effective_chat.id
@@ -155,16 +158,65 @@ class NexusBot:
 
         question = update.message.text
 
-        # Show typing indicator (no message in chat history)
+        # Send loading message + typing indicator
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+        loading_msg = await update.message.reply_text(
+            "\U0001f50d Searching knowledge base\u2026"
+        )
+
+        # Animate spinner while Q&A runs
+        done = asyncio.Event()
+
+        async def _animate():
+            i = 0
+            while not done.is_set():
+                await asyncio.sleep(1.2)
+                if done.is_set():
+                    break
+                frame = self._SPINNER[i % len(self._SPINNER)]
+                try:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=loading_msg.message_id,
+                        text=f"{frame} Analyzing\u2026",
+                    )
+                except Exception:
+                    pass
+                i += 1
+
+        animation_task = asyncio.create_task(_animate())
 
         try:
             answer = await answer_question(
                 self._llm, self._store, self._config, question,
             )
+            done.set()
+            await animation_task
+
             html_answer = md_to_telegram_html_light(answer)
             chunks = split_message(html_answer)
-            for chunk in chunks:
+
+            # First chunk replaces the loading message
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=loading_msg.message_id,
+                    text=chunks[0],
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+            except Exception:
+                try:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=loading_msg.message_id,
+                        text=chunks[0],
+                    )
+                except Exception:
+                    pass
+
+            # Additional chunks as new messages
+            for chunk in chunks[1:]:
                 try:
                     await update.message.reply_text(
                         chunk, parse_mode="HTML",
@@ -172,9 +224,19 @@ class NexusBot:
                     )
                 except Exception:
                     await update.message.reply_text(chunk)
+
         except Exception as e:
+            done.set()
+            await animation_task
             logger.error(f"Q&A failed: {e}")
-            await update.message.reply_text("\u26a0\ufe0f Sorry, I couldn't process that question.")
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=loading_msg.message_id,
+                    text="\u26a0\ufe0f Sorry, I couldn't process that question.",
+                )
+            except Exception:
+                pass
 
     async def _handle_callback(self, update, context):
         """Handle inline keyboard callbacks (feedback)."""

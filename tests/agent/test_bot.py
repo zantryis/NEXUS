@@ -72,29 +72,38 @@ async def test_handle_status(bot):
 
 
 @patch("nexus.agent.bot.answer_question", new_callable=AsyncMock)
-async def test_handle_message_html_response(mock_qa, bot):
-    """Q&A responses should be sent as formatted HTML."""
+async def test_handle_message_loading_animation(mock_qa, bot):
+    """Q&A shows loading message, then edits it with the answer."""
     mock_qa.return_value = "**Iran** imposed *new* sanctions."
+
+    loading_msg = MagicMock()
+    loading_msg.message_id = 42
 
     update = MagicMock()
     update.effective_chat.id = 12345
     update.message.text = "What happened?"
-    update.message.reply_text = AsyncMock()
+    update.message.reply_text = AsyncMock(return_value=loading_msg)
     context = MagicMock()
     context.bot.send_chat_action = AsyncMock()
+    context.bot.edit_message_text = AsyncMock()
 
     await bot._handle_message(update, context)
 
-    # Should show typing indicator, not "Thinking..." message
+    # Should send typing indicator
     context.bot.send_chat_action.assert_called_once_with(
         chat_id=12345, action="typing",
     )
 
-    # Answer should be HTML formatted (only call, no "Thinking..." before it)
-    assert update.message.reply_text.call_count == 1
-    answer_call = update.message.reply_text.call_args_list[0]
-    assert answer_call.kwargs.get("parse_mode") == "HTML"
-    assert "<b>Iran</b>" in answer_call.args[0]
+    # Should send loading message first
+    update.message.reply_text.assert_called_once()
+    assert "Searching" in update.message.reply_text.call_args.args[0]
+
+    # Answer should edit the loading message (not send a new one)
+    context.bot.edit_message_text.assert_called()
+    final_edit = context.bot.edit_message_text.call_args
+    assert final_edit.kwargs["message_id"] == 42
+    assert final_edit.kwargs.get("parse_mode") == "HTML"
+    assert "<b>Iran</b>" in final_edit.kwargs["text"]
 
 
 @patch("nexus.agent.bot.deliver_briefing", new_callable=AsyncMock)
