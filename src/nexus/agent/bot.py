@@ -154,7 +154,9 @@ class NexusBot:
             return
 
         question = update.message.text
-        await update.message.reply_text("Thinking...")
+
+        # Show typing indicator (no message in chat history)
+        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
         try:
             answer = await answer_question(
@@ -172,7 +174,7 @@ class NexusBot:
                     await update.message.reply_text(chunk)
         except Exception as e:
             logger.error(f"Q&A failed: {e}")
-            await update.message.reply_text("Sorry, I couldn't process that question.")
+            await update.message.reply_text("\u26a0\ufe0f Sorry, I couldn't process that question.")
 
     async def _handle_callback(self, update, context):
         """Handle inline keyboard callbacks (feedback)."""

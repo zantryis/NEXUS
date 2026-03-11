@@ -80,11 +80,19 @@ async def test_handle_message_html_response(mock_qa, bot):
     update.effective_chat.id = 12345
     update.message.text = "What happened?"
     update.message.reply_text = AsyncMock()
+    context = MagicMock()
+    context.bot.send_chat_action = AsyncMock()
 
-    await bot._handle_message(update, MagicMock())
+    await bot._handle_message(update, context)
 
-    # First call is "Thinking...", second is the answer
-    answer_call = update.message.reply_text.call_args_list[1]
+    # Should show typing indicator, not "Thinking..." message
+    context.bot.send_chat_action.assert_called_once_with(
+        chat_id=12345, action="typing",
+    )
+
+    # Answer should be HTML formatted (only call, no "Thinking..." before it)
+    assert update.message.reply_text.call_count == 1
+    answer_call = update.message.reply_text.call_args_list[0]
     assert answer_call.kwargs.get("parse_mode") == "HTML"
     assert "<b>Iran</b>" in answer_call.args[0]
 
