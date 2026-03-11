@@ -38,6 +38,7 @@ async def run_all(
         api_key=api_key,
         anthropic_api_key=anthropic_api_key,
         deepseek_api_key=deepseek_api_key,
+        budget_config=config.budget,
     )
 
     store = KnowledgeStore(data_dir / "knowledge.db")
@@ -74,8 +75,10 @@ async def run_all(
         app = create_app(data_dir / "knowledge.db")
         # Set audio dir for podcast RSS
         app.state.audio_dir = data_dir / "artifacts" / "audio"
-        # Inject the already-initialized store
+        # Inject shared resources into app state
         app.state.store = store
+        app.state.llm = llm
+        app.state.config = config
 
         uv_config = uvicorn.Config(
             app, host=host, port=port,

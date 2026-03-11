@@ -6,7 +6,7 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 3
+CURRENT_VERSION = 4
 
 DDL = """
 -- Schema version tracking
@@ -210,6 +210,24 @@ CREATE INDEX IF NOT EXISTS idx_feedback_date ON feedback(briefing_date);
 """
 
 
+MIGRATION_V4 = """
+-- Usage log for LLM cost tracking (v4)
+CREATE TABLE IF NOT EXISTS usage_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    config_key TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL NOT NULL DEFAULT 0.0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_log_date ON usage_log(date);
+"""
+
+
 async def initialize_schema(db: aiosqlite.Connection) -> None:
     """Create all tables and indexes. Idempotent."""
     await db.executescript(DDL)
@@ -229,6 +247,10 @@ async def initialize_schema(db: aiosqlite.Connection) -> None:
     if current < 3:
         await db.executescript(MIGRATION_V3)
         logger.info("Applied migration v3: breaking_alerts + feedback tables")
+
+    if current < 4:
+        await db.executescript(MIGRATION_V4)
+        logger.info("Applied migration v4: usage_log table")
 
     if current < CURRENT_VERSION:
         await db.execute(

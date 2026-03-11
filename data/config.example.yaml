@@ -1,4 +1,10 @@
 # Nexus configuration — copy to data/config.yaml and customize
+# Or run: python -m nexus setup
+
+# Model preset — pick one: free | cheap | balanced | quality
+# "free" uses Ollama (local, no API key), "cheap" uses DeepSeek (~$0.01/day),
+# "balanced" uses Gemini Flash (~$0.05/day), "quality" uses Gemini Pro (~$0.15/day)
+# preset: balanced
 
 user:
   name: "Your Name"
@@ -21,7 +27,7 @@ topics:
     filter_threshold: 6.0         # 1-10, lower = more articles pass
     scope: medium                 # narrow | medium | broad (affects event extraction cap)
 
-# LLM model assignments per pipeline stage
+# LLM model assignments per pipeline stage (overrides preset if set)
 models:
   filtering: "gemini-3-flash-preview"
   synthesis: "gemini-3.1-pro-preview"
@@ -43,11 +49,24 @@ breaking_news:
   enabled: true
   poll_interval_hours: 3
   threshold: 7                    # 1-10, only alert above this
+  # wire_feeds:                   # Custom wire feed sources (optional)
+  #   - type: rss
+  #     url: "https://feeds.reuters.com/reuters/topNews"
+  #     id: reuters-wire
+  #   - type: telegram_channel
+  #     channel: "@reuters"
+  #     id: reuters-telegram
 
 # Telegram delivery
 telegram:
   enabled: true
   # chat_id is set automatically on first /start
+
+# Budget limits (optional)
+budget:
+  daily_limit_usd: 1.00          # Hard stop — no LLM calls beyond this
+  warning_threshold_usd: 0.50    # Telegram alert when exceeded
+  degradation_strategy: "skip_expensive"  # "skip_expensive" | "stop_all"
 
 sources:
   discover_new_sources: false

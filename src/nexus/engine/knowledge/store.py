@@ -1005,6 +1005,54 @@ class KnowledgeStore:
             entities=entities,
         )
 
+    # ── Usage Log ─────────────────────────────────────────────────────
+
+    async def add_usage_record(
+        self, date: str, provider: str, model: str, config_key: str,
+        input_tokens: int, output_tokens: int, cost_usd: float,
+    ) -> int:
+        """Insert a usage log record. Returns the row ID."""
+        cursor = await self.db.execute(
+            "INSERT INTO usage_log (date, provider, model, config_key, "
+            "input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (date, provider, model, config_key, input_tokens, output_tokens, cost_usd),
+        )
+        await self.db.commit()
+        return cursor.lastrowid
+
+    async def get_usage_summary(self, since_date: str | None = None) -> list[dict]:
+        """Aggregate usage by date."""
+        query = (
+            "SELECT date, SUM(input_tokens), SUM(output_tokens), SUM(cost_usd), COUNT(*) "
+            "FROM usage_log"
+        )
+        params: list = []
+        if since_date:
+            query += " WHERE date >= ?"
+            params.append(since_date)
+        query += " GROUP BY date ORDER BY date ASC"
+
+        cursor = await self.db.execute(query, params)
+        return [
+            {
+                "date": r[0],
+                "total_input_tokens": r[1],
+                "total_output_tokens": r[2],
+                "total_cost_usd": r[3],
+                "call_count": r[4],
+            }
+            for r in await cursor.fetchall()
+        ]
+
+    async def get_daily_cost(self, date: str) -> float:
+        """Get total cost for a specific date. Returns 0.0 if no data."""
+        cursor = await self.db.execute(
+            "SELECT SUM(cost_usd) FROM usage_log WHERE date = ?",
+            (date,),
+        )
+        row = await cursor.fetchone()
+        return row[0] if row[0] is not None else 0.0
+
     # ── Migration ─────────────────────────────────────────────────────
 
     async def import_events_from_yaml(self, events: list[Event], topic_slug: str) -> int:

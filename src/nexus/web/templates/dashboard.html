@@ -3,6 +3,10 @@
 {% block content %}
 <h2>{{ today }}</h2>
 
+<div hx-get="/api/cost" hx-trigger="load, every 60s" hx-swap="innerHTML" id="cost-badge">
+    <small>Loading cost...</small>
+</div>
+
 {% if source_balance %}
 <p class="source-balance">
     {% for affil, count in source_balance.items() %}

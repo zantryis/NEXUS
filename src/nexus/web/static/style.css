@@ -64,3 +64,18 @@
 .page-content {
     line-height: 1.7;
 }
+
+.cost-big {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--pico-primary);
+}
+
+#cost-badge {
+    margin-bottom: 1rem;
+}
+#cost-badge .cost-ok { color: var(--pico-ins-color); }
+#cost-badge .cost-warning { color: #f39c12; }
+#cost-badge .cost-over { color: #c0392b; }
+
+.badge-social { background: #8e44ad; color: white; }

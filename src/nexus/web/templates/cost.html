@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Nexus — Cost Dashboard{% endblock %}
+{% block content %}
+<h2>Cost Dashboard</h2>
+
+<article>
+    <h3>Today's Spend</h3>
+    <p class="cost-big">${{ "%.4f"|format(today_cost) }}</p>
+</article>
+
+{% if daily_costs %}
+<section>
+    <h3>Last 30 Days</h3>
+    <table>
+        <thead>
+            <tr><th>Date</th><th>Tokens (in/out)</th><th>Calls</th><th>Cost</th></tr>
+        </thead>
+        <tbody>
+        {% for row in daily_costs %}
+            <tr>
+                <td>{{ row.date }}</td>
+                <td>{{ row.total_input_tokens }} / {{ row.total_output_tokens }}</td>
+                <td>{{ row.call_count }}</td>
+                <td>${{ "%.4f"|format(row.total_cost_usd) }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% else %}
+<p>No usage data yet. Run the pipeline first.</p>
+{% endif %}
+{% endblock %}

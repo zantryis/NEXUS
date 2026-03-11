@@ -62,6 +62,7 @@ def run_engine():
         config.models, api_key=api_key,
         anthropic_api_key=anthropic_api_key,
         deepseek_api_key=deepseek_api_key,
+        budget_config=config.budget,
     )
 
     do_capture = "--capture" in sys.argv
@@ -316,7 +317,8 @@ def main():
     elif command == "serve":
         run_serve()
     elif command == "setup":
-        print("Setup wizard not yet implemented.")
+        from nexus.cli.setup import run_setup
+        run_setup(Path("data"))
     else:
         print(f"Unknown command: {command}")
         sys.exit(1)

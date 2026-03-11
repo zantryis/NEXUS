@@ -53,6 +53,7 @@ class BreakingNewsConfig(BaseModel):
     enabled: bool = True
     poll_interval_hours: int = 3
     threshold: int = 7
+    wire_feeds: list[dict] = Field(default_factory=list)
 
 
 class TelegramConfig(BaseModel):
@@ -67,6 +68,12 @@ class SourcesConfig(BaseModel):
     discovery_interval_days: int = 7
 
 
+class BudgetConfig(BaseModel):
+    daily_limit_usd: float = 1.00
+    warning_threshold_usd: float = 0.50
+    degradation_strategy: str = "skip_expensive"  # "skip_expensive" | "stop_all"
+
+
 class NexusConfig(BaseModel):
     user: UserConfig
     briefing: BriefingConfig = Field(default_factory=BriefingConfig)
@@ -76,3 +83,5 @@ class NexusConfig(BaseModel):
     breaking_news: BreakingNewsConfig = Field(default_factory=BreakingNewsConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
     sources: SourcesConfig = Field(default_factory=SourcesConfig)
+    budget: BudgetConfig = Field(default_factory=BudgetConfig)
+    preset: Optional[str] = None

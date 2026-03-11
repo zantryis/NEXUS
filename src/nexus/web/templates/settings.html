@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Nexus — Settings{% endblock %}
+{% block content %}
+<h2>Settings</h2>
+
+{% if preset %}
+<article>
+    <h3>Active Preset</h3>
+    <p><span class="badge badge-active">{{ preset }}</span></p>
+</article>
+{% endif %}
+
+<section>
+    <h3>API Keys</h3>
+    <table>
+        <thead>
+            <tr><th>Provider</th><th>Key Status</th><th>Value</th></tr>
+        </thead>
+        <tbody>
+        {% for p in providers %}
+            <tr>
+                <td>{{ p.name }}</td>
+                <td>
+                    {% if p.is_set %}
+                    <span class="badge badge-active">configured</span>
+                    {% else %}
+                    <span class="badge badge-unknown">not set</span>
+                    {% endif %}
+                </td>
+                <td><code>{{ p.masked }}</code></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <small>Keys are configured via <code>.env</code> file or environment variables.</small>
+</section>
+{% endblock %}

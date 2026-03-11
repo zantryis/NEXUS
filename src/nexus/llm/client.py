@@ -1,18 +1,24 @@
-"""Provider-agnostic LLM client. Supports Gemini, Anthropic, and DeepSeek."""
+"""Provider-agnostic LLM client. Supports Gemini, Anthropic, DeepSeek, and Ollama."""
 
 import logging
 import time
 from collections import defaultdict
 from typing import Optional
 
-from nexus.config.models import ModelsConfig
+import httpx
+
+from nexus.config.models import BudgetConfig, ModelsConfig
+from nexus.llm.budget import BudgetDegradedError, BudgetExceededError, BudgetGuard
+from nexus.llm.cost import estimate_cost
 
 logger = logging.getLogger(__name__)
 
 
 def _resolve_provider(model_name: str) -> str:
     """Determine provider from model name prefix."""
-    if model_name.startswith("gemini"):
+    if model_name.startswith("ollama/"):
+        return "ollama"
+    elif model_name.startswith("gemini"):
         return "gemini"
     elif model_name.startswith("claude"):
         return "anthropic"
@@ -71,6 +77,11 @@ class UsageTracker:
             "by_config_key": dict(by_key),
         }
 
+    def cost_summary(self) -> dict:
+        """Aggregate cost from tracked calls using the cost module."""
+        from nexus.llm.cost import cost_summary as _cost_summary
+        return _cost_summary(self._calls)
+
 
 class LLMClient:
     def __init__(
@@ -79,12 +90,18 @@ class LLMClient:
         api_key: Optional[str] = None,
         anthropic_api_key: Optional[str] = None,
         deepseek_api_key: Optional[str] = None,
+        ollama_base_url: Optional[str] = None,
+        budget_config: Optional[BudgetConfig] = None,
     ):
         self._config = models_config
         self._gemini_client = None
         self._anthropic_client = None
         self._deepseek_client = None
+        self._ollama_base_url = ollama_base_url or "http://localhost:11434"
         self.usage = UsageTracker()
+        self._budget_guard: Optional[BudgetGuard] = (
+            BudgetGuard(budget_config) if budget_config else None
+        )
 
         # Lazy-init Gemini
         if api_key:
@@ -110,6 +127,27 @@ class LLMClient:
             raise ValueError(f"Unknown config key: {config_key}")
         return getattr(self._config, config_key)
 
+    @property
+    def budget_status(self) -> str:
+        """Return budget status: 'ok', 'warning', or 'over_limit'."""
+        if not self._budget_guard:
+            return "ok"
+        spend = self._budget_guard.today_spend
+        limit = self._budget_guard._config.daily_limit_usd
+        warning = self._budget_guard._config.warning_threshold_usd
+        if spend >= limit:
+            return "over_limit"
+        if spend >= warning:
+            return "warning"
+        return "ok"
+
+    @property
+    def today_spend(self) -> float:
+        """Return current day's spend in USD."""
+        if not self._budget_guard:
+            return 0.0
+        return self._budget_guard.today_spend
+
     async def complete(
         self,
         config_key: str,
@@ -120,6 +158,18 @@ class LLMClient:
         """Send a completion request through the configured model."""
         model = self.resolve_model(config_key)
         provider = _resolve_provider(model)
+
+        # Budget check before making the call
+        if self._budget_guard:
+            status = self._budget_guard.check_budget(config_key)
+            if status == "blocked":
+                raise BudgetExceededError(
+                    f"Daily budget limit reached (${self._budget_guard.today_spend:.4f}), all calls blocked"
+                )
+            if status == "degraded":
+                raise BudgetDegradedError(
+                    f"Daily budget limit reached, expensive operation '{config_key}' blocked"
+                )
 
         t0 = time.monotonic()
 
@@ -132,11 +182,20 @@ class LLMClient:
         elif provider == "deepseek":
             text, in_tok, out_tok = await self._complete_deepseek(
                 model, system_prompt, user_prompt, json_response)
+        elif provider == "ollama":
+            text, in_tok, out_tok = await self._complete_ollama(
+                model, system_prompt, user_prompt, json_response)
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
         elapsed = time.monotonic() - t0
         self.usage.record(provider, model, config_key, in_tok, out_tok, elapsed)
+
+        # Record cost to budget guard after successful call
+        if self._budget_guard:
+            cost = estimate_cost(model, in_tok, out_tok)
+            self._budget_guard.record_cost(cost)
+
         return text
 
     async def _complete_gemini(
@@ -182,6 +241,37 @@ class LLMClient:
         in_tok = getattr(getattr(response, 'usage', None), 'input_tokens', 0) or 0
         out_tok = getattr(getattr(response, 'usage', None), 'output_tokens', 0) or 0
         return response.content[0].text, in_tok, out_tok
+
+    async def _complete_ollama(
+        self, model: str, system_prompt: str, user_prompt: str, json_response: bool
+    ) -> tuple[str, int, int]:
+        model_name = model.removeprefix("ollama/")
+        url = f"{self._ollama_base_url}/api/chat"
+        body: dict = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "stream": False,
+        }
+        if json_response:
+            body["format"] = "json"
+
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(url, json=body, timeout=120.0)
+                resp.raise_for_status()
+        except httpx.ConnectError:
+            raise RuntimeError(
+                f"Ollama not running at {self._ollama_base_url}"
+            )
+
+        data = resp.json()
+        text = data["message"]["content"]
+        in_tok = data.get("prompt_eval_count", 0)
+        out_tok = data.get("eval_count", 0)
+        return text, in_tok, out_tok
 
     async def _complete_deepseek(
         self, model: str, system_prompt: str, user_prompt: str, json_response: bool

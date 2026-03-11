@@ -42,6 +42,8 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     from nexus.web.routes.filters import router as filters_router
     from nexus.web.routes.sources import router as sources_router
     from nexus.web.routes.podcast import router as podcast_router
+    from nexus.web.routes.cost import router as cost_router
+    from nexus.web.routes.settings import router as settings_router
 
     app.include_router(dashboard_router)
     app.include_router(topics_router)
@@ -52,6 +54,8 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app.include_router(filters_router)
     app.include_router(sources_router)
     app.include_router(podcast_router)
+    app.include_router(cost_router)
+    app.include_router(settings_router)
 
     return app
 

@@ -8,6 +8,7 @@ import feedparser
 
 from nexus.config.models import NexusConfig
 from nexus.engine.knowledge.store import KnowledgeStore
+from nexus.engine.sources.router import poll_source
 from nexus.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -31,23 +32,8 @@ def _hash_headline(headline: str) -> str:
     return hashlib.sha256(headline.lower().strip().encode()).hexdigest()[:16]
 
 
-async def check_breaking_news(
-    llm: LLMClient,
-    config: NexusConfig,
-    store: KnowledgeStore,
-    feed_urls: list[str] | None = None,
-) -> list[dict]:
-    """Poll wire feeds and return new high-significance headlines.
-
-    Returns list of dicts: {headline, source_url, significance_score, headline_hash}
-    """
-    if not config.breaking_news.enabled:
-        return []
-
-    urls = feed_urls or WIRE_FEEDS
-    threshold = config.breaking_news.threshold
-
-    # Gather headlines from feeds
+async def _gather_headlines_default(urls: list[str], store: KnowledgeStore) -> list[dict]:
+    """Gather headlines from default wire feeds using feedparser."""
     headlines = []
     for url in urls:
         try:
@@ -63,6 +49,51 @@ async def check_breaking_news(
                         })
         except Exception as e:
             logger.warning(f"Feed parse failed for {url}: {e}")
+    return headlines
+
+
+async def _gather_headlines_router(wire_feeds: list[dict], store: KnowledgeStore) -> list[dict]:
+    """Gather headlines from custom wire feeds using the source router."""
+    headlines = []
+    for feed_config in wire_feeds:
+        try:
+            items = await poll_source(feed_config)
+            for item in items[:20]:
+                title = item.title.strip()
+                link = item.url
+                if title:
+                    h = _hash_headline(title)
+                    if not await store.is_alerted(h):
+                        headlines.append({
+                            "title": title, "url": link, "hash": h,
+                        })
+        except Exception as e:
+            logger.warning(f"Router poll failed for {feed_config.get('id', '?')}: {e}")
+    return headlines
+
+
+async def check_breaking_news(
+    llm: LLMClient,
+    config: NexusConfig,
+    store: KnowledgeStore,
+    feed_urls: list[str] | None = None,
+) -> list[dict]:
+    """Poll wire feeds and return new high-significance headlines.
+
+    Returns list of dicts: {headline, source_url, significance_score, headline_hash}
+    """
+    if not config.breaking_news.enabled:
+        return []
+
+    threshold = config.breaking_news.threshold
+
+    # Gather headlines — use custom wire_feeds via router if configured,
+    # otherwise fall back to default WIRE_FEEDS via feedparser
+    if config.breaking_news.wire_feeds:
+        headlines = await _gather_headlines_router(config.breaking_news.wire_feeds, store)
+    else:
+        urls = feed_urls or WIRE_FEEDS
+        headlines = await _gather_headlines_default(urls, store)
 
     if not headlines:
         return []
