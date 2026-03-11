@@ -42,6 +42,19 @@ async def daily_pipeline_job(
             await deliver_briefing(
                 bot._application.bot, config.telegram.chat_id, text, audio,
             )
+
+            # Deliver additional language versions
+            for lang in config.briefing.additional_languages:
+                lang_briefing = data_dir / "artifacts" / "briefings" / f"{today}-{lang}.md"
+                lang_audio = data_dir / "artifacts" / "audio" / f"{today}-{lang}.mp3"
+                if lang_briefing.exists():
+                    lang_text = lang_briefing.read_text()
+                    lang_aud = lang_audio if lang_audio.exists() else None
+                    await deliver_briefing(
+                        bot._application.bot, config.telegram.chat_id,
+                        lang_text, lang_aud,
+                    )
+
             # Send feedback keyboard
             keyboard = build_feedback_keyboard(today)
             await bot._application.bot.send_message(

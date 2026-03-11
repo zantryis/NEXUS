@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import date
 from pathlib import Path
 
-from nexus.config.models import NexusConfig, UserConfig, TelegramConfig
+from nexus.config.models import NexusConfig, UserConfig, TelegramConfig, BriefingConfig
 from nexus.agent.bot import NexusBot
 
 
@@ -67,3 +67,39 @@ async def test_handle_status(bot):
     await bot._handle_status(update, MagicMock())
     text = update.message.reply_text.call_args.args[0]
     assert "iran-us" in text
+
+
+@patch("nexus.agent.bot.deliver_briefing", new_callable=AsyncMock)
+@patch("nexus.agent.bot.build_feedback_keyboard")
+async def test_handle_briefing_additional_languages(mock_keyboard, mock_deliver, tmp_path):
+    """Bot delivers additional language briefings when available."""
+    config = NexusConfig(
+        user=UserConfig(name="Tristan"),
+        telegram=TelegramConfig(chat_id=12345),
+        briefing=BriefingConfig(additional_languages=["zh"]),
+    )
+    b = NexusBot("token", config, AsyncMock(), AsyncMock(), data_dir=tmp_path)
+
+    today = date.today().isoformat()
+
+    # Create English briefing
+    briefing_dir = tmp_path / "artifacts" / "briefings"
+    briefing_dir.mkdir(parents=True, exist_ok=True)
+    (briefing_dir / f"{today}.md").write_text("English briefing")
+
+    # Create Chinese briefing
+    (briefing_dir / f"{today}-zh.md").write_text("中文简报")
+
+    mock_keyboard.return_value = MagicMock()
+
+    update = MagicMock()
+    update.effective_chat.id = 12345
+    update.message.reply_text = AsyncMock()
+    context = MagicMock()
+
+    await b._handle_briefing(update, context)
+
+    # Should have been called twice: once for English, once for Chinese
+    assert mock_deliver.call_count == 2
+    assert mock_deliver.call_args_list[0].args[2] == "English briefing"
+    assert mock_deliver.call_args_list[1].args[2] == "中文简报"

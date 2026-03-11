@@ -21,8 +21,12 @@ async def run_audio_pipeline(
     data_dir: Path,
     gemini_api_key: str | None = None,
     report_date: date | None = None,
+    lang_suffix: str | None = None,
 ) -> Path | None:
     """Run the full audio pipeline: script → TTS → MP3.
+
+    Args:
+        lang_suffix: If set, append to filename (e.g., "zh" → "2026-03-10-zh.mp3").
 
     Returns path to the output MP3 or None if disabled/failed.
     """
@@ -33,15 +37,16 @@ async def run_audio_pipeline(
         report_date = date.today()
 
     # 1. Generate dialogue script
-    logger.info("Generating dialogue script...")
+    lang_label = f"[{lang_suffix}] " if lang_suffix else ""
+    logger.info(f"{lang_label}Generating dialogue script...")
     script = await generate_dialogue_script(llm, config, syntheses, report_date=report_date)
 
     if not script.turns:
-        logger.warning("Dialogue script has no turns, skipping audio.")
+        logger.warning(f"{lang_label}Dialogue script has no turns, skipping audio.")
         return None
 
     # 2. Synthesize each turn via TTS
-    logger.info(f"Synthesizing {len(script.turns)} dialogue turns via TTS...")
+    logger.info(f"{lang_label}Synthesizing {len(script.turns)} dialogue turns via TTS...")
     tts = get_tts_backend(config.audio, gemini_api_key=gemini_api_key)
 
     segments: list[bytes] = []
@@ -50,18 +55,19 @@ async def run_audio_pipeline(
             audio_bytes = await tts.synthesize(turn)
             segments.append(audio_bytes)
         except Exception as e:
-            logger.warning(f"TTS failed for turn {i}: {e}")
+            logger.warning(f"{lang_label}TTS failed for turn {i}: {e}")
             continue
 
     if not segments:
-        logger.warning("No audio segments produced, skipping concatenation.")
+        logger.warning(f"{lang_label}No audio segments produced, skipping concatenation.")
         return None
 
     # 3. Concatenate and export
     today = report_date.isoformat()
-    output_path = data_dir / "artifacts" / "audio" / f"{today}.mp3"
-    logger.info(f"Concatenating {len(segments)} segments → {output_path}")
+    suffix = f"-{lang_suffix}" if lang_suffix else ""
+    output_path = data_dir / "artifacts" / "audio" / f"{today}{suffix}.mp3"
+    logger.info(f"{lang_label}Concatenating {len(segments)} segments → {output_path}")
 
     result = await concatenate_audio(segments, output_path)
-    logger.info(f"Audio pipeline complete: {result}")
+    logger.info(f"{lang_label}Audio pipeline complete: {result}")
     return result

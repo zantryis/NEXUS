@@ -108,6 +108,15 @@ class NexusBot:
         audio = audio_path if audio_path.exists() else None
         await deliver_briefing(context.bot, chat_id, text, audio)
 
+        # Deliver additional language versions
+        for lang in self._config.briefing.additional_languages:
+            lang_briefing = self._data_dir / "artifacts" / "briefings" / f"{today}-{lang}.md"
+            lang_audio = self._data_dir / "artifacts" / "audio" / f"{today}-{lang}.mp3"
+            if lang_briefing.exists():
+                lang_text = lang_briefing.read_text()
+                lang_aud = lang_audio if lang_audio.exists() else None
+                await deliver_briefing(context.bot, chat_id, lang_text, lang_aud)
+
         # Send feedback keyboard
         keyboard = build_feedback_keyboard(today)
         await update.message.reply_text(

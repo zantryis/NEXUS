@@ -128,3 +128,21 @@ def test_nexus_config_with_new_sections():
     assert config.audio.voice_host_a == "nova"
     assert config.breaking_news.threshold == 8
     assert config.telegram.chat_id == 12345
+
+
+def test_briefing_additional_languages_default():
+    briefing = BriefingConfig()
+    assert briefing.additional_languages == []
+
+
+def test_briefing_additional_languages():
+    briefing = BriefingConfig(additional_languages=["zh", "es"])
+    assert briefing.additional_languages == ["zh", "es"]
+
+
+def test_nexus_config_additional_languages():
+    config = NexusConfig(
+        user=UserConfig(name="Tristan"),
+        briefing=BriefingConfig(additional_languages=["zh"]),
+    )
+    assert config.briefing.additional_languages == ["zh"]

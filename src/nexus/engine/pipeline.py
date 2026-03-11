@@ -337,6 +337,31 @@ async def run_pipeline(
             except Exception as e:
                 logger.warning(f"Audio pipeline failed (non-blocking): {e}")
 
+        # Render additional language versions (briefing + audio)
+        for lang in config.briefing.additional_languages:
+            try:
+                lang_config = config.model_copy(deep=True)
+                lang_config.user.output_language = lang
+
+                lang_text = await render_text_briefing(llm, lang_config, syntheses)
+                lang_path = briefing_dir / f"{today}-{lang}.md"
+                lang_path.write_text(lang_text)
+                logger.info(f"[{lang}] Briefing saved to {lang_path}")
+
+                if config.audio.enabled:
+                    try:
+                        lang_audio = await run_audio_pipeline(
+                            llm, lang_config, syntheses, data_dir,
+                            gemini_api_key=gemini_api_key,
+                            lang_suffix=lang,
+                        )
+                        if lang_audio:
+                            logger.info(f"[{lang}] Audio saved to {lang_audio}")
+                    except Exception as e:
+                        logger.warning(f"[{lang}] Audio pipeline failed (non-blocking): {e}")
+            except Exception as e:
+                logger.warning(f"[{lang}] Briefing render failed (non-blocking): {e}")
+
         total_time = time.monotonic() - pipeline_start
         logger.info(f"Briefing saved to {briefing_path} (total pipeline: {total_time:.1f}s)")
         return briefing_path

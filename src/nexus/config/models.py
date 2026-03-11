@@ -17,6 +17,7 @@ class BriefingConfig(BaseModel):
     format: str = "two-host-dialogue"
     style: str = "analytical"
     depth: str = "detailed"
+    additional_languages: list[str] = Field(default_factory=list)
 
 
 class TopicConfig(BaseModel):
