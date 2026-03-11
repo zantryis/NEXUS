@@ -1,28 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Sources — Nexus{% endblock %}
 {% block content %}
-<h2>Source Analytics
-    {% if filter_topic %}<small>in {{ filter_topic }}</small>{% endif %}
-</h2>
+
+<div class="page-header">
+    <h2>Source Analytics</h2>
+    {% if filter_topic %}
+    <p class="page-subtitle">in {{ filter_topic }}</p>
+    {% endif %}
+</div>
 
 {% if stats %}
-<table>
+<table class="sources-table">
     <thead>
         <tr><th>Outlet</th><th>Affiliation</th><th>Country</th><th>Language</th><th>Events</th></tr>
     </thead>
     <tbody>
         {% for s in stats %}
         <tr>
-            <td>{{ s.outlet }}</td>
+            <td class="outlet-name">{{ s.outlet }}</td>
             <td><span class="badge badge-{{ s.affiliation }}">{{ s.affiliation }}</span></td>
             <td>{{ s.country }}</td>
             <td>{{ s.language }}</td>
-            <td>{{ s.event_count }}</td>
+            <td class="event-count">{{ s.event_count }}</td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
 {% else %}
-<p>No source data.</p>
+<div class="empty-state">
+    <h3>No source data</h3>
+    <p>Source analytics populate after the pipeline processes news feeds.</p>
+</div>
 {% endif %}
+
 {% endblock %}

@@ -1,18 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Filter Log — {{ topic_slug }} {{ run_date }}{% endblock %}
 {% block content %}
-<h2>Filter Log: {{ topic_slug }} ({{ run_date }})</h2>
+
+<div class="page-header">
+    <h2>Filter Log</h2>
+    <p class="page-subtitle">{{ topic_slug }} &mdash; {{ run_date }}</p>
+</div>
 
 {% if stats.get('total', 0) > 0 %}
-<p>
-    {{ stats.total }} articles polled &rarr;
+<div class="filter-summary">
+    <span>{{ stats.total }} articles polled &rarr;
     <strong>{{ stats.get('accepted', 0) }} accepted</strong>,
-    {{ stats.total - stats.get('accepted', 0) }} rejected
-</p>
+    {{ stats.total - stats.get('accepted', 0) }} rejected</span>
+</div>
 {% endif %}
 
 {% if log %}
-<table>
+<table class="filter-table">
     <thead>
         <tr>
             <th>Title</th>
@@ -41,6 +45,10 @@
     </tbody>
 </table>
 {% else %}
-<p>No filter log for this date.</p>
+<div class="empty-state">
+    <h3>No filter log</h3>
+    <p>No filter data for this date.</p>
+</div>
 {% endif %}
+
 {% endblock %}

@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Not Found — Nexus{% endblock %}
 {% block content %}
-<h2>Not Found</h2>
-<p>{{ what }} "{{ id }}" was not found.</p>
-<p><a href="/">Back to dashboard</a></p>
+
+<div class="not-found">
+    <h2>404</h2>
+    <p>{{ what }} "{{ id }}" was not found.</p>
+    <a href="/" class="deep-dive-link">Back to dashboard &#8594;</a>
+</div>
+
 {% endblock %}

@@ -1,45 +1,81 @@
 {% extends "base.html" %}
 {% block title %}{{ entity.canonical_name }} — Nexus{% endblock %}
 {% block content %}
-<h2>{{ entity.canonical_name }}</h2>
-<p>Type: {{ entity.entity_type }}
-    {% if entity.aliases %} &mdash; Aliases: {{ entity.aliases | join(', ') }}{% endif %}
-</p>
 
-{% if events %}
-<section>
-    <h3>Events ({{ events | length }})</h3>
-    {% for e in events %}
-    <div class="event-row">
-        <small>{{ e.date }}</small>
-        {{ e.summary }}
+<div class="entity-detail-header">
+    <h2>{{ entity.canonical_name }}</h2>
+    <span class="entity-type-label">{{ entity.entity_type }}</span>
+    {% if entity.aliases %}
+    <div class="entity-aliases">Also known as: {{ entity.aliases | join(', ') }}</div>
+    {% endif %}
+</div>
+
+<div class="entity-content-grid">
+
+    {# ── Main: events + threads ── #}
+    <div>
+        {% if events %}
+        <section class="dash-section">
+            <div class="section-header">
+                <h3>Events ({{ events | length }})</h3>
+            </div>
+            <div class="thread-events-list">
+                {% for e in events %}
+                <div class="thread-event-item">
+                    <span class="thread-event-date">{{ e.date }}</span>
+                    <span class="thread-event-summary">{{ e.summary }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if threads %}
+        <section class="dash-section">
+            <div class="section-header">
+                <h3>Threads</h3>
+            </div>
+            <div class="thread-list">
+                {% for t in threads %}
+                <a href="/threads/{{ t.slug }}" class="thread-card-v2">
+                    <div class="thread-card-header">
+                        <span class="thread-headline">{{ t.headline }}</span>
+                    </div>
+                    <div class="thread-card-meta">
+                        <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
     </div>
-    {% endfor %}
-</section>
-{% endif %}
 
-{% if threads %}
-<section>
-    <h3>Threads</h3>
-    {% for t in threads %}
-    <article class="thread-card">
-        <a href="/threads/{{ t.slug }}">{{ t.headline }}</a>
-        <small><span class="badge badge-{{ t.status }}">{{ t.status }}</span></small>
-    </article>
-    {% endfor %}
-</section>
-{% endif %}
+    {# ── Sidebar: related entities + profile ── #}
+    <div>
+        {% if related %}
+        <section class="dash-section">
+            <div class="section-header">
+                <h3>Related Entities</h3>
+            </div>
+            <div class="related-entities">
+                {% for r in related %}
+                <a href="/entities/{{ r.id }}" class="related-entity-link">
+                    <span>{{ r.canonical_name }}</span>
+                    <span class="co-count">{{ r.co_occurrence_count }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
 
-{% if related %}
-<section>
-    <h3>Related Entities</h3>
-    {% for r in related %}
-    <a href="/entities/{{ r.id }}">{{ r.canonical_name }}</a> ({{ r.co_occurrence_count }}){% if not loop.last %}, {% endif %}
-    {% endfor %}
-</section>
-{% endif %}
+        {% if page %}
+        <a href="/pages/entity:{{ entity.id }}" class="deep-dive-link">
+            View profile &#8594;
+        </a>
+        {% endif %}
+    </div>
 
-{% if page %}
-<p><a href="/pages/entity:{{ entity.id }}">Profile</a></p>
-{% endif %}
+</div>
+
 {% endblock %}

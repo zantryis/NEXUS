@@ -1,25 +1,43 @@
 {% extends "base.html" %}
 {% block title %}Threads — Nexus{% endblock %}
 {% block content %}
-<h2>Threads
-    {% if filter_status %}<small>({{ filter_status }})</small>{% endif %}
-    {% if filter_topic %}<small>in {{ filter_topic }}</small>{% endif %}
-</h2>
+
+<div class="page-header">
+    <h2>Threads</h2>
+    {% if filter_status or filter_topic %}
+    <p class="page-subtitle">
+        {% if filter_status %}Showing {{ filter_status }} threads{% endif %}
+        {% if filter_topic %}in {{ filter_topic }}{% endif %}
+    </p>
+    {% endif %}
+</div>
 
 {% if threads %}
-{% for t in threads %}
-<article class="thread-card">
-    <a href="/threads/{{ t.slug }}">{{ t.headline }}</a>
-    <small>
-        <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
-        sig: {{ t.significance }}
-        {% if t.key_entities %}
-         &mdash; {{ t.key_entities[:3] | join(', ') }}
-        {% endif %}
-    </small>
-</article>
-{% endfor %}
+<div class="thread-list">
+    {% for t in threads %}
+    <a href="/threads/{{ t.slug }}" class="thread-card-v2">
+        <div class="thread-card-header">
+            <span class="thread-headline">{{ t.headline }}</span>
+            <span class="sig-indicator sig-{{ 'high' if t.significance >= 7 else ('med' if t.significance >= 4 else 'low') }}">
+                {{ t.significance }}
+            </span>
+        </div>
+        <div class="thread-card-meta">
+            <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
+            {% if t.key_entities %}
+            {% for e in t.key_entities[:3] %}
+            <span class="entity-tag">{{ e }}</span>
+            {% endfor %}
+            {% endif %}
+        </div>
+    </a>
+    {% endfor %}
+</div>
 {% else %}
-<p>No threads found.</p>
+<div class="empty-state">
+    <h3>No threads found</h3>
+    <p>Threads are created when the pipeline identifies narrative patterns across events.</p>
+</div>
 {% endif %}
+
 {% endblock %}

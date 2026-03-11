@@ -1,46 +1,69 @@
 {% extends "base.html" %}
 {% block title %}{{ slug }} — Nexus{% endblock %}
 {% block content %}
-<h2>{{ slug }}</h2>
 
-{% if backstory %}
-<p><a href="/pages/backstory:{{ slug }}">Backstory</a></p>
-{% endif %}
-
-{% if active_threads %}
-<section>
-    <h3>Active Threads</h3>
-    {% for t in active_threads %}
-    <article class="thread-card">
-        <a href="/threads/{{ t.slug }}">{{ t.headline }}</a>
-        <small>
-            <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
-            sig: {{ t.significance }}
-        </small>
-    </article>
-    {% endfor %}
-</section>
-{% endif %}
-
-{% if recent_events %}
-<section>
-    <h3>Recent Events (7 days)</h3>
-    {% for e in recent_events %}
-    <div class="event-row">
-        <small>{{ e.date }}</small>
-        {{ e.summary }}
-        <small class="sig">sig: {{ e.significance }}</small>
+<div class="topic-header">
+    <div class="topic-header-info">
+        <h2>{{ slug }}</h2>
+        <div class="topic-links">
+            {% if backstory %}
+            <a href="/pages/backstory:{{ slug }}">Backstory</a>
+            {% endif %}
+            <a href="/entities/?topic={{ slug }}">Entities</a>
+            {% if filter_stats and filter_stats.get('total', 0) > 0 %}
+            <a href="/filters/{{ slug }}/{{ today }}">Filter log</a>
+            {% endif %}
+        </div>
     </div>
-    {% endfor %}
-</section>
-{% endif %}
+</div>
+
+<div class="topic-grid">
+
+    {# ── Threads column ── #}
+    <div class="card-section">
+        <div class="card-section-title">Active Threads</div>
+        {% if active_threads %}
+        {% for t in active_threads %}
+        <a href="/threads/{{ t.slug }}" class="topic-thread-item">
+            <span class="thread-name">{{ t.headline }}</span>
+            <span class="thread-right">
+                <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
+                <span class="sig-indicator sig-{{ 'high' if t.significance >= 7 else ('med' if t.significance >= 4 else 'low') }}">
+                    {{ t.significance }}
+                </span>
+            </span>
+        </a>
+        {% endfor %}
+        {% else %}
+        <div class="topic-event-item" style="color: var(--nx-text-dim);">No active threads yet.</div>
+        {% endif %}
+    </div>
+
+    {# ── Events column ── #}
+    <div class="card-section">
+        <div class="card-section-title">Recent Events (7 days)</div>
+        {% if recent_events %}
+        {% for e in recent_events %}
+        <div class="topic-event-item">
+            <span class="event-date-label">{{ e.date }}</span>
+            {{ e.summary }}
+            <span class="event-sig-label">{{ e.significance }}</span>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="topic-event-item" style="color: var(--nx-text-dim);">No recent events.</div>
+        {% endif %}
+    </div>
+
+</div>
 
 {% if filter_stats and filter_stats.get('total', 0) > 0 %}
-<p><a href="/filters/{{ slug }}/{{ today }}">Filter log</a>:
-    {{ filter_stats.get('accepted', 0) }} accepted,
-    {{ filter_stats.total - filter_stats.get('accepted', 0) }} rejected
-</p>
+<div class="filter-stats-bar">
+    <span>{{ filter_stats.total }} articles polled &rarr;
+    <strong>{{ filter_stats.get('accepted', 0) }} accepted</strong>,
+    {{ filter_stats.total - filter_stats.get('accepted', 0) }} rejected</span>
+    <a href="/filters/{{ slug }}/{{ today }}">View log &rarr;</a>
+</div>
 {% endif %}
 
-<p><a href="/entities/?topic={{ slug }}">View entities</a></p>
 {% endblock %}

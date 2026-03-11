@@ -1,26 +1,42 @@
 {% extends "base.html" %}
 {% block title %}Events — Nexus{% endblock %}
 {% block content %}
-<h2>Events
-    {% if filter_topic %}<small>in {{ filter_topic }}</small>{% endif %}
-</h2>
 
-{% if events %}
-{% for e in events %}
-<div class="event-row">
-    <small>{{ e.date }}</small>
-    {{ e.summary }}
-    <small class="sig">sig: {{ e.significance }}</small>
-    {% if e.sources %}
-    <small>
-        {% for s in e.sources %}
-        <span class="badge badge-{{ s.affiliation }}">{{ s.outlet }}/{{ s.country }}</span>
-        {% endfor %}
-    </small>
+<div class="page-header">
+    <h2>Events</h2>
+    {% if filter_topic %}
+    <p class="page-subtitle">in {{ filter_topic }}</p>
     {% endif %}
 </div>
-{% endfor %}
+
+{% if events %}
+<div class="event-list">
+    {% for e in events %}
+    <div class="event-card">
+        <span class="event-card-date">{{ e.date }}</span>
+        <div class="event-card-body">
+            <div class="event-card-summary">{{ e.summary }}</div>
+            {% if e.sources %}
+            <div class="event-card-meta">
+                {% for s in e.sources %}
+                <span class="badge badge-{{ s.affiliation }}">{{ s.outlet }}/{{ s.country }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        <span class="event-card-sig">
+            <span class="sig-indicator sig-{{ 'high' if e.significance >= 7 else ('med' if e.significance >= 4 else 'low') }}">
+                {{ e.significance }}
+            </span>
+        </span>
+    </div>
+    {% endfor %}
+</div>
 {% else %}
-<p>No events found.</p>
+<div class="empty-state">
+    <h3>No events found</h3>
+    <p>Events are extracted when the pipeline processes news sources.</p>
+</div>
 {% endif %}
+
 {% endblock %}

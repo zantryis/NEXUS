@@ -1,11 +1,17 @@
 {% extends "base.html" %}
 {% block title %}{{ page.title }} — Nexus{% endblock %}
 {% block content %}
-<h2>{{ page.title }}</h2>
+
+<div class="page-header">
+    <h2>{{ page.title }}</h2>
+</div>
+
 <div class="page-content">
     {{ rendered_html | safe }}
 </div>
-<footer>
-    <small>Generated: {{ page.generated_at }} &mdash; Stale after: {{ page.stale_after }}</small>
-</footer>
+
+<div class="page-meta">
+    Generated: {{ page.generated_at }} &mdash; Stale after: {{ page.stale_after }}
+</div>
+
 {% endblock %}

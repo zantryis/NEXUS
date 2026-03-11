@@ -1,16 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Entities — Nexus{% endblock %}
 {% block content %}
-<h2>Entities
-    {% if filter_topic %}<small>in {{ filter_topic }}</small>{% endif %}
-</h2>
 
-<form method="get" action="/entities/">
-    <input type="search" name="q" placeholder="Search entities..." value="{{ search_query or '' }}">
-</form>
+<div class="page-header">
+    <h2>Entities</h2>
+    {% if filter_topic %}
+    <p class="page-subtitle">in {{ filter_topic }}</p>
+    {% endif %}
+</div>
+
+<div class="entity-search">
+    <form method="get" action="/entities/">
+        <input type="search" name="q" placeholder="Search entities..." value="{{ search_query or '' }}">
+    </form>
+</div>
 
 {% if entities %}
-<table>
+<table class="entity-table">
     <thead>
         <tr><th>Name</th><th>Type</th><th>First Seen</th><th>Last Seen</th></tr>
     </thead>
@@ -26,6 +32,10 @@
     </tbody>
 </table>
 {% else %}
-<p>No entities found.</p>
+<div class="empty-state">
+    <h3>No entities found</h3>
+    <p>Entities are extracted and resolved from news events during pipeline runs.</p>
+</div>
 {% endif %}
+
 {% endblock %}

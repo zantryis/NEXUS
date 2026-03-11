@@ -1,17 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Nexus — Cost Dashboard{% endblock %}
 {% block content %}
-<h2>Cost Dashboard</h2>
 
-<article>
-    <h3>Today's Spend</h3>
-    <p class="cost-big">${{ "%.4f"|format(today_cost) }}</p>
-</article>
+<div class="page-header">
+    <h2>Cost Dashboard</h2>
+</div>
+
+<div class="cost-hero">
+    <span class="cost-big">${{ "%.4f"|format(today_cost) }}</span>
+    <span class="cost-label">spent today</span>
+</div>
 
 {% if daily_costs %}
-<section>
-    <h3>Last 30 Days</h3>
-    <table>
+<section class="dash-section">
+    <div class="section-header">
+        <h3>Last 30 Days</h3>
+    </div>
+    <table class="cost-table">
         <thead>
             <tr><th>Date</th><th>Tokens (in/out)</th><th>Calls</th><th>Cost</th></tr>
         </thead>
@@ -21,13 +26,17 @@
                 <td>{{ row.date }}</td>
                 <td>{{ row.total_input_tokens }} / {{ row.total_output_tokens }}</td>
                 <td>{{ row.call_count }}</td>
-                <td>${{ "%.4f"|format(row.total_cost_usd) }}</td>
+                <td class="cost-value">${{ "%.4f"|format(row.total_cost_usd) }}</td>
             </tr>
         {% endfor %}
         </tbody>
     </table>
 </section>
 {% else %}
-<p>No usage data yet. Run the pipeline first.</p>
+<div class="empty-state">
+    <h3>No usage data yet</h3>
+    <p>Run the pipeline to start tracking costs.</p>
+</div>
 {% endif %}
+
 {% endblock %}
