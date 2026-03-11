@@ -23,6 +23,7 @@ audio = [
 ]
 agent = [
     "python-telegram-bot>=20.0",
+    "ddgs>=7.0",
 ]
 scheduler = [
     "apscheduler>=3.10",

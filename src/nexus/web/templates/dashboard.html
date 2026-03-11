@@ -1,59 +1,172 @@
 {% extends "base.html" %}
-{% block title %}Nexus — Today's Feed{% endblock %}
+{% block title %}Nexus &mdash; Intelligence Dashboard{% endblock %}
 {% block content %}
-<h2>{{ today }}</h2>
 
-<div hx-get="/api/cost" hx-trigger="load, every 60s" hx-swap="innerHTML" id="cost-badge">
-    <small>Loading cost...</small>
+{# ── Hero metrics ── #}
+<div class="hero">
+    <div class="hero-title">
+        <h2>Dashboard</h2>
+        <span class="hero-date">{{ today.strftime('%B %d, %Y') }}</span>
+    </div>
+    <div class="metrics-grid">
+        <div class="metric-card">
+            <span class="metric-value">{{ topic_stats|length }}</span>
+            <span class="metric-label">Topics</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-value">{{ active_threads|length }}</span>
+            <span class="metric-label">Active Threads</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-value">{{ total_events }}</span>
+            <span class="metric-label">Events</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-value" id="cost-value"
+                  hx-get="/api/cost-badge" hx-trigger="load, every 60s" hx-swap="innerHTML">
+                ${{ "%.2f"|format(today_cost) }}
+            </span>
+            <span class="metric-label">Today's Cost</span>
+        </div>
+    </div>
 </div>
 
-{% if source_balance %}
-<p class="source-balance">
-    {% for affil, count in source_balance.items() %}
-    <span class="badge badge-{{ affil }}">{{ count }} {{ affil }}</span>
-    {% endfor %}
-</p>
-{% endif %}
+{# ── Status bar ── #}
+<div class="status-bar">
+    {% if briefing_available %}
+    <span class="status-pill status-ok">Briefing ready</span>
+    {% else %}
+    <span class="status-pill status-pending">Briefing pending</span>
+    {% endif %}
+    {% if audio_available %}
+    <span class="status-pill status-ok">Audio ready</span>
+    {% endif %}
+    {% if source_balance %}
+        {% for affil, count in source_balance.items() %}
+        <span class="badge badge-{{ affil }}">{{ count }} {{ affil }}</span>
+        {% endfor %}
+    {% endif %}
+</div>
 
-{% if active_threads %}
-<section>
-    <h3>Active Threads</h3>
-    {% for t in active_threads %}
-    <article class="thread-card">
-        <a href="/threads/{{ t.slug }}">{{ t.headline }}</a>
-        <small>
-            <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
-            sig: {{ t.significance }}
-            {% if t.key_entities %}
-             &mdash; {{ t.key_entities[:3] | join(', ') }}
-            {% endif %}
-        </small>
-    </article>
-    {% endfor %}
-</section>
-{% endif %}
+{# ── Main two-column layout ── #}
+<div class="dashboard-grid">
 
-{% if topic_stats %}
-<section>
-    <h3>Topics</h3>
-    {% for ts in topic_stats %}
-    <article>
-        <a href="/topics/{{ ts.topic_slug }}"><strong>{{ ts.topic_slug }}</strong></a>
-        &mdash; {{ ts.event_count }} events, {{ ts.entity_count }} entities, {{ ts.thread_count }} threads
-        {% if filter_stats.get(ts.topic_slug) %}
-        <br><small>
-            <a href="/filters/{{ ts.topic_slug }}/{{ today }}">
-                Filter: {{ filter_stats[ts.topic_slug].get('accepted', 0) }} accepted,
-                {{ filter_stats[ts.topic_slug].total - filter_stats[ts.topic_slug].get('accepted', 0) }} rejected
+    {# ── Left column: threads + events ── #}
+    <div class="dashboard-main">
+
+        {# Active threads #}
+        {% if active_threads %}
+        <section class="dash-section">
+            <div class="section-header">
+                <h3>Active Threads</h3>
+                <a href="/threads/" class="section-link">View all &rarr;</a>
+            </div>
+            {% for t in active_threads %}
+            <a href="/threads/{{ t.slug }}" class="thread-card-v2">
+                <div class="thread-card-header">
+                    <span class="thread-headline">{{ t.headline }}</span>
+                    <span class="sig-indicator sig-{{ 'high' if t.significance >= 7 else ('med' if t.significance >= 4 else 'low') }}">
+                        {{ t.significance }}
+                    </span>
+                </div>
+                <div class="thread-card-meta">
+                    <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
+                    {% if t.key_entities %}
+                    {% for e in t.key_entities[:3] %}
+                    <span class="entity-tag">{{ e }}</span>
+                    {% endfor %}
+                    {% endif %}
+                </div>
             </a>
-        </small>
+            {% endfor %}
+        </section>
         {% endif %}
-    </article>
-    {% endfor %}
-</section>
-{% endif %}
+
+        {# Recent events timeline #}
+        {% if recent_events %}
+        <section class="dash-section">
+            <div class="section-header">
+                <h3>Recent Events</h3>
+                <a href="/events/" class="section-link">View all &rarr;</a>
+            </div>
+            <div class="timeline">
+                {% set ns = namespace(last_date='') %}
+                {% for item in recent_events %}
+                {% set event_date = item.event.date if item.event.date is string else item.event.date.isoformat() %}
+                {% if event_date != ns.last_date %}
+                <div class="timeline-date">{{ event_date }}</div>
+                {% set ns.last_date = event_date %}
+                {% endif %}
+                <div class="timeline-event">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <span class="timeline-topic">{{ item.topic }}</span>
+                        <span class="timeline-summary">{{ item.event.summary }}</span>
+                        <span class="timeline-sig">{{ item.event.significance }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+    </div>
+
+    {# ── Right column: topics + quick access ── #}
+    <div class="dashboard-sidebar">
+
+        {# Topics #}
+        {% if topic_stats %}
+        <section class="dash-section">
+            <h3>Topics</h3>
+            {% for ts in topic_stats %}
+            <a href="/topics/{{ ts.topic_slug }}" class="topic-card">
+                <span class="topic-emoji">{{ topic_emoji(ts.topic_slug) }}</span>
+                <div class="topic-info">
+                    <span class="topic-name">{{ ts.topic_slug }}</span>
+                    <span class="topic-meta">
+                        {{ ts.event_count }} events &middot;
+                        {{ ts.thread_count }} threads &middot;
+                        {{ ts.entity_count }} entities
+                    </span>
+                </div>
+            </a>
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        {# Quick links #}
+        <section class="dash-section">
+            <h3>Quick Access</h3>
+            <div class="quick-links">
+                <a href="/entities/" class="quick-link">
+                    <span class="ql-icon">&#128100;</span>
+                    <span>Entities ({{ total_entities }})</span>
+                </a>
+                <a href="/sources/" class="quick-link">
+                    <span class="ql-icon">&#128225;</span>
+                    <span>Sources</span>
+                </a>
+                <a href="/feed.xml" class="quick-link">
+                    <span class="ql-icon">&#127911;</span>
+                    <span>Podcast Feed</span>
+                </a>
+                <a href="/cost" class="quick-link">
+                    <span class="ql-icon">&#128176;</span>
+                    <span>Cost Tracking</span>
+                </a>
+            </div>
+        </section>
+
+    </div>
+</div>
 
 {% if not active_threads and not topic_stats %}
-<p>No data yet. Run the pipeline first: <code>python -m nexus engine</code></p>
+<div class="empty-state">
+    <h3>Welcome to Nexus</h3>
+    <p>No data yet. Run the pipeline to get started:</p>
+    <code>python -m nexus engine</code>
+</div>
 {% endif %}
+
 {% endblock %}

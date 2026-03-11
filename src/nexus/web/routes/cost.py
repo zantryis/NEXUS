@@ -3,7 +3,7 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from nexus.web.app import get_store, get_templates
 
@@ -45,3 +45,11 @@ async def cost_api(request: Request):
         "today_usd": round(today_cost, 4),
         "session": session_cost,
     })
+
+
+@router.get("/api/cost-badge")
+async def cost_badge(request: Request):
+    """HTML fragment for HTMX cost metric on dashboard."""
+    store = get_store(request)
+    today_cost = await store.get_daily_cost(date.today().isoformat())
+    return HTMLResponse(f"${today_cost:.2f}")

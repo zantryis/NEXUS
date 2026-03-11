@@ -92,6 +92,22 @@ async def test_dashboard_shows_topics(client):
     assert "iran-us" in resp.text
 
 
+async def test_dashboard_has_metrics(client):
+    """Dashboard shows hero metrics grid."""
+    resp = await client.get("/")
+    assert "metrics-grid" in resp.text
+    assert "Active Threads" in resp.text
+    assert "Topics" in resp.text
+    assert "Events" in resp.text
+
+
+async def test_dashboard_has_thread_cards(client):
+    """Dashboard shows redesigned thread cards with significance."""
+    resp = await client.get("/")
+    assert "Sanctions Escalation" in resp.text
+    assert "thread-card-v2" in resp.text
+
+
 async def test_topic_detail(client):
     resp = await client.get("/topics/iran-us")
     assert resp.status_code == 200

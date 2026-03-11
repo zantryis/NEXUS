@@ -254,3 +254,51 @@ async def deliver_breaking_alert(
     except Exception as e:
         logger.error(f"Breaking alert delivery failed: {e}")
         return False
+
+
+async def deliver_breaking_digest(
+    bot,
+    chat_id: int,
+    alerts: list[dict],
+) -> bool:
+    """Send aggregated breaking news digest as a single message.
+
+    Alerts are sorted by significance (highest first) and formatted
+    as a numbered list in one message instead of individual alerts.
+    """
+    if not alerts:
+        return False
+
+    try:
+        sorted_alerts = sorted(alerts, key=lambda a: a.get("significance_score", 0), reverse=True)
+
+        lines = ["\U0001f6a8 <b>BREAKING NEWS DIGEST</b>\n"]
+        for i, alert in enumerate(sorted_alerts, 1):
+            sig = alert.get("significance_score", "?")
+            headline = html.escape(alert.get("headline", ""))
+            url = alert.get("source_url", "")
+            lines.append(f"<b>{i}.</b> [{sig}/10] {headline}")
+            if url:
+                lines.append(f'   \U0001f4ce <a href="{url}">Source</a>')
+            lines.append("")
+
+        text = "\n".join(lines).strip()
+        chunks = split_message(text)
+
+        for chunk in chunks:
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=chunk,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+            except Exception:
+                await bot.send_message(chat_id=chat_id, text=chunk)
+
+        logger.info(f"Breaking digest delivered: {len(alerts)} alerts to chat {chat_id}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Breaking digest delivery failed: {e}")
+        return False

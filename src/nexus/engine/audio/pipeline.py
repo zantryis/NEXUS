@@ -20,6 +20,8 @@ async def run_audio_pipeline(
     syntheses: list[TopicSynthesis],
     data_dir: Path,
     gemini_api_key: str | None = None,
+    elevenlabs_api_key: str | None = None,
+    openai_api_key: str | None = None,
     report_date: date | None = None,
     lang_suffix: str | None = None,
 ) -> Path | None:
@@ -47,7 +49,12 @@ async def run_audio_pipeline(
 
     # 2. Synthesize each turn via TTS
     logger.info(f"{lang_label}Synthesizing {len(script.turns)} dialogue turns via TTS...")
-    tts = get_tts_backend(config.audio, gemini_api_key=gemini_api_key)
+    tts = get_tts_backend(
+        config.audio,
+        gemini_api_key=gemini_api_key,
+        elevenlabs_api_key=elevenlabs_api_key,
+        openai_api_key=openai_api_key,
+    )
 
     segments: list[bytes] = []
     for i, turn in enumerate(script.turns):

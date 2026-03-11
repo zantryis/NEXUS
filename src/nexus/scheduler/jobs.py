@@ -81,14 +81,13 @@ async def breaking_news_job(
         alerts = await check_breaking_news(llm, config, store)
 
         if alerts and bot and config.telegram.chat_id:
-            from nexus.agent.delivery import deliver_breaking_alert
-            for alert in alerts:
-                await deliver_breaking_alert(
-                    bot._application.bot, config.telegram.chat_id, alert,
-                )
+            from nexus.agent.delivery import deliver_breaking_digest
+            await deliver_breaking_digest(
+                bot._application.bot, config.telegram.chat_id, alerts,
+            )
 
         if alerts:
-            logger.info(f"Breaking news: {len(alerts)} alerts sent")
+            logger.info(f"Breaking news: {len(alerts)} alerts delivered as digest")
         else:
             logger.info("No breaking news")
 

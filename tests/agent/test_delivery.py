@@ -7,7 +7,7 @@ from pathlib import Path
 
 from nexus.agent.delivery import (
     split_message, _md_to_telegram_html, _get_topic_emoji,
-    deliver_briefing, deliver_breaking_alert,
+    deliver_briefing, deliver_breaking_alert, deliver_breaking_digest,
     md_to_telegram_html_light,
     MAX_MESSAGE_LENGTH,
 )
@@ -198,3 +198,40 @@ def test_light_html_no_newsletter_header():
     """Light formatter should NOT add newsletter header."""
     result = md_to_telegram_html_light("Just a response")
     assert "NEXUS DAILY BRIEFING" not in result
+
+
+# ── Breaking news digest tests ──
+
+
+async def test_digest_empty():
+    bot = AsyncMock()
+    result = await deliver_breaking_digest(bot, 123, [])
+    assert result is False
+    bot.send_message.assert_not_called()
+
+
+async def test_digest_multiple_alerts():
+    bot = AsyncMock()
+    alerts = [
+        {"headline": "Alert one", "source_url": "https://a.com", "significance_score": 7},
+        {"headline": "Alert two", "source_url": "https://b.com", "significance_score": 9},
+        {"headline": "Alert three", "source_url": "https://c.com", "significance_score": 8},
+    ]
+    result = await deliver_breaking_digest(bot, 123, alerts)
+    assert result is True
+    bot.send_message.assert_called()
+    text = bot.send_message.call_args.kwargs["text"]
+    # Should be sorted by significance (highest first)
+    assert text.index("Alert two") < text.index("Alert three")
+    assert text.index("Alert three") < text.index("Alert one")
+    assert "DIGEST" in text
+
+
+async def test_digest_single_alert():
+    bot = AsyncMock()
+    alerts = [{"headline": "Solo alert", "source_url": "https://x.com", "significance_score": 8}]
+    result = await deliver_breaking_digest(bot, 123, alerts)
+    assert result is True
+    text = bot.send_message.call_args.kwargs["text"]
+    assert "Solo alert" in text
+    assert "[8/10]" in text

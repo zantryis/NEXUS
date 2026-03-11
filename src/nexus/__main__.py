@@ -41,9 +41,10 @@ def run_engine():
     api_key = os.getenv("GEMINI_API_KEY")
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
     deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
+    openai_api_key = os.getenv("OPENAI_API_KEY")
 
-    if not api_key and not anthropic_api_key and not deepseek_api_key:
-        print("Set GEMINI_API_KEY, ANTHROPIC_API_KEY, or DEEPSEEK_API_KEY in .env")
+    if not api_key and not anthropic_api_key and not deepseek_api_key and not openai_api_key:
+        print("Set GEMINI_API_KEY, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, or OPENAI_API_KEY in .env")
         sys.exit(1)
 
     config = load_config(config_path)
@@ -62,6 +63,7 @@ def run_engine():
         config.models, api_key=api_key,
         anthropic_api_key=anthropic_api_key,
         deepseek_api_key=deepseek_api_key,
+        openai_api_key=openai_api_key,
         budget_config=config.budget,
     )
 
@@ -173,13 +175,78 @@ def run_sources():
         for s in matched:
             print(f"  [{s.language}] {s.id} — {s.name}")
 
+    elif subcommand == "discover":
+        load_dotenv()
+        import yaml as _yaml
+        from nexus.config.loader import load_config
+        from nexus.llm.client import LLMClient
+        from nexus.engine.sources.discovery import discover_sources
+
+        if len(sys.argv) < 4:
+            print("Usage: python -m nexus sources discover <topic-slug>")
+            sys.exit(1)
+
+        slug = sys.argv[3]
+        config = load_config(data_dir / "config.yaml")
+
+        topic = None
+        for t in config.topics:
+            topic_slug = t.name.lower().replace(" ", "-").replace("/", "-")
+            if topic_slug == slug:
+                topic = t
+                break
+        if not topic:
+            print(f"Topic '{slug}' not found in config.")
+            sys.exit(1)
+
+        api_key = os.getenv("GEMINI_API_KEY")
+        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+        deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
+
+        llm = LLMClient(
+            config.models, api_key=api_key,
+            anthropic_api_key=anthropic_api_key,
+            deepseek_api_key=deepseek_api_key,
+        )
+
+        # Get existing URLs to avoid duplicates
+        existing_urls: set[str] = set()
+        existing_path = data_dir / "sources" / slug / "registry.yaml"
+        if existing_path.exists():
+            existing_reg = _yaml.safe_load(existing_path.read_text()) or {}
+            for s_entry in existing_reg.get("sources", []):
+                existing_urls.add(s_entry.get("url", ""))
+
+        discovered = asyncio.run(discover_sources(
+            llm, topic.name, subtopics=topic.subtopics,
+            existing_urls=existing_urls,
+        ))
+
+        if not discovered:
+            print(f"No new feeds discovered for '{slug}'.")
+            sys.exit(0)
+
+        print(f"Discovered {len(discovered)} feeds for '{slug}':")
+        for d in discovered:
+            print(f"  [{d['language']}] {d['id']:30s} {d['url']}")
+
+        # Append to existing registry
+        existing_path.parent.mkdir(parents=True, exist_ok=True)
+        if existing_path.exists():
+            reg = _yaml.safe_load(existing_path.read_text()) or {}
+        else:
+            reg = {"sources": []}
+        reg["sources"].extend(discovered)
+        existing_path.write_text(_yaml.dump(reg, default_flow_style=False))
+        print(f"Updated {existing_path}")
+
     elif subcommand == "list":
         for s in sources:
             affil = f"{s.affiliation}/{s.country}" if s.country else s.affiliation
             print(f"  [{s.language}] {s.tier} {affil:12s} {s.id:25s} {','.join(s.tags)}")
 
     else:
-        print(f"Unknown subcommand: {subcommand}. Use: check, build, list")
+        print(f"Unknown subcommand: {subcommand}. Use: check, build, list, discover")
         sys.exit(1)
 
 
@@ -301,7 +368,8 @@ def main():
     )
 
     if len(sys.argv) < 2:
-        print("Usage: python -m nexus <engine|run|sources|evaluate|serve|setup>")
+        print("Usage: python -m nexus <engine|run|sources|evaluate|serve|setup>\n"
+              "  sources check|build|list|discover")
         sys.exit(1)
 
     command = sys.argv[1]

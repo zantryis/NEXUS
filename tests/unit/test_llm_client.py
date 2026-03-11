@@ -19,9 +19,15 @@ def test_resolve_deepseek():
     assert _resolve_provider("deepseek-reasoner") == "deepseek"
 
 
+def test_resolve_openai():
+    assert _resolve_provider("gpt-4o") == "openai"
+    assert _resolve_provider("gpt-4.1-mini") == "openai"
+    assert _resolve_provider("o3-mini") == "openai"
+
+
 def test_resolve_unknown():
     with pytest.raises(ValueError, match="Unknown model provider"):
-        _resolve_provider("gpt-4o")
+        _resolve_provider("totally-unknown-model")
 
 
 def test_usage_tracker_accumulates():

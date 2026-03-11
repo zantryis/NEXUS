@@ -31,6 +31,7 @@ async def run_all(
     api_key = os.getenv("GEMINI_API_KEY")
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
     deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
+    openai_api_key = os.getenv("OPENAI_API_KEY")
 
     # Initialize shared resources
     llm = LLMClient(
@@ -38,6 +39,7 @@ async def run_all(
         api_key=api_key,
         anthropic_api_key=anthropic_api_key,
         deepseek_api_key=deepseek_api_key,
+        openai_api_key=openai_api_key,
         budget_config=config.budget,
     )
 

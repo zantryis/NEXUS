@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from nexus.config.models import ModelsConfig
-from nexus.llm.client import LLMClient
+from nexus.llm.client import LLMClient, _resolve_provider
 
 
 @pytest.fixture
@@ -60,3 +60,44 @@ async def test_complete_with_json_response(client):
             json_response=True,
         )
         assert '"score": 8' in result
+
+
+# ── Provider resolution ──
+
+
+def test_resolve_provider_openai():
+    assert _resolve_provider("gpt-4o") == "openai"
+    assert _resolve_provider("gpt-4.1-mini") == "openai"
+    assert _resolve_provider("gpt-4.1-nano") == "openai"
+
+
+def test_resolve_provider_openai_reasoning():
+    assert _resolve_provider("o1") == "openai"
+    assert _resolve_provider("o3") == "openai"
+    assert _resolve_provider("o3-mini") == "openai"
+    assert _resolve_provider("o4-mini") == "openai"
+
+
+def test_resolve_provider_existing():
+    assert _resolve_provider("gemini-3-flash-preview") == "gemini"
+    assert _resolve_provider("claude-sonnet-4-20250514") == "anthropic"
+    assert _resolve_provider("deepseek-chat") == "deepseek"
+    assert _resolve_provider("ollama/qwen2") == "ollama"
+
+
+def test_resolve_provider_unknown():
+    with pytest.raises(ValueError, match="Unknown model provider"):
+        _resolve_provider("llama-3.1-70b")
+
+
+# ── OpenAI client initialization ──
+
+
+def test_openai_client_initialized():
+    client = LLMClient(ModelsConfig(), openai_api_key="test-openai-key")
+    assert client._openai_client is not None
+
+
+def test_openai_client_not_initialized_without_key():
+    client = LLMClient(ModelsConfig())
+    assert client._openai_client is None

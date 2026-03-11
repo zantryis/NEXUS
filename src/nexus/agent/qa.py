@@ -11,6 +11,7 @@ import logging
 from nexus.config.models import NexusConfig
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.llm.client import LLMClient
+from nexus.agent.websearch import web_search, format_web_results, _is_context_thin
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +44,11 @@ QA_SYSTEM_PROMPT = (
     "- Start with a 1-sentence TL;DR, then brief details.\n\n"
     "KNOWLEDGE:\n"
     "- For SOURCED info (from context): attribute briefly (e.g., '(Reuters)').\n"
-    "- For GENERAL KNOWLEDGE beyond the context: you may use training data, "
-    "just note it naturally (e.g., 'Historically...').\n"
-    "- If you don't know, say so honestly.\n\n"
+    "- For WEB SEARCH results: use them to provide up-to-date info, cite the source.\n"
+    "- For GENERAL KNOWLEDGE beyond the context: freely use your training data "
+    "to fill gaps — be helpful and complete. Note it naturally "
+    "(e.g., 'Historically...' or 'As of the latest regulations...').\n"
+    "- Only say 'I don't know' if you truly have no relevant information.\n\n"
     "Output language: {output_language}\n"
 )
 
@@ -167,8 +170,17 @@ async def answer_question(
     # Detect response language: match user's input language
     response_lang = analysis.get("language", config.user.output_language)
 
-    # Stage 2: gather targeted context
+    # Stage 2: gather targeted context from knowledge store
     context = await _gather_context(store, analysis)
+
+    # Stage 2.5: supplement with web search if store context is thin
+    if _is_context_thin(context):
+        entities = analysis.get("entities", [])
+        search_query = question if not entities else f"{question} {' '.join(entities)}"
+        logger.info(f"Store context thin, running web search: {search_query}")
+        web_results = await web_search(search_query, max_results=5)
+        if web_results:
+            context += "\n" + format_web_results(web_results)
 
     # Stage 3: answer
     system_prompt = QA_SYSTEM_PROMPT.format(output_language=response_lang)

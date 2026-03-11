@@ -1,4 +1,4 @@
-"""Provider-agnostic LLM client. Supports Gemini, Anthropic, DeepSeek, and Ollama."""
+"""Provider-agnostic LLM client. Supports Gemini, Anthropic, OpenAI, DeepSeek, and Ollama."""
 
 import logging
 import time
@@ -24,6 +24,8 @@ def _resolve_provider(model_name: str) -> str:
         return "anthropic"
     elif model_name.startswith("deepseek"):
         return "deepseek"
+    elif model_name.startswith(("gpt-", "o1", "o3", "o4")):
+        return "openai"
     else:
         raise ValueError(f"Unknown model provider for: {model_name}")
 
@@ -90,6 +92,7 @@ class LLMClient:
         api_key: Optional[str] = None,
         anthropic_api_key: Optional[str] = None,
         deepseek_api_key: Optional[str] = None,
+        openai_api_key: Optional[str] = None,
         ollama_base_url: Optional[str] = None,
         budget_config: Optional[BudgetConfig] = None,
     ):
@@ -97,6 +100,7 @@ class LLMClient:
         self._gemini_client = None
         self._anthropic_client = None
         self._deepseek_client = None
+        self._openai_client = None
         self._ollama_base_url = ollama_base_url or "http://localhost:11434"
         self.usage = UsageTracker()
         self._budget_guard: Optional[BudgetGuard] = (
@@ -120,6 +124,11 @@ class LLMClient:
                 api_key=deepseek_api_key,
                 base_url="https://api.deepseek.com",
             )
+
+        # Lazy-init OpenAI
+        if openai_api_key:
+            from openai import AsyncOpenAI
+            self._openai_client = AsyncOpenAI(api_key=openai_api_key)
 
     def resolve_model(self, config_key: str) -> str:
         """Look up model name from config key (e.g. 'filtering' -> 'gemini-3-flash-preview')."""
@@ -178,6 +187,9 @@ class LLMClient:
                 model, system_prompt, user_prompt, json_response)
         elif provider == "anthropic":
             text, in_tok, out_tok = await self._complete_anthropic(
+                model, system_prompt, user_prompt, json_response)
+        elif provider == "openai":
+            text, in_tok, out_tok = await self._complete_openai(
                 model, system_prompt, user_prompt, json_response)
         elif provider == "deepseek":
             text, in_tok, out_tok = await self._complete_deepseek(
@@ -294,6 +306,28 @@ class LLMClient:
             kwargs["response_format"] = {"type": "json_object"}
 
         response = await self._deepseek_client.chat.completions.create(**kwargs)
+
+        in_tok = getattr(getattr(response, 'usage', None), 'prompt_tokens', 0) or 0
+        out_tok = getattr(getattr(response, 'usage', None), 'completion_tokens', 0) or 0
+        return response.choices[0].message.content, in_tok, out_tok
+
+    async def _complete_openai(
+        self, model: str, system_prompt: str, user_prompt: str, json_response: bool
+    ) -> tuple[str, int, int]:
+        if not self._openai_client:
+            raise RuntimeError("OpenAI client not initialized — set OPENAI_API_KEY")
+
+        kwargs: dict = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        if json_response:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        response = await self._openai_client.chat.completions.create(**kwargs)
 
         in_tok = getattr(getattr(response, 'usage', None), 'prompt_tokens', 0) or 0
         out_tok = getattr(getattr(response, 'usage', None), 'completion_tokens', 0) or 0

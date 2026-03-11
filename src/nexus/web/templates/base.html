@@ -9,24 +9,27 @@
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
 </head>
 <body>
-    <nav class="container-fluid">
-        <ul>
-            <li><strong><a href="/">Nexus</a></strong></li>
-        </ul>
-        <ul>
-            <li><a href="/threads/">Threads</a></li>
-            <li><a href="/events/">Events</a></li>
-            <li><a href="/entities/">Entities</a></li>
-            <li><a href="/sources/">Sources</a></li>
-            <li><a href="/cost">Cost</a></li>
-            <li><a href="/settings">Settings</a></li>
-        </ul>
-    </nav>
+    <header class="container-fluid site-header">
+        <nav>
+            <ul>
+                <li><a href="/" class="brand"><strong>&#9670; Nexus</strong></a></li>
+            </ul>
+            <ul class="nav-links">
+                <li><a href="/threads/">Threads</a></li>
+                <li><a href="/events/">Events</a></li>
+                <li><a href="/entities/">Entities</a></li>
+                <li><a href="/sources/">Sources</a></li>
+                <li><a href="/cost">Cost</a></li>
+                <li><a href="/settings">Settings</a></li>
+            </ul>
+        </nav>
+    </header>
     <main class="container">
         {% block content %}{% endblock %}
     </main>
     <footer class="container">
-        <small>Nexus Intelligence Dashboard</small>
+        <small class="footer-text">Nexus Intelligence &mdash; Open Source News Compiler</small>
     </footer>
+    {% block scripts %}{% endblock %}
 </body>
 </html>

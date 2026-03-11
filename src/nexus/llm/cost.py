@@ -4,11 +4,25 @@ from collections import defaultdict
 
 # Per-million-token pricing (USD)
 PRICING = {
+    # Gemini
     "gemini-3-flash-preview": {"input": 0.10, "output": 0.40},
     "gemini-3.1-pro-preview": {"input": 1.25, "output": 5.00},
     "gemini-2.5-flash-preview-tts": {"input": 0.15, "output": 0.60},
+    # DeepSeek
     "deepseek-chat": {"input": 0.14, "output": 0.28},
     "deepseek-reasoner": {"input": 0.55, "output": 2.19},
+    # OpenAI
+    "gpt-4o": {"input": 2.50, "output": 10.00},
+    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+    "gpt-4.1": {"input": 2.00, "output": 8.00},
+    "gpt-4.1-mini": {"input": 0.40, "output": 1.60},
+    "gpt-4.1-nano": {"input": 0.10, "output": 0.40},
+    "o3": {"input": 2.00, "output": 8.00},
+    "o3-mini": {"input": 1.10, "output": 4.40},
+    "o4-mini": {"input": 1.10, "output": 4.40},
+    # Anthropic
+    "claude-sonnet-4-20250514": {"input": 3.00, "output": 15.00},
+    "claude-haiku-3-5-20241022": {"input": 0.80, "output": 4.00},
 }
 
 
