@@ -65,8 +65,28 @@ async def test_handle_status(bot):
     update.message.reply_text = AsyncMock()
 
     await bot._handle_status(update, MagicMock())
-    text = update.message.reply_text.call_args.args[0]
+    call_kwargs = update.message.reply_text.call_args
+    text = call_kwargs.args[0]
     assert "iran-us" in text
+    assert call_kwargs.kwargs.get("parse_mode") == "HTML"
+
+
+@patch("nexus.agent.bot.answer_question", new_callable=AsyncMock)
+async def test_handle_message_html_response(mock_qa, bot):
+    """Q&A responses should be sent as formatted HTML."""
+    mock_qa.return_value = "**Iran** imposed *new* sanctions."
+
+    update = MagicMock()
+    update.effective_chat.id = 12345
+    update.message.text = "What happened?"
+    update.message.reply_text = AsyncMock()
+
+    await bot._handle_message(update, MagicMock())
+
+    # First call is "Thinking...", second is the answer
+    answer_call = update.message.reply_text.call_args_list[1]
+    assert answer_call.kwargs.get("parse_mode") == "HTML"
+    assert "<b>Iran</b>" in answer_call.args[0]
 
 
 @patch("nexus.agent.bot.deliver_briefing", new_callable=AsyncMock)

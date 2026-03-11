@@ -1,5 +1,11 @@
-"""Q&A agent — answer user questions using the knowledge store."""
+"""Q&A agent — answer user questions using the knowledge store.
 
+Two-stage approach:
+1. Fast LLM call to extract entities + classify intent
+2. Targeted store lookups, then answer with full context
+"""
+
+import json
 import logging
 
 from nexus.config.models import NexusConfig
@@ -8,13 +14,138 @@ from nexus.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
 
+# Stage 1: extract entities + classify intent
+ANALYSIS_SYSTEM_PROMPT = (
+    "You analyze user questions to extract search terms and classify intent. "
+    "Output JSON only.\n\n"
+    "FIELDS:\n"
+    "- entities: list of entity names / keywords to search (e.g., [\"Iran\", \"Red Bull\", \"Honda\"])\n"
+    "- intent: one of \"recent\" (what happened today/this week), "
+    "\"background\" (historical context, how did X start), "
+    "\"reference\" (factual lookup, who/what/where)\n"
+    "- language: ISO 639-1 code of the question's language (e.g., \"en\", \"zh\", \"fa\")\n\n"
+    "Example: {\"entities\": [\"Iran\", \"sanctions\"], \"intent\": \"recent\", \"language\": \"en\"}\n"
+    "Example: {\"entities\": [\"Red Bull\", \"engine\"], \"intent\": \"reference\", \"language\": \"en\"}\n"
+    "Example: {\"entities\": [\"伊朗\", \"美国\"], \"intent\": \"background\", \"language\": \"zh\"}"
+)
+
+# Stage 2: answer with context
 QA_SYSTEM_PROMPT = (
-    "You are Nexus, a news intelligence assistant. Answer the user's question "
-    "based on the knowledge context provided. Be concise and factual. "
-    "Always attribute claims to their sources. "
-    "If the context doesn't contain enough information, say so honestly.\n\n"
+    "You are Nexus, a news intelligence assistant. You have access to a curated "
+    "knowledge store of recent events, narrative threads, and background pages.\n\n"
+    "RULES:\n"
+    "- For SOURCED INTELLIGENCE (from the context below): attribute claims to sources.\n"
+    "- For GENERAL KNOWLEDGE (factual/historical questions beyond the context): "
+    "you may draw on your training data, but clearly note it "
+    "(e.g., 'Based on general knowledge...' or 'Historically...').\n"
+    "- Be concise. Use short paragraphs and bullet points where appropriate.\n"
+    "- If you genuinely don't know, say so.\n"
+    "- Use clean markdown formatting: **bold** for emphasis, bullet points for lists.\n\n"
     "Output language: {output_language}\n"
 )
+
+
+async def _analyze_question(llm: LLMClient, question: str) -> dict:
+    """Extract entities, intent, and language from a question."""
+    try:
+        raw = await llm.complete(
+            config_key="filtering",  # fast model
+            system_prompt=ANALYSIS_SYSTEM_PROMPT,
+            user_prompt=question,
+            json_response=True,
+        )
+        return json.loads(raw)
+    except Exception as e:
+        logger.warning(f"Question analysis failed, using defaults: {e}")
+        return {"entities": [], "intent": "recent", "language": "en"}
+
+
+async def _gather_context(
+    store: KnowledgeStore, analysis: dict,
+) -> str:
+    """Gather targeted context from the store based on question analysis."""
+    parts: list[str] = []
+    intent = analysis.get("intent", "recent")
+    entity_names = analysis.get("entities", [])
+
+    # Always include: recent events + active threads (baseline)
+    topic_stats = await store.get_topic_stats()
+    for ts in topic_stats:
+        slug = ts["topic_slug"]
+        days = 7 if intent == "background" else 3
+        events = await store.get_recent_events(slug, days=days, limit=10)
+        if events:
+            parts.append(f"## {slug} (recent events)")
+            for e in events:
+                sources_str = ", ".join(s.get("outlet", "?") for s in e.sources)
+                parts.append(f"- [{e.date}] {e.summary} (sources: {sources_str})")
+
+    threads = await store.get_active_threads()
+    if threads:
+        parts.append("\n## Active narrative threads")
+        for t in threads:
+            entities_str = ", ".join(t.get("key_entities", [])[:5])
+            parts.append(
+                f"- {t['headline']} (significance: {t['significance']}, "
+                f"entities: {entities_str})"
+            )
+
+    # Entity-targeted lookups
+    matched_entity_ids: list[int] = []
+    for name in entity_names:
+        results = await store.search_entities(name, limit=3)
+        for ent in results:
+            if ent["id"] not in matched_entity_ids:
+                matched_entity_ids.append(ent["id"])
+
+    if matched_entity_ids:
+        parts.append("\n## Entity-matched events")
+        for eid in matched_entity_ids[:5]:  # cap to avoid context explosion
+            entity_events = await store.get_events_for_entity(eid)
+            if entity_events:
+                # Show last 10 events for this entity
+                for e in entity_events[-10:]:
+                    sources_str = ", ".join(s.get("outlet", "?") for s in e.sources)
+                    parts.append(f"- [{e.date}] {e.summary} (sources: {sources_str})")
+
+        # Threads involving these entities
+        for eid in matched_entity_ids[:5]:
+            entity_threads = await store.get_threads_for_entity(eid)
+            for t in entity_threads:
+                thread_id = t["id"]
+                convergence = await store.get_convergence_for_thread(thread_id)
+                divergence = await store.get_divergence_for_thread(thread_id)
+                if convergence or divergence:
+                    parts.append(f"\n### Thread: {t['headline']}")
+                    for c in convergence:
+                        confirmed = ", ".join(c.get("confirmed_by", []))
+                        parts.append(f"  Confirmed: {c['fact_text']} (by: {confirmed})")
+                    for d in divergence:
+                        parts.append(
+                            f"  Disputed: {d['shared_event']}: "
+                            f"{d['source_a']} vs {d['source_b']}"
+                        )
+
+    # Background pages (for background/reference intents)
+    if intent in ("background", "reference"):
+        for ts in topic_stats:
+            slug = ts["topic_slug"]
+            page = await store.get_page(f"backstory:{slug}")
+            if page and page.get("content_md"):
+                # Truncate to avoid context explosion
+                content = page["content_md"][:2000]
+                parts.append(f"\n## Background: {page['title']}\n{content}")
+
+        # Weekly summaries for deeper context
+        for ts in topic_stats:
+            slug = ts["topic_slug"]
+            summaries = await store.get_summaries(slug, "weekly")
+            if summaries:
+                parts.append(f"\n## Weekly summaries ({slug})")
+                for s in summaries[-3:]:  # last 3 weeks
+                    parts.append(f"- {s.period_start} to {s.period_end}: {s.text[:300]}")
+
+    return "\n".join(parts) if parts else "No data available in the knowledge store."
 
 
 async def answer_question(
@@ -23,34 +154,19 @@ async def answer_question(
     config: NexusConfig,
     question: str,
 ) -> str:
-    """Answer a user question using recent events and threads from the store."""
-    # Gather context from store
-    context_parts = []
+    """Answer a user question with entity-aware, intent-targeted context."""
+    # Stage 1: analyze question
+    analysis = await _analyze_question(llm, question)
+    logger.info(f"Q&A analysis: {analysis}")
 
-    # Recent events across all topics
-    topic_stats = await store.get_topic_stats()
-    for ts in topic_stats:
-        slug = ts["topic_slug"]
-        events = await store.get_recent_events(slug, days=3, limit=10)
-        if events:
-            context_parts.append(f"## {slug} (recent events)")
-            for e in events:
-                sources_str = ", ".join(s.get("outlet", "?") for s in e.sources)
-                context_parts.append(f"- [{e.date}] {e.summary} (sources: {sources_str})")
+    # Detect response language: match user's input language
+    response_lang = analysis.get("language", config.user.output_language)
 
-    # Active threads
-    threads = await store.get_active_threads()
-    if threads:
-        context_parts.append("\n## Active narrative threads")
-        for t in threads:
-            context_parts.append(f"- {t['headline']} (significance: {t['significance']})")
+    # Stage 2: gather targeted context
+    context = await _gather_context(store, analysis)
 
-    context = "\n".join(context_parts) if context_parts else "No recent data available."
-
-    system_prompt = QA_SYSTEM_PROMPT.format(
-        output_language=config.user.output_language,
-    )
-
+    # Stage 3: answer
+    system_prompt = QA_SYSTEM_PROMPT.format(output_language=response_lang)
     user_prompt = f"Knowledge context:\n{context}\n\nUser question: {question}"
 
     return await llm.complete(

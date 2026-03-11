@@ -8,6 +8,7 @@ from pathlib import Path
 from nexus.agent.delivery import (
     split_message, _md_to_telegram_html, _get_topic_emoji,
     deliver_briefing, deliver_breaking_alert,
+    md_to_telegram_html_light,
     MAX_MESSAGE_LENGTH,
 )
 
@@ -147,3 +148,53 @@ async def test_deliver_breaking_alert():
     assert "BREAKING" in call_kwargs["text"]
     assert "Crisis erupts" in call_kwargs["text"]
     assert call_kwargs["parse_mode"] == "HTML"
+
+
+# ── Lightweight Q&A HTML formatter tests ──
+
+
+def test_light_html_bold():
+    result = md_to_telegram_html_light("**important** point")
+    assert "<b>important</b>" in result
+
+
+def test_light_html_italic():
+    result = md_to_telegram_html_light("*emphasis* here")
+    assert "<i>emphasis</i>" in result
+
+
+def test_light_html_bullets():
+    result = md_to_telegram_html_light("- Item one\n- Item two")
+    assert "\u2022 Item one" in result
+    assert "\u2022 Item two" in result
+
+
+def test_light_html_star_bullets():
+    result = md_to_telegram_html_light("* First\n* Second")
+    assert "\u2022 First" in result
+
+
+def test_light_html_headers():
+    result = md_to_telegram_html_light("## Section\nContent")
+    assert "<b>Section</b>" in result
+    # Should NOT have newsletter treatment (no separator, no emoji, no uppercase)
+    assert "\u2501" not in result
+    assert "SECTION" not in result
+
+
+def test_light_html_escapes():
+    result = md_to_telegram_html_light("A < B & C > D")
+    assert "&lt;" in result
+    assert "&amp;" in result
+    assert "&gt;" in result
+
+
+def test_light_html_code():
+    result = md_to_telegram_html_light("Use `config.yaml` here")
+    assert "<code>config.yaml</code>" in result
+
+
+def test_light_html_no_newsletter_header():
+    """Light formatter should NOT add newsletter header."""
+    result = md_to_telegram_html_light("Just a response")
+    assert "NEXUS DAILY BRIEFING" not in result

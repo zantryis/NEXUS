@@ -189,6 +189,47 @@ async def deliver_briefing(
         return False
 
 
+def md_to_telegram_html_light(text: str) -> str:
+    """Lightweight markdown → Telegram HTML for Q&A responses.
+
+    Handles bold, italic, bullets, inline code, links. No newsletter
+    headers, section separators, or topic emojis.
+    """
+    text = html.escape(text)
+
+    # Markdown bullet points → bullet character (- item or * item)
+    text = re.sub(r'^[-*]\s+', '\u2022 ', text, flags=re.MULTILINE)
+
+    # Headers → bold (any level)
+    text = re.sub(r'^#{1,3}\s+(.+)$', r'<b>\1</b>', text, flags=re.MULTILINE)
+
+    # Bold: **text** or __text__
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+    text = re.sub(r'__(.+?)__', r'<b>\1</b>', text)
+
+    # Italic: *text* or _text_
+    text = re.sub(r'(?<!\w)\*([^*]+?)\*(?!\w)', r'<i>\1</i>', text)
+    text = re.sub(r'(?<!\w)_([^_]+?)_(?!\w)', r'<i>\1</i>', text)
+
+    # Inline code: `text`
+    text = re.sub(r'`([^`]+?)`', r'<code>\1</code>', text)
+
+    # Links: [text](url)
+    def _fix_link(m):
+        link_text = m.group(1)
+        url = html.unescape(m.group(2))
+        return f'<a href="{url}">{link_text}</a>'
+    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', _fix_link, text)
+
+    # Horizontal rules
+    text = re.sub(r'^-{3,}$', '', text, flags=re.MULTILINE)
+
+    # Clean up excessive blank lines
+    text = re.sub(r'\n{3,}', '\n\n', text)
+
+    return text.strip()
+
+
 async def deliver_breaking_alert(
     bot,
     chat_id: int,

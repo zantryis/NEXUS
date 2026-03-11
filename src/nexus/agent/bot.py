@@ -8,7 +8,7 @@ from nexus.config.models import NexusConfig
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.llm.client import LLMClient
 from nexus.agent.qa import answer_question
-from nexus.agent.delivery import deliver_briefing
+from nexus.agent.delivery import deliver_briefing, md_to_telegram_html_light, split_message
 from nexus.agent.feedback import build_feedback_keyboard, handle_feedback_callback
 
 logger = logging.getLogger(__name__)
@@ -132,10 +132,10 @@ class NexusBot:
             return
 
         stats = await self._store.get_topic_stats()
-        lines = ["*Nexus Status*\n"]
+        lines = ["<b>Nexus Status</b>\n"]
         for s in stats:
             lines.append(
-                f"• {s['topic_slug']}: {s['event_count']} events, "
+                f"\u2022 {s['topic_slug']}: {s['event_count']} events, "
                 f"{s['thread_count']} threads (latest: {s['latest_date']})"
             )
 
@@ -144,7 +144,7 @@ class NexusBot:
         lines.append(f"\nToday's briefing: {'available' if briefing_path.exists() else 'pending'}")
 
         await update.message.reply_text(
-            "\n".join(lines), parse_mode="Markdown",
+            "\n".join(lines), parse_mode="HTML",
         )
 
     async def _handle_message(self, update, context):
@@ -160,7 +160,16 @@ class NexusBot:
             answer = await answer_question(
                 self._llm, self._store, self._config, question,
             )
-            await update.message.reply_text(answer)
+            html_answer = md_to_telegram_html_light(answer)
+            chunks = split_message(html_answer)
+            for chunk in chunks:
+                try:
+                    await update.message.reply_text(
+                        chunk, parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
+                except Exception:
+                    await update.message.reply_text(chunk)
         except Exception as e:
             logger.error(f"Q&A failed: {e}")
             await update.message.reply_text("Sorry, I couldn't process that question.")
