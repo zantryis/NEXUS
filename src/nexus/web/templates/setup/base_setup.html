@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nexus Setup</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Share+Tech+Mono&display=swap">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="setup-page">
+        <div class="setup-container">
+            <div class="setup-header">
+                <span class="brand">&#9670; Nexus</span>
+                <span class="setup-subtitle">Setup Wizard</span>
+            </div>
+
+            <!-- Step indicator -->
+            <div class="setup-steps">
+                {% for i in range(1, total_steps + 1) %}
+                <div class="setup-step-dot {% if i < step %}done{% elif i == step %}active{% endif %}">
+                    <span class="dot">{% if i < step %}&#10003;{% else %}{{ i }}{% endif %}</span>
+                </div>
+                {% if i < total_steps %}
+                <div class="setup-step-line {% if i < step %}done{% endif %}"></div>
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            {% block wizard_content %}{% endblock %}
+        </div>
+    </div>
+</body>
+</html>

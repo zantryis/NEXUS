@@ -1,0 +1,52 @@
+{% extends "setup/base_setup.html" %}
+{% block wizard_content %}
+<h2>Review Your Setup</h2>
+<p class="setup-desc">Everything look good? You can go back to change anything.</p>
+
+<div class="review-card">
+    <div class="review-section">
+        <span class="review-label">Model Preset</span>
+        <span class="review-value">{{ preset_label }}</span>
+        <a href="/setup" class="review-edit">Change</a>
+    </div>
+    <div class="review-section">
+        <span class="review-label">API Keys</span>
+        <span class="review-value">{{ session.get('keys', {}) | length }} configured</span>
+        <a href="/setup/step/2" class="review-edit">Change</a>
+    </div>
+    <div class="review-section">
+        <span class="review-label">Topics</span>
+        <span class="review-value">
+            {% for t in session.get('topics', []) %}
+            <span class="review-tag">{{ t.name }}</span>
+            {% endfor %}
+        </span>
+        <a href="/setup/step/4" class="review-edit">Change</a>
+    </div>
+    <div class="review-section">
+        <span class="review-label">User</span>
+        <span class="review-value">{{ session.get('user_name', 'User') }} &middot; {{ session.get('timezone', 'UTC') }}</span>
+        <a href="/setup/step/5" class="review-edit">Change</a>
+    </div>
+    <div class="review-section">
+        <span class="review-label">Briefing</span>
+        <span class="review-value">{{ session.get('schedule', '06:00') }} &middot; {{ session.get('style', 'analytical') }}</span>
+        <a href="/setup/step/5" class="review-edit">Change</a>
+    </div>
+    <div class="review-section">
+        <span class="review-label">Telegram</span>
+        <span class="review-value">{% if session.get('telegram_enabled') %}Enabled{% else %}Disabled{% endif %}</span>
+    </div>
+    <div class="review-section">
+        <span class="review-label">Podcast Audio</span>
+        <span class="review-value">{% if session.get('elevenlabs_enabled') %}ElevenLabs{% elif session.get('preset') != 'free' %}Preset default{% else %}Disabled{% endif %}</span>
+    </div>
+</div>
+
+<form method="post" action="/setup/complete">
+    <div class="setup-actions">
+        <a href="/setup/step/5" class="btn-secondary">Back</a>
+        <button type="submit" class="btn-primary btn-lg">Complete Setup</button>
+    </div>
+</form>
+{% endblock %}

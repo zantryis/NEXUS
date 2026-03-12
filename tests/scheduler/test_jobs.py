@@ -89,3 +89,46 @@ def test_schedule_jobs_no_breaking():
     schedule_jobs(scheduler, config, MagicMock(), Path("/tmp"), MagicMock())
 
     assert scheduler.add_job.call_count == 1
+
+
+def test_schedule_jobs_passes_all_api_keys():
+    """schedule_jobs should forward openai and elevenlabs keys to the daily pipeline job."""
+    config = NexusConfig(
+        user=UserConfig(name="Tristan", timezone="America/Denver"),
+        breaking_news=BreakingNewsConfig(enabled=False),
+    )
+    scheduler = MagicMock()
+
+    schedule_jobs(
+        scheduler, config, MagicMock(), Path("/tmp"), MagicMock(),
+        gemini_api_key="gem-key",
+        openai_api_key="oai-key",
+        elevenlabs_api_key="el-key",
+    )
+
+    # Check the daily_pipeline job kwargs include all three keys
+    daily_call = scheduler.add_job.call_args_list[0]
+    kwargs = daily_call.kwargs.get("kwargs", {})
+    assert kwargs["gemini_api_key"] == "gem-key"
+    assert kwargs["openai_api_key"] == "oai-key"
+    assert kwargs["elevenlabs_api_key"] == "el-key"
+
+
+async def test_daily_pipeline_job_passes_api_keys(config, tmp_path):
+    """daily_pipeline_job should forward all API keys to run_pipeline."""
+    briefing_path = tmp_path / "artifacts" / "briefings" / "2026-03-10.md"
+    briefing_path.parent.mkdir(parents=True)
+    briefing_path.write_text("Test briefing")
+
+    with patch("nexus.engine.pipeline.run_pipeline", new_callable=AsyncMock) as mock_pipeline:
+        mock_pipeline.return_value = briefing_path
+        await daily_pipeline_job(
+            config, AsyncMock(), tmp_path, AsyncMock(),
+            gemini_api_key="gem-key",
+            openai_api_key="oai-key",
+            elevenlabs_api_key="el-key",
+        )
+        call_kwargs = mock_pipeline.call_args.kwargs
+        assert call_kwargs["gemini_api_key"] == "gem-key"
+        assert call_kwargs["openai_api_key"] == "oai-key"
+        assert call_kwargs["elevenlabs_api_key"] == "el-key"

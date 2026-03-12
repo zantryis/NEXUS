@@ -1,0 +1,30 @@
+{% extends "setup/base_setup.html" %}
+{% block wizard_content %}
+<h2>Choose Your Topics</h2>
+<p class="setup-desc">Select the topics you want Nexus to track. You can add more later.</p>
+
+<form method="post" action="/setup/step/4">
+    <div class="topic-grid">
+        {% for slug, name in topic_choices %}
+        <label class="topic-card">
+            <input type="checkbox" name="topics" value="{{ slug }}"
+                   {% if slug in (selected_topics | map(attribute='name') | list) %}checked{% endif %}>
+            <div class="topic-card-inner">
+                <span class="topic-name">{{ name }}</span>
+            </div>
+        </label>
+        {% endfor %}
+    </div>
+
+    <div class="form-group" style="margin-top: 1.5rem;">
+        <label for="custom_topic">Add a custom topic</label>
+        <input type="text" id="custom_topic" name="custom_topic" class="form-input"
+               placeholder="e.g. Cryptocurrency Markets">
+    </div>
+
+    <div class="setup-actions">
+        <a href="/setup/step/3" class="btn-secondary">Back</a>
+        <button type="submit" class="btn-primary">Continue</button>
+    </div>
+</form>
+{% endblock %}

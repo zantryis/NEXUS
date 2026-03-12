@@ -212,8 +212,17 @@
 {% else %}
 <div class="empty-state">
     <h3>Welcome to Nexus</h3>
-    <p>No intelligence data yet. Run the pipeline to start tracking:</p>
-    <code>python -m nexus engine</code>
+    <p>No intelligence data yet. Run the pipeline to populate your dashboard.</p>
+    <div style="margin-top: 1.5rem;">
+        <button class="btn-primary btn-lg" id="launch-pipeline-btn"
+                hx-post="/setup/launch" hx-target="#pipeline-bar" hx-swap="outerHTML">
+            Run Initial Pipeline
+        </button>
+        <div id="pipeline-bar"
+             hx-get="/setup/status" hx-trigger="every 3s" hx-swap="outerHTML"
+             style="margin-top: 1rem;"></div>
+    </div>
+    <p style="margin-top: 1.5rem; font-size: 0.82rem;">Or run from terminal: <code>python -m nexus engine</code></p>
 </div>
 {% endif %}
 

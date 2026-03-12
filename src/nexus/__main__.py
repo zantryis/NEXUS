@@ -107,9 +107,12 @@ def run_engine():
 
         asyncio.run(run_backtest(config, llm, data_dir, label=label, max_days=max_days))
     else:
+        elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
         briefing_path = asyncio.run(run_pipeline(
             config, llm, data_dir, capture=do_capture,
             gemini_api_key=api_key,
+            openai_api_key=openai_api_key,
+            elevenlabs_api_key=elevenlabs_api_key,
         ))
         print(f"Briefing generated: {briefing_path}")
 

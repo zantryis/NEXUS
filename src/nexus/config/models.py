@@ -86,3 +86,4 @@ class NexusConfig(BaseModel):
     sources: SourcesConfig = Field(default_factory=SourcesConfig)
     budget: BudgetConfig = Field(default_factory=BudgetConfig)
     preset: Optional[str] = None
+    demo_mode: bool = False

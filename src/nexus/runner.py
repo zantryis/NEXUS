@@ -32,6 +32,7 @@ async def run_all(
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
     deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
     openai_api_key = os.getenv("OPENAI_API_KEY")
+    elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
 
     # Initialize shared resources
     llm = LLMClient(
@@ -69,14 +70,15 @@ async def run_all(
         schedule_jobs(
             scheduler, config, llm, data_dir, store,
             bot=bot, gemini_api_key=api_key,
+            openai_api_key=openai_api_key,
+            elevenlabs_api_key=elevenlabs_api_key,
         )
         scheduler.start()
         logger.info("Scheduler started")
 
         # 3. Start web dashboard (non-blocking via uvicorn Server)
-        app = create_app(data_dir / "knowledge.db")
+        app = create_app(data_dir / "knowledge.db", data_dir=data_dir)
         # Set data paths
-        app.state.data_dir = data_dir
         app.state.audio_dir = data_dir / "artifacts" / "audio"
         # Inject shared resources into app state
         app.state.store = store

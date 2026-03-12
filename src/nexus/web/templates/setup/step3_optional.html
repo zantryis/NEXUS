@@ -1,0 +1,27 @@
+{% extends "setup/base_setup.html" %}
+{% block wizard_content %}
+<h2>Optional Features</h2>
+<p class="setup-desc">These are optional. You can always add them later in Settings.</p>
+
+<form method="post" action="/setup/step/3">
+    <div class="form-group">
+        <label for="telegram_token">Telegram Bot Token</label>
+        <input type="password" id="telegram_token" name="telegram_token" class="form-input"
+               placeholder="1234567890:ABC..." autocomplete="off">
+        <span class="form-hint">Get one from <a href="https://t.me/BotFather" target="_blank">@BotFather</a> on Telegram. Enables daily briefing delivery and Q&A.</span>
+    </div>
+
+    <div class="form-group">
+        <label for="elevenlabs_key">ElevenLabs API Key</label>
+        <input type="password" id="elevenlabs_key" name="elevenlabs_key" class="form-input"
+               placeholder="Paste ElevenLabs key (optional)" autocomplete="off">
+        <span class="form-hint">For premium text-to-speech podcast voices. Your preset may already include TTS.</span>
+    </div>
+
+    <div class="setup-actions">
+        <a href="/setup/step/2" class="btn-secondary">Back</a>
+        <button type="submit" class="btn-primary">Continue</button>
+        <button type="submit" class="btn-skip">Skip</button>
+    </div>
+</form>
+{% endblock %}

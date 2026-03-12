@@ -1,5 +1,6 @@
 """FastAPI application factory with KnowledgeStore lifespan."""
 
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -20,10 +21,17 @@ async def _lifespan(app: FastAPI):
     await store.close()
 
 
-def create_app(db_path: Path | None = None) -> FastAPI:
+def create_app(db_path: Path | None = None, data_dir: Path | None = None) -> FastAPI:
     """Build the FastAPI dashboard app."""
     app = FastAPI(title="Nexus Dashboard", lifespan=_lifespan)
     app.state.db_path = db_path or Path("data/knowledge.db")
+
+    # Setup redirect middleware — redirects to /setup when config.yaml is missing
+    resolved_data_dir = data_dir or Path("data")
+    app.state.data_dir = resolved_data_dir
+    from nexus.web.middleware import SetupRedirectMiddleware, DemoModeMiddleware
+    app.add_middleware(SetupRedirectMiddleware, data_dir=resolved_data_dir)
+    app.add_middleware(DemoModeMiddleware)
 
     # Static files and templates
     web_dir = Path(__file__).parent
@@ -32,9 +40,12 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     templates = Jinja2Templates(directory=web_dir / "templates")
     app.state.templates = templates
 
-    # Register custom Jinja2 filters
+    # Register custom Jinja2 filters and globals
     from nexus.web.filters import timeago
     templates.env.filters["timeago"] = timeago
+    templates.env.globals["is_demo_mode"] = lambda: os.getenv(
+        "NEXUS_DEMO_MODE", ""
+    ).lower() in ("1", "true", "yes")
 
     # Register routes
     from nexus.web.routes.dashboard import router as dashboard_router
@@ -50,7 +61,11 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     from nexus.web.routes.settings import router as settings_router
     from nexus.web.routes.explore import router as explore_router
     from nexus.web.routes.graph import router as graph_router
+    from nexus.web.routes.setup import router as setup_router
+    from nexus.web.routes.chat import router as chat_router
 
+    app.include_router(setup_router)
+    app.include_router(chat_router)
     app.include_router(dashboard_router)
     app.include_router(topics_router)
     app.include_router(threads_router)

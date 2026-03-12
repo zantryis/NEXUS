@@ -8,8 +8,10 @@ RUN pip install --no-cache-dir --upgrade pip hatchling
 
 WORKDIR /app
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md LICENSE ./
 COPY src/ src/
+COPY data/sources/ data/sources/
+COPY data/config.example.yaml data/config.example.yaml
 
 RUN pip install --no-cache-dir ".[all]"
 

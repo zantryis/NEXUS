@@ -1,0 +1,77 @@
+<!-- Floating chat widget -->
+<div id="chat-widget" class="chat-widget">
+    <button id="chat-toggle" class="chat-toggle" title="Ask a question">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+        </svg>
+    </button>
+    <div id="chat-panel" class="chat-panel hidden">
+        <div class="chat-header">
+            <span>Ask Nexus</span>
+            <span id="chat-remaining" class="chat-remaining"></span>
+            <button id="chat-close" class="chat-close">&times;</button>
+        </div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <form id="chat-form" class="chat-input-area">
+            <input type="text" id="chat-input" class="chat-input" placeholder="Ask a question..." autocomplete="off">
+            <button type="submit" class="chat-send">Send</button>
+        </form>
+    </div>
+</div>
+
+<script>
+(function() {
+    const toggle = document.getElementById('chat-toggle');
+    const panel = document.getElementById('chat-panel');
+    const close = document.getElementById('chat-close');
+    const form = document.getElementById('chat-form');
+    const input = document.getElementById('chat-input');
+    const messages = document.getElementById('chat-messages');
+    const remaining = document.getElementById('chat-remaining');
+
+    toggle.addEventListener('click', () => {
+        panel.classList.toggle('hidden');
+        if (!panel.classList.contains('hidden')) input.focus();
+    });
+    close.addEventListener('click', () => panel.classList.add('hidden'));
+
+    function addMessage(text, sender) {
+        const div = document.createElement('div');
+        div.className = 'chat-msg chat-msg-' + sender;
+        div.textContent = text;
+        messages.appendChild(div);
+        messages.scrollTop = messages.scrollHeight;
+    }
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const q = input.value.trim();
+        if (!q) return;
+
+        addMessage(q, 'user');
+        input.value = '';
+        input.disabled = true;
+
+        try {
+            const resp = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({question: q}),
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                addMessage(data.answer, 'bot');
+                if (data.remaining !== undefined) {
+                    remaining.textContent = data.remaining + ' left today';
+                }
+            } else {
+                addMessage(data.error || 'Error', 'error');
+            }
+        } catch (err) {
+            addMessage('Network error.', 'error');
+        }
+        input.disabled = false;
+        input.focus();
+    });
+})();
+</script>

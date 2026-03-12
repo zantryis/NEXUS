@@ -271,6 +271,8 @@ async def run_pipeline(
     config: NexusConfig, llm: LLMClient, data_dir: Path,
     capture: bool = False, fixture_dir: Path | None = None,
     gemini_api_key: str | None = None,
+    openai_api_key: str | None = None,
+    elevenlabs_api_key: str | None = None,
 ) -> Path:
     """Run the full daily engine pipeline. Returns path to generated briefing."""
     pipeline_start = time.monotonic()
@@ -347,6 +349,8 @@ async def run_pipeline(
                 audio_path = await run_audio_pipeline(
                     llm, config, syntheses, data_dir,
                     gemini_api_key=gemini_api_key,
+                    openai_api_key=openai_api_key,
+                    elevenlabs_api_key=elevenlabs_api_key,
                 )
                 if audio_path:
                     logger.info(f"Audio saved to {audio_path}")
@@ -369,6 +373,8 @@ async def run_pipeline(
                         lang_audio = await run_audio_pipeline(
                             llm, lang_config, syntheses, data_dir,
                             gemini_api_key=gemini_api_key,
+                            openai_api_key=openai_api_key,
+                            elevenlabs_api_key=elevenlabs_api_key,
                             lang_suffix=lang,
                         )
                         if lang_audio:

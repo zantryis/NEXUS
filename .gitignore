@@ -27,6 +27,9 @@ data/metrics/
 data/knowledge/
 data/evaluation/
 
+# OAuth tokens
+data/.oauth-tokens.json
+
 # IDE
 .vscode/
 .idea/

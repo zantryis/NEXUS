@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-import yaml
+from nexus.config.writer import write_config, write_env
 
 PRESET_INFO = [
     ("free", "Free (Ollama local)", "No API key needed — runs models locally", None),
@@ -94,7 +94,7 @@ def run_setup(data_dir: Path) -> None:
     timezone = input("Timezone (e.g. America/New_York) [UTC]: ").strip() or "UTC"
 
     # 5. Generate config.yaml
-    config = {
+    config_dict = {
         "preset": preset_name,
         "user": {"name": user_name, "timezone": timezone, "output_language": "en"},
         "topics": selected,
@@ -104,27 +104,16 @@ def run_setup(data_dir: Path) -> None:
         "telegram": {"enabled": True},
     }
 
-    data_dir.mkdir(parents=True, exist_ok=True)
-    config_path = data_dir / "config.yaml"
-    config_path.write_text(yaml.dump(config, default_flow_style=False, sort_keys=False))
+    config_path = write_config(data_dir, config_dict)
     print(f"\nWrote {config_path}")
 
     # 6. Generate / update .env
-    env_path = data_dir.parent / ".env"
-    existing_lines: dict[str, str] = {}
-    if env_path.exists():
-        for line in env_path.read_text().splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                existing_lines[k.strip()] = v.strip()
-
+    env_keys = {}
     if api_key and required_key:
-        existing_lines[required_key] = api_key
+        env_keys[required_key] = api_key
 
-    if existing_lines:
-        env_text = "\n".join(f"{k}={v}" for k, v in existing_lines.items()) + "\n"
-        env_path.write_text(env_text)
+    if env_keys:
+        env_path = write_env(data_dir.parent, env_keys)
         print(f"Wrote {env_path}")
 
     print(f"\nDone! Run: python -m nexus run")

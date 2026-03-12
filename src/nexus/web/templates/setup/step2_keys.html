@@ -1,0 +1,22 @@
+{% extends "setup/base_setup.html" %}
+{% block wizard_content %}
+<h2>API Key</h2>
+<p class="setup-desc">Your <strong>{{ preset }}</strong> preset requires a <code>{{ required_key }}</code>.</p>
+
+{% if error %}
+<div class="alert-error">{{ error }}</div>
+{% endif %}
+
+<form method="post" action="/setup/step/2">
+    <div class="form-group">
+        <label for="api_key">{{ required_key }}</label>
+        <input type="password" id="api_key" name="api_key" class="form-input"
+               placeholder="Paste your API key here" required autocomplete="off">
+        <span class="form-hint">Your key is stored locally in <code>.env</code> and never sent anywhere.</span>
+    </div>
+    <div class="setup-actions">
+        <a href="/setup" class="btn-secondary">Back</a>
+        <button type="submit" class="btn-primary">Continue</button>
+    </div>
+</form>
+{% endblock %}

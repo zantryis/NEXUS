@@ -1,0 +1,25 @@
+{% extends "setup/base_setup.html" %}
+{% block wizard_content %}
+<h2>Welcome to Nexus</h2>
+<p class="setup-desc">Choose a model preset to get started. This determines which AI provider powers your briefings.</p>
+
+<form method="post" action="/setup/step/1">
+    <div class="preset-grid">
+        {% for name, label, desc, required_key in presets %}
+        <label class="preset-card {% if selected_preset == name %}selected{% endif %}">
+            <input type="radio" name="preset" value="{{ name }}" {% if selected_preset == name %}checked{% endif %} required>
+            <div class="preset-card-inner">
+                <span class="preset-name">{{ label }}</span>
+                <span class="preset-desc">{{ desc }}</span>
+                {% if not required_key %}
+                <span class="preset-badge badge-free">No API Key</span>
+                {% endif %}
+            </div>
+        </label>
+        {% endfor %}
+    </div>
+    <div class="setup-actions">
+        <button type="submit" class="btn-primary">Continue</button>
+    </div>
+</form>
+{% endblock %}

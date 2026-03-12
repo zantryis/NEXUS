@@ -27,6 +27,8 @@ async def daily_pipeline_job(
     store: KnowledgeStore,
     bot=None,
     gemini_api_key: str | None = None,
+    openai_api_key: str | None = None,
+    elevenlabs_api_key: str | None = None,
 ) -> None:
     """Run the daily pipeline + deliver briefing via Telegram."""
     from nexus.engine.pipeline import run_pipeline
@@ -34,7 +36,10 @@ async def daily_pipeline_job(
     logger.info("=== Scheduled daily pipeline starting ===")
     try:
         briefing_path = await run_pipeline(
-            config, llm, data_dir, gemini_api_key=gemini_api_key,
+            config, llm, data_dir,
+            gemini_api_key=gemini_api_key,
+            openai_api_key=openai_api_key,
+            elevenlabs_api_key=elevenlabs_api_key,
         )
         logger.info(f"Daily pipeline complete: {briefing_path}")
 
@@ -113,6 +118,8 @@ def schedule_jobs(
     store: KnowledgeStore,
     bot=None,
     gemini_api_key: str | None = None,
+    openai_api_key: str | None = None,
+    elevenlabs_api_key: str | None = None,
 ) -> None:
     """Register scheduled jobs with an APScheduler AsyncIOScheduler."""
     # Parse schedule time (HH:MM)
@@ -127,7 +134,12 @@ def schedule_jobs(
         minute=minute,
         timezone=timezone,
         args=[config, llm, data_dir, store],
-        kwargs={"bot": bot, "gemini_api_key": gemini_api_key},
+        kwargs={
+            "bot": bot,
+            "gemini_api_key": gemini_api_key,
+            "openai_api_key": openai_api_key,
+            "elevenlabs_api_key": elevenlabs_api_key,
+        },
         id="daily_pipeline",
         name="Daily Intelligence Pipeline",
         replace_existing=True,

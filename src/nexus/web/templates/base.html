@@ -14,6 +14,7 @@
     <header class="site-header">
         <nav class="site-nav">
             <a href="/" class="brand">&#9670; Nexus</a>
+            {% if is_demo_mode() %}<span class="demo-badge">Demo</span>{% endif %}
             <div class="nav-primary">
                 <a href="/" class="nav-link {% block nav_briefing %}{% endblock %}">Briefing</a>
                 <a href="/threads/" class="nav-link {% block nav_threads %}{% endblock %}">Threads</a>
@@ -32,6 +33,7 @@
             </div>
         </nav>
     </header>
+    {% block status_bar %}{% endblock %}
     <main class="main-content {% block main_class %}{% endblock %}">
         {% block content %}{% endblock %}
     </main>
@@ -61,6 +63,9 @@
             b.setAttribute('aria-expanded', 'false'));
     });
     </script>
+    {% if is_demo_mode() %}
+    {% include "partials/chat_widget.html" %}
+    {% endif %}
     {% block scripts %}{% endblock %}
 </body>
 </html>
