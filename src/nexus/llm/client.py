@@ -125,10 +125,15 @@ class LLMClient:
                 base_url="https://api.deepseek.com",
             )
 
-        # Lazy-init OpenAI
+        # Lazy-init OpenAI (API key or OAuth token)
         if openai_api_key:
             from openai import AsyncOpenAI
             self._openai_client = AsyncOpenAI(api_key=openai_api_key)
+
+    def set_openai_oauth_token(self, token: str) -> None:
+        """Hot-swap OpenAI client to use an OAuth access token."""
+        from openai import AsyncOpenAI
+        self._openai_client = AsyncOpenAI(api_key=token)
 
     def resolve_model(self, config_key: str) -> str:
         """Look up model name from config key (e.g. 'filtering' -> 'gemini-3-flash-preview')."""

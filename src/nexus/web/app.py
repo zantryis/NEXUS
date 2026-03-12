@@ -63,9 +63,11 @@ def create_app(db_path: Path | None = None, data_dir: Path | None = None) -> Fas
     from nexus.web.routes.graph import router as graph_router
     from nexus.web.routes.setup import router as setup_router
     from nexus.web.routes.chat import router as chat_router
+    from nexus.web.routes.oauth import router as oauth_router
 
     app.include_router(setup_router)
     app.include_router(chat_router)
+    app.include_router(oauth_router)
     app.include_router(dashboard_router)
     app.include_router(topics_router)
     app.include_router(threads_router)

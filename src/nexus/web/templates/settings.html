@@ -235,6 +235,28 @@
     </div>
 </div>
 
+<!-- OpenAI OAuth (Beta) -->
+<div class="settings-section">
+    <div class="settings-section-header" onclick="this.parentElement.classList.toggle('open')">
+        OpenAI OAuth <span class="badge badge-{{ 'active' if oauth_connected else 'stale' }}" style="margin-left:0.5rem;font-size:0.7rem;">{{ 'connected' if oauth_connected else 'not connected' }}</span> <span class="toggle-icon">+</span>
+    </div>
+    <div class="settings-section-body">
+        <p style="color:var(--nx-text-dim);font-size:0.85rem;margin-bottom:1rem;">
+            Sign in with your OpenAI account to use subscription-based API access instead of an API key. <span class="badge badge-emerging" style="font-size:0.65rem;">Beta</span>
+        </p>
+        {% if oauth_connected %}
+        <div style="display:flex;align-items:center;gap:1rem;">
+            <span class="badge badge-active">Connected</span>
+            <form method="post" action="/auth/openai/revoke" style="margin:0;">
+                <button type="submit" class="btn-skip" style="color:var(--nx-red);">Disconnect</button>
+            </form>
+        </div>
+        {% else %}
+        <a href="/auth/openai" class="btn-primary" style="display:inline-block;text-decoration:none;">Sign in with OpenAI</a>
+        {% endif %}
+    </div>
+</div>
+
 <!-- Budget -->
 <div class="settings-section">
     <div class="settings-section-header" onclick="this.parentElement.classList.toggle('open')">

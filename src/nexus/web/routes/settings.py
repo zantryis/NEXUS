@@ -61,12 +61,20 @@ async def settings_page(request: Request):
 
     saved = request.query_params.get("saved")
 
+    # Check OAuth status
+    from nexus.llm.oauth import OpenAIOAuthManager
+    data_dir = _data_dir(request)
+    oauth_mgr = OpenAIOAuthManager(token_path=data_dir / ".oauth-tokens.json")
+    oauth_tokens = oauth_mgr.load_tokens()
+    oauth_connected = oauth_tokens is not None and not oauth_mgr.is_expired(oauth_tokens)
+
     return templates.TemplateResponse(request, "settings.html", {
         "providers": _provider_status(),
         "config": config,
         "raw": raw,
         "preset": getattr(config, "preset", raw.get("preset")),
         "saved": saved,
+        "oauth_connected": oauth_connected,
     })
 
 
