@@ -40,3 +40,5 @@ tests/              # Mirrors src structure, 547 tests
 - TopicSynthesis (X): intermediate knowledge object with NarrativeThread, convergence/divergence
 - Artifacts render FROM X (briefings, audio scripts, etc.)
 - CLI: `python -m nexus run` (all services) | `engine` (pipeline only) | `serve` (dashboard only)
+- Pipeline parameters (thresholds, scoring rubrics, limits): `docs/pipeline-parameters.md`
+- Cost accounting: `LLMClient` persists usage to SQLite via `set_store()`, budget guard syncs on startup

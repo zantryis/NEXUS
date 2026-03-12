@@ -49,6 +49,13 @@ PASS2_SYSTEM_PROMPT = (
 
 PASS2_BATCH_SIZE = 5  # Smaller batches — more text per article
 
+# Composite score formula weights (see docs/pipeline-parameters.md)
+RELEVANCE_WEIGHT = 0.4
+SIGNIFICANCE_WEIGHT = 0.6
+NOVEL_BONUS = 1.0
+NON_NOVEL_BONUS = 0.7
+DIVERSITY_MAX_ITEMS = 30
+
 
 @dataclass
 class FilterResult:
@@ -195,7 +202,7 @@ async def score_significance_batch(
 def apply_perspective_diversity(
     items: list[ContentItem],
     topic: TopicConfig,
-    max_items: int = 30,
+    max_items: int = DIVERSITY_MAX_ITEMS,
 ) -> list[ContentItem]:
     """Apply perspective diversity constraints based on topic config.
 
@@ -359,8 +366,8 @@ async def filter_items(
             # Composite score: relevance (from pass 1) weighted with significance
             # Novel articles get a boost
             relevance = item.relevance_score or 0
-            novelty_bonus = 1.0 if is_novel else 0.7
-            composite = (relevance * 0.4 + sig * 0.6) * novelty_bonus
+            novelty_bonus = NOVEL_BONUS if is_novel else NON_NOVEL_BONUS
+            composite = (relevance * RELEVANCE_WEIGHT + sig * SIGNIFICANCE_WEIGHT) * novelty_bonus
             item.relevance_score = round(composite, 1)
 
             # Keep if significance >= 4 or novel

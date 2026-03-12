@@ -1,0 +1,175 @@
+# Pipeline Parameters Reference
+
+Every tunable threshold, limit, and scoring rubric in the Nexus engine pipeline.
+
+Parameters marked **configurable** can be set in `data/config.yaml`.
+All others are code constants — modify in source or wait for future config support.
+
+---
+
+## 1. Source Polling
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| Recency filter | 48 hours | `polling.py` `filter_recent()` | Drops RSS items older than 48h before processing |
+
+## 2. Ingestion
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| `MAX_INGEST` | 250 articles | `pipeline.py` | Cap per topic — prioritizes most recent dated items |
+| Global concurrency | 10 | `ingest.py` semaphore | Max concurrent HTTP fetches |
+| Per-domain concurrency | 2 | `ingest.py` semaphore | Rate-limits per domain |
+
+## 3. Two-Pass Filtering
+
+### Pass 1: Relevance Scoring
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| `BATCH_SIZE` | 10 | `filter.py:38` | Articles per LLM call |
+| `filter_threshold` | 6.0 (default) | `models.py:29` | **Configurable** per-topic. Scale: 1–10, lower = more pass |
+| Snippet cap | 1000 chars | `filter.py:90` | Max article text per batch item |
+
+**Rubric** (system prompt at `filter.py:23-29`):
+> Score relevance 1–10. Include source metadata (affiliation, country) in assessment.
+> State media, public broadcasters, and private outlets all provide valid perspectives.
+
+### Pass 2: Significance + Novelty
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| `PASS2_BATCH_SIZE` | 5 | `filter.py:50` | Smaller batches — more text per article |
+| Text cap | 2000 chars | `filter.py:147` | Max article text per batch item |
+| Pass threshold | significance ≥ 4 **OR** `is_novel` | `filter.py:367` | Either condition passes |
+
+**Rubric** (system prompt at `filter.py:42-48`):
+> Score significance 1–10, assess novelty (boolean) against known events from last 7 days.
+
+### Composite Score
+
+```
+novelty_bonus = 1.0 if is_novel else 0.7
+composite = (relevance × 0.4 + significance × 0.6) × novelty_bonus
+```
+
+Constants: `RELEVANCE_WEIGHT=0.4`, `SIGNIFICANCE_WEIGHT=0.6`, `NOVEL_BONUS=1.0`, `NON_NOVEL_BONUS=0.7` (`filter.py:362-363`)
+
+### Perspective Diversity
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| `max_items` | 30 | `filter.py:198` | Max articles after diversity selection |
+| `perspective_diversity` | `"medium"` (default) | `models.py` | **Configurable** per-topic: `low`, `medium`, `high` |
+| High diversity | ≥ 20% per affiliation | `filter.py:209` | Min representation from each source type |
+| Medium diversity | ≥ 10% per affiliation | `filter.py:209` | |
+| Low diversity | Pure score ranking | `filter.py:206-207` | No diversity constraint |
+
+## 4. Event Extraction
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| Event cap (narrow) | 15 | `pipeline.py:92` | Max events per topic per run |
+| Event cap (medium) | 20 | `pipeline.py:92` | |
+| Event cap (broad) | 35 | `pipeline.py:92` | |
+| `max_events` | (override) | `models.py:31` | **Configurable** per-topic |
+| Extraction concurrency | 5 | `pipeline.py:181` | Semaphore for parallel extraction |
+| Entity overlap threshold | 0.6 | `events.py:52` | 60% entity overlap → duplicate event |
+| Event context window | 14 days | `pipeline.py:153` | How far back to load existing events |
+| Recent events for novelty | 7 days, max 30 | `pipeline.py:156-157` | Context window for novelty assessment |
+| Text cap | 3000 chars | `events.py` | Max article text in extraction prompt |
+
+**Rubric** (system prompt at `events.py:99-111`):
+> Extract: date (MUST be ≤ today), summary (1–2 sentences), entities, relation to prior events, significance 1–10.
+> Critical date rules: event date is when it happened, not future speculation.
+
+## 5. Entity Resolution
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| Known entity cap | 200 | `entities.py:62` | Max known entities in LLM prompt to avoid overflow |
+
+**Rubric** (system prompt at `entities.py:21-38`):
+> Map raw names to canonical forms. Types: person, org, country, treaty, concept.
+> Be conservative — only merge entities you are CERTAIN are the same.
+
+## 6. Thread Matching
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| `HIGH_OVERLAP` | 0.5 | `threads.py:19` | Auto-match, no LLM confirmation needed |
+| `LOW_OVERLAP` | 0.3 | `threads.py:20` | Below this = no match candidate |
+| Thread lifecycle | emerging → active → stale → resolved | `threads.py` | active after 2+ distinct days |
+
+**Rubric** (system prompt at `threads.py:70-79`):
+> Match events to existing threads by slug, or group unmatched into new threads.
+
+## 7. Knowledge Synthesis
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| Synthesis fallback | last 3 days, 10 events | `pipeline.py:274` | Used when no new events extracted |
+| Weekly summary context | last 3 weeks | `knowledge.py:193` | Background summaries for synthesis |
+| Monthly summary context | last 1 month | `knowledge.py:196` | |
+| Max threads on error | 10 | `knowledge.py:256` | Fallback cap for thread generation |
+
+**Rubric** (system prompt at `knowledge.py:60-146`):
+> Group events into story arcs. Identify convergence (2+ independent sources) and divergence (conflicting framing).
+> Source affiliation assessment: state (gov-controlled), public (editorially independent), private (varies), nonprofit/academic.
+> Thread consolidation: threads sharing 3+ entities in same causal chain MUST be merged.
+
+## 8. Page Cache (Narrative Pages)
+
+| Page Type | TTL | Location |
+|-----------|-----|----------|
+| `backstory` | 7 days | `pages.py:19` |
+| `entity_profile` | 3 days | `pages.py:20` |
+| `thread_deepdive` | 1 day | `pages.py:21` |
+| `weekly_recap` | 365 days | `pages.py` (immutable) |
+
+## 9. Breaking News
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| `poll_interval_hours` | 3 | `models.py:54` | **Configurable** |
+| `threshold` | 7 | `models.py:55` | **Configurable**. Significance ≥ 7 → alert |
+
+## 10. Budget & Cost
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| `daily_limit_usd` | 1.00 | `models.py:73` | **Configurable** |
+| `warning_threshold_usd` | 0.50 | `models.py:74` | **Configurable** |
+| `degradation_strategy` | `"skip_expensive"` | `models.py:75` | **Configurable**: `skip_expensive` or `stop_all` |
+| Expensive operations | `synthesis`, `dialogue_script`, `agent` | `budget.py:22` | Blocked first when over limit |
+
+### Cost Estimation
+
+Pricing table in `cost.py:6-29`. Formula:
+
+```
+cost = (input_tokens / 1M) × input_price + (output_tokens / 1M) × output_price
+```
+
+## 11. Quality Evaluation (Judge)
+
+**Rubric** (system prompt at `judge.py:12-34`):
+> Score on 5 dimensions (1–10 each): completeness, source balance, convergence accuracy, divergence detection, entity coverage.
+
+---
+
+## LLM Model Assignments
+
+All LLM calls go through `src/nexus/llm/client.py`. Model selection is by `config_key`:
+
+| Config Key | Default Model | Used For |
+|------------|--------------|----------|
+| `filtering` | gemini-3-flash-preview | Pass 1 + Pass 2 scoring |
+| `knowledge_summary` | gemini-3-flash-preview | Event extraction, entity resolution, synthesis |
+| `synthesis` | gemini-3.1-pro-preview | (currently unused — synthesis uses knowledge_summary) |
+| `dialogue_script` | gemini-3.1-pro-preview | Podcast script generation |
+| `breaking_news` | gemini-3-flash-preview | Breaking news assessment |
+| `agent` | gemini-3.1-pro-preview | Telegram Q&A |
+| `discovery` | gemini-3-flash-preview | Source discovery queries |
+
+See `config/models.py` and `data/config.example.yaml` for preset configurations.

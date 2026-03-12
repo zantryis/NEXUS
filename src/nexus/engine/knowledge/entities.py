@@ -8,6 +8,8 @@ from nexus.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
 
+MAX_KNOWN_ENTITIES = 200  # Cap to avoid prompt overflow
+
 
 @dataclass
 class EntityResolution:
@@ -59,7 +61,7 @@ async def resolve_entities(
 
     # Build known entities context
     known_lines = []
-    for e in known_entities[:200]:  # Cap to avoid prompt overflow
+    for e in known_entities[:MAX_KNOWN_ENTITIES]:
         aliases = e.get("aliases", [])
         alias_str = f" (aliases: {', '.join(aliases)})" if aliases else ""
         known_lines.append(
