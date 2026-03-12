@@ -23,7 +23,7 @@ We follow **TDD** (test-driven development):
 3. Run the full suite before submitting
 
 ```bash
-# Run all tests
+# Run all unit tests
 .venv/bin/pytest
 
 # Run a specific test file
@@ -31,6 +31,12 @@ We follow **TDD** (test-driven development):
 
 # Skip integration tests (require live API keys)
 .venv/bin/pytest -m "not integration"
+
+# Run E2E smoke tests (requires API keys in .env)
+.venv/bin/pytest -m e2e -v
+
+# CLI smoke test (runs a minimal pipeline end-to-end)
+python -m nexus test
 ```
 
 ## Code Style
@@ -38,7 +44,7 @@ We follow **TDD** (test-driven development):
 - Keep it minimal — no over-engineering, no premature abstractions
 - All LLM calls go through `src/nexus/llm/client.py`, never directly to SDKs
 - Use `logging` for observability, not `print()`
-- Tests that hit real APIs must be marked `@pytest.mark.integration`
+- Tests that hit real APIs must be marked `@pytest.mark.integration` or `@pytest.mark.e2e`
 
 ## Pull Requests
 
@@ -59,7 +65,8 @@ src/nexus/
   scheduler/  # APScheduler job definitions
   web/        # FastAPI dashboard + setup wizard
   llm/        # Multi-provider async LLM client
-tests/        # Mirrors src structure
+  testing/    # E2E smoke test runner
+tests/        # Mirrors src structure (unit + e2e)
 ```
 
 ## Questions?

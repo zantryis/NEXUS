@@ -474,11 +474,14 @@ async def setup_launch(request: Request):
                         logger.warning(f"Source discovery failed for {topic_cfg.name}: {disc_err}")
 
             status["stage"] = "running"
+            # NEXUS_SMOKE_MODE caps ingestion for fast testing
+            smoke_cap = int(os.getenv("NEXUS_SMOKE_MODE", "0"))
             briefing_path = await run_pipeline(
                 config, llm, data_dir,
                 gemini_api_key=api_key,
                 openai_api_key=openai_api_key,
                 elevenlabs_api_key=elevenlabs_api_key,
+                max_ingest=smoke_cap or None,
             )
             status["stage"] = "complete"
             status["done"] = True

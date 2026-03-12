@@ -97,6 +97,7 @@ python -m nexus setup                   # Interactive CLI setup wizard
 python -m nexus sources check           # Test RSS feed health
 python -m nexus sources list            # List all global sources
 python -m nexus sources discover <slug> # Auto-discover RSS feeds for a topic
+python -m nexus test                            # E2E smoke test (runs minimal pipeline)
 python -m nexus evaluate synthesis <path>       # Judge synthesis quality
 python -m nexus evaluate compare <path> <path>  # Compare two syntheses
 ```
@@ -145,6 +146,14 @@ NEXUS_DEMO_MODE=1 python -m nexus run
 
 In demo mode, all settings are locked and a chat widget appears for visitor Q&A (rate-limited to 5 questions/day per IP).
 
+### Smoke Mode
+
+To cap pipeline ingestion for fast testing (e.g., verifying the setup flow end-to-end):
+
+```bash
+NEXUS_SMOKE_MODE=20 python -m nexus run   # Limits ingestion to 20 articles per topic
+```
+
 ## Architecture
 
 ```
@@ -168,7 +177,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full module map and schema detail
 
 ```bash
 pip install -e ".[all,dev]"
-pytest                          # Run 547 tests
+pytest                          # Run unit tests
+pytest -m e2e                   # Run E2E smoke tests (requires API keys)
 ```
 
 ## Project Structure
@@ -181,11 +191,12 @@ src/nexus/
   web/            FastAPI dashboard, setup wizard, settings, chat widget
   llm/            Multi-provider async LLM client (Gemini, OpenAI, Anthropic, DeepSeek, Ollama)
   config/         Pydantic config models, presets, config writer
+  testing/        E2E smoke test runner
   runner.py       Unified runner (all services on one event loop)
 data/
   sources/        Per-topic RSS source registries (pre-built for 4 topics)
   config.yaml     Your personal configuration (gitignored — created by setup wizard)
-tests/            547 tests mirroring src structure
+tests/            578 tests mirroring src structure (unit + e2e)
 ```
 
 ## License
