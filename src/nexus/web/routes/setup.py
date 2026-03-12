@@ -474,7 +474,7 @@ async def setup_launch(request: Request):
                         logger.warning(f"Source discovery failed for {topic_cfg.name}: {disc_err}")
 
             status["stage"] = "running"
-            await run_pipeline(
+            briefing_path = await run_pipeline(
                 config, llm, data_dir,
                 gemini_api_key=api_key,
                 openai_api_key=openai_api_key,
@@ -484,6 +484,32 @@ async def setup_launch(request: Request):
             status["done"] = True
             # Mark that data now exists
             request.app.state.has_data = True
+
+            # Deliver via Telegram if token and chat_id are available
+            telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+            if (
+                config.telegram.enabled
+                and telegram_token
+                and config.telegram.chat_id
+                and briefing_path
+                and briefing_path.exists()
+            ):
+                try:
+                    from telegram import Bot
+                    from nexus.agent.delivery import deliver_briefing
+                    from datetime import date as _date
+
+                    tg_bot = Bot(token=telegram_token)
+                    today_str = _date.today().isoformat()
+                    text = briefing_path.read_text()
+                    audio_path = data_dir / "artifacts" / "audio" / f"{today_str}.mp3"
+                    audio = audio_path if audio_path.exists() else None
+
+                    async with tg_bot:
+                        await deliver_briefing(tg_bot, config.telegram.chat_id, text, audio)
+                    logger.info("Briefing delivered via Telegram")
+                except Exception as tg_err:
+                    logger.warning(f"Telegram delivery failed (non-blocking): {tg_err}")
         except Exception as e:
             logger.error(f"Background pipeline failed: {e}", exc_info=True)
             request.app.state.pipeline_status = {

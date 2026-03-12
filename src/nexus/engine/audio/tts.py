@@ -10,6 +10,58 @@ from nexus.engine.audio.script import DialogueTurn
 
 logger = logging.getLogger(__name__)
 
+# Per-backend defaults — used when configured voices/model belong to a different backend
+BACKEND_DEFAULTS = {
+    "gemini": {
+        "model": "gemini-2.5-flash-preview-tts",
+        "voice_a": "Kore",
+        "voice_b": "Puck",
+        "known_voices": {"Kore", "Puck", "Charon", "Fenrir", "Aoede", "Leda", "Orus", "Zephyr"},
+    },
+    "elevenlabs": {
+        "model": "eleven_multilingual_v2",
+        "voice_a": "Rachel",
+        "voice_b": "Drew",
+        "known_voices": {"Rachel", "Drew", "Clyde", "Domi", "Bella", "Josh", "Adam"},
+    },
+    "openai": {
+        "model": "tts-1-hd",
+        "voice_a": "nova",
+        "voice_b": "onyx",
+        "known_voices": {"alloy", "echo", "fable", "onyx", "nova", "shimmer"},
+    },
+}
+
+
+def _resolve_voice(backend: str, configured: str, default_key: str) -> str:
+    """Return configured voice if valid for backend, else the backend's default."""
+    defaults = BACKEND_DEFAULTS.get(backend, {})
+    known = defaults.get("known_voices", set())
+    # Accept any voice the user explicitly set if it looks intentional for this backend
+    if configured in known:
+        return configured
+    # Also accept raw ElevenLabs voice IDs (24-char alphanumeric)
+    if backend == "elevenlabs" and len(configured) > 15:
+        return configured
+    # Fall back to backend default
+    fallback = defaults.get(default_key, configured)
+    if configured != fallback:
+        logger.info(f"Voice '{configured}' not valid for {backend} TTS, using '{fallback}'")
+    return fallback
+
+
+def _resolve_model(backend: str, configured: str) -> str:
+    """Return configured model if it belongs to this backend, else the backend's default."""
+    defaults = BACKEND_DEFAULTS.get(backend, {})
+    default_model = defaults.get("model", configured)
+    # Detect cross-backend model strings
+    other_backends = [b for b in BACKEND_DEFAULTS if b != backend]
+    for other in other_backends:
+        if BACKEND_DEFAULTS[other]["model"] in configured:
+            logger.info(f"Model '{configured}' belongs to {other}, using '{default_model}' for {backend}")
+            return default_model
+    return configured
+
 
 class TTSBackend(ABC):
     """Abstract TTS backend."""
@@ -132,33 +184,43 @@ def get_tts_backend(
     elevenlabs_api_key: str | None = None,
     openai_api_key: str | None = None,
 ) -> TTSBackend:
-    """Factory: create a TTS backend from config."""
-    if config.tts_backend == "gemini":
+    """Factory: create a TTS backend from config.
+
+    Resolves voice names and model IDs to backend-appropriate defaults when the
+    configured values belong to a different backend (e.g., Gemini voices with
+    ElevenLabs backend).
+    """
+    backend = config.tts_backend
+    voice_a = _resolve_voice(backend, config.voice_host_a, "voice_a")
+    voice_b = _resolve_voice(backend, config.voice_host_b, "voice_b")
+    model = _resolve_model(backend, config.tts_model)
+
+    if backend == "gemini":
         from google import genai
         client = genai.Client(api_key=gemini_api_key)
         return GeminiTTS(
             client=client,
-            model=config.tts_model,
-            voice_a=config.voice_host_a,
-            voice_b=config.voice_host_b,
+            model=model,
+            voice_a=voice_a,
+            voice_b=voice_b,
         )
-    elif config.tts_backend == "elevenlabs":
+    elif backend == "elevenlabs":
         if not elevenlabs_api_key:
             raise ValueError("ELEVENLABS_API_KEY required for ElevenLabs TTS")
         return ElevenLabsTTS(
             api_key=elevenlabs_api_key,
-            voice_a=config.voice_host_a,
-            voice_b=config.voice_host_b,
-            model=config.tts_model or "eleven_multilingual_v2",
+            voice_a=voice_a,
+            voice_b=voice_b,
+            model=model,
         )
-    elif config.tts_backend == "openai":
+    elif backend == "openai":
         if not openai_api_key:
             raise ValueError("OPENAI_API_KEY required for OpenAI TTS")
         return OpenAITTS(
             api_key=openai_api_key,
-            voice_a=config.voice_host_a,
-            voice_b=config.voice_host_b,
-            model=config.tts_model or "tts-1-hd",
+            voice_a=voice_a,
+            voice_b=voice_b,
+            model=model,
         )
     else:
-        raise ValueError(f"Unsupported TTS backend: {config.tts_backend}")
+        raise ValueError(f"Unsupported TTS backend: {backend}")

@@ -86,14 +86,28 @@ class NexusBot:
             await self._application.shutdown()
             logger.info("Nexus Telegram bot stopped")
 
+    def _persist_chat_id(self, chat_id: int) -> None:
+        """Save chat_id to config.yaml so it survives restarts."""
+        try:
+            import yaml
+            config_path = self._data_dir / "config.yaml"
+            if config_path.exists():
+                raw = yaml.safe_load(config_path.read_text()) or {}
+                raw.setdefault("telegram", {})["chat_id"] = chat_id
+                config_path.write_text(yaml.dump(raw, default_flow_style=False, sort_keys=False))
+                logger.info(f"Persisted chat_id {chat_id} to {config_path}")
+        except Exception as e:
+            logger.warning(f"Failed to persist chat_id: {e}")
+
     async def _handle_start(self, update, context):
-        """Handle /start — register user."""
+        """Handle /start — register user and persist chat_id."""
         chat_id = update.effective_chat.id
 
-        # Record chat_id if not set
+        # Record chat_id if not set, and persist to config.yaml
         if self._config.telegram.chat_id is None:
             self._config.telegram.chat_id = chat_id
             logger.info(f"Registered Telegram chat_id: {chat_id}")
+            self._persist_chat_id(chat_id)
 
         await update.message.reply_text(
             "Welcome to Nexus Intelligence Briefing!\n\n"

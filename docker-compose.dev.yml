@@ -6,6 +6,8 @@ services:
     volumes:
       - ./data:/app/data
       - ./src:/app/src
+    environment:
+      - PYTHONPATH=/app/src
     env_file:
       - path: .env
         required: false

@@ -4,7 +4,9 @@
 
 If you discover a security vulnerability in Nexus, please report it responsibly.
 
-**Email:** Open a [GitHub Security Advisory](https://github.com/Tyan3001/NEXUS/security/advisories/new) (preferred) or email **zantryis@gmail.com** directly.
+**Email:** Email **zantryis@gmail.com** directly.
+
+If private GitHub Security Advisories are enabled for this repository later, prefer reporting there instead of opening a public issue.
 
 Please include:
 - Description of the vulnerability
