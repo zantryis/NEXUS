@@ -17,4 +17,4 @@ RUN pip install --no-cache-dir ".[all]"
 
 EXPOSE 8080
 
-CMD ["python", "-m", "nexus", "run"]
+CMD ["python", "-m", "nexus", "run", "--host", "0.0.0.0"]

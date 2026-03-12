@@ -27,8 +27,14 @@ async def graph_page(request: Request):
 async def graph_data(request: Request):
     """JSON API: nodes + links for D3 force graph."""
     store = get_store(request)
-    min_events = int(request.query_params.get("min_events", "3"))
-    min_co = int(request.query_params.get("min_co", "2"))
+    try:
+        min_events = int(request.query_params.get("min_events", "3"))
+        min_co = int(request.query_params.get("min_co", "2"))
+    except ValueError:
+        return JSONResponse(
+            {"error": "min_events and min_co must be integers."},
+            status_code=400,
+        )
     data = await store.get_graph_data(min_events=min_events, min_co=min_co)
     return JSONResponse(data)
 

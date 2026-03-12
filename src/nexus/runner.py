@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 async def run_all(
     config: NexusConfig,
     data_dir: Path,
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8080,
 ) -> None:
     """Start everything: dashboard, scheduler, Telegram bot.

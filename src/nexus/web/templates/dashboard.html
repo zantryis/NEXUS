@@ -3,6 +3,12 @@
 {% block nav_briefing %}active{% endblock %}
 {% block content %}
 
+{% if setup_complete %}
+<div class="flash-banner flash-warning">
+    Setup is saved. Restart Nexus once to enable scheduled jobs, Telegram delivery, and other always-on services.
+</div>
+{% endif %}
+
 <div class="briefing-header">
     <div class="briefing-header-top">
         <div class="briefing-header-left">

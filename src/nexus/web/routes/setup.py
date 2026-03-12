@@ -9,6 +9,7 @@ from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse, HTMLResponse
 
 from nexus.cli.setup import PRESET_INFO, TOPIC_CHOICES
+from nexus.config.presets import preset_names
 from nexus.config.writer import write_config, write_env
 from nexus.web.app import get_templates
 
@@ -55,6 +56,7 @@ async def setup_start(request: Request):
     response = templates.TemplateResponse(request, "setup/step1_welcome.html", {
         "presets": PRESET_INFO,
         "selected_preset": session.get("preset"),
+        "error": None,
         "step": 1,
         "total_steps": 6,
     })
@@ -65,6 +67,22 @@ async def setup_start(request: Request):
 async def setup_step1(request: Request, preset: str = Form(...)):
     """Save preset, advance to step 2."""
     session_id, session = _get_session(request)
+    if preset not in preset_names():
+        templates = get_templates(request)
+        response = templates.TemplateResponse(
+            request,
+            "setup/step1_welcome.html",
+            {
+                "presets": PRESET_INFO,
+                "selected_preset": session.get("preset"),
+                "error": "Choose a valid preset.",
+                "step": 1,
+                "total_steps": 6,
+            },
+            status_code=400,
+        )
+        return _set_cookie(response, session_id)
+
     session["preset"] = preset
 
     # Find required key for this preset
@@ -258,7 +276,7 @@ async def setup_step6_get(request: Request):
 
 @router.post("/setup/complete")
 async def setup_complete(request: Request):
-    """Write config.yaml + .env, redirect to dashboard."""
+    """Write config.yaml + .env, redirect to dashboard with restart guidance."""
     session_id, session = _get_session(request)
     data_dir = _data_dir(request)
 
@@ -299,7 +317,7 @@ async def setup_complete(request: Request):
     sessions = getattr(request.app.state, "setup_sessions", {})
     sessions.pop(session_id, None)
 
-    response = RedirectResponse(url="/", status_code=303)
+    response = RedirectResponse(url="/?setup=complete", status_code=303)
     response.delete_cookie("nexus_setup")
     return response
 

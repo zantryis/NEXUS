@@ -88,6 +88,20 @@ async def test_dashboard_returns_200(client):
     assert "Nexus" in resp.text
 
 
+async def test_dashboard_sets_security_headers(client):
+    resp = await client.get("/")
+    assert resp.headers["x-frame-options"] == "DENY"
+    assert resp.headers["x-content-type-options"] == "nosniff"
+    assert resp.headers["referrer-policy"] == "same-origin"
+    assert "frame-ancestors 'none'" in resp.headers["content-security-policy"]
+
+
+async def test_dashboard_setup_complete_banner(client):
+    resp = await client.get("/?setup=complete")
+    assert resp.status_code == 200
+    assert "Restart Nexus once" in resp.text
+
+
 async def test_dashboard_shows_topics(client):
     resp = await client.get("/")
     assert "iran-us" in resp.text

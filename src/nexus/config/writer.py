@@ -1,6 +1,7 @@
 """Write config.yaml and .env files from structured data."""
 
 import os
+import stat
 from pathlib import Path
 
 import yaml
@@ -11,6 +12,7 @@ def write_config(data_dir: Path, config_dict: dict) -> Path:
     data_dir.mkdir(parents=True, exist_ok=True)
     config_path = data_dir / "config.yaml"
     config_path.write_text(yaml.dump(config_dict, default_flow_style=False, sort_keys=False))
+    os.chmod(config_path, stat.S_IRUSR | stat.S_IWUSR)
     return config_path
 
 

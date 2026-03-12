@@ -109,6 +109,11 @@ PRESET_INFO = {
 }
 
 
+def preset_names() -> set[str]:
+    """Return the named presets supported by the config loader."""
+    return set(PRESETS.keys()) | {"custom"}
+
+
 def apply_preset(preset_name: str, overrides: dict | None = None) -> ModelsConfig:
     """Get a ModelsConfig from a preset name, with optional field overrides."""
     if preset_name not in PRESETS:

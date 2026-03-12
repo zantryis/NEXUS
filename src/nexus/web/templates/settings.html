@@ -12,6 +12,12 @@
 </div>
 {% endif %}
 
+{% if error == "invalid-preset" %}
+<div class="form-error">
+    Choose a valid preset before saving.
+</div>
+{% endif %}
+
 <!-- API Keys -->
 <div class="settings-section">
     <div class="settings-section-header" onclick="this.parentElement.classList.toggle('open')">

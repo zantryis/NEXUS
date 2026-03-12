@@ -588,7 +588,7 @@ src/nexus/
 │   ├── app.py               FastAPI app factory
 │   ├── graph.py             Entity relationship SVG generator
 │   ├── sanitize.py          HTML sanitization (bleach)
-│   ├── middleware.py         Demo mode + rate limiting middleware
+│   ├── middleware.py         Setup redirect, admin protection, security headers, demo mode
 │   ├── clustering.py        Event clustering for explore view
 │   ├── filters.py           Jinja2 template filters
 │   ├── thumbnails.py        Favicon/thumbnail helpers

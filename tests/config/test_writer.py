@@ -1,5 +1,6 @@
 """Tests for config writer module."""
 
+import stat
 
 from nexus.config.writer import write_config, write_env
 from nexus.config.loader import load_config
@@ -81,3 +82,10 @@ def test_write_config_creates_directories(tmp_path):
     path = write_config(data_dir, config_dict)
     assert path.exists()
     assert data_dir.exists()
+
+
+def test_write_config_restricts_permissions(tmp_path):
+    """config.yaml should be written with owner-only permissions."""
+    path = write_config(tmp_path / "data", {"topics": [{"name": "Test Topic"}]})
+    mode = stat.S_IMODE(path.stat().st_mode)
+    assert mode == 0o600

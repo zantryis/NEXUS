@@ -1,6 +1,7 @@
 """Tests for the settings page."""
 
 import pytest
+from unittest.mock import patch
 import yaml
 from httpx import AsyncClient, ASGITransport
 
@@ -201,3 +202,64 @@ async def test_settings_page_shows_model_choices(settings_app):
         assert "gpt-5.4" in resp.text
         assert "claude-sonnet-4-6" in resp.text
         assert "deepseek-chat" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_settings_invalid_preset_rejected(settings_app):
+    """Named presets must be validated before writing config."""
+    app, data_dir = settings_app
+    before = (data_dir / "config.yaml").read_text()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/settings/preset",
+            data={"preset": "evil"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/settings?error=invalid-preset"
+
+    assert (data_dir / "config.yaml").read_text() == before
+
+
+@pytest.mark.asyncio
+async def test_graph_invalid_params_return_400(settings_app):
+    """Malformed graph filters should return a 400 instead of a 500."""
+    app, _ = settings_app
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/graph-data?min_events=abc&min_co=2")
+        assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_remote_settings_requires_localhost_or_token(settings_app):
+    """Remote settings access is blocked by default."""
+    app, _ = settings_app
+    transport = ASGITransport(app=app, client=("203.0.113.10", 12345))
+    async with AsyncClient(transport=transport, base_url="http://192.168.1.50") as client:
+        resp = await client.get("/settings")
+        assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+@patch.dict("os.environ", {"NEXUS_ADMIN_TOKEN": "secret"})
+async def test_remote_settings_token_unlocks_session(settings_app):
+    """Remote settings can be used when an explicit admin token is provided."""
+    app, data_dir = settings_app
+    transport = ASGITransport(app=app, client=("203.0.113.10", 12345))
+    async with AsyncClient(transport=transport, base_url="http://192.168.1.50") as client:
+        resp = await client.get("/settings?admin_token=secret", follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/settings"
+
+        resp = await client.get("/settings")
+        assert resp.status_code == 200
+
+        resp = await client.post("/settings/user", data={
+            "name": "RemoteAdmin", "timezone": "UTC", "output_language": "en",
+        }, follow_redirects=False)
+        assert resp.status_code == 303
+
+    raw = yaml.safe_load((data_dir / "config.yaml").read_text())
+    assert raw["user"]["name"] == "RemoteAdmin"

@@ -29,8 +29,15 @@ def create_app(db_path: Path | None = None, data_dir: Path | None = None) -> Fas
     # Setup redirect middleware — redirects to /setup when config.yaml is missing
     resolved_data_dir = data_dir or Path("data")
     app.state.data_dir = resolved_data_dir
-    from nexus.web.middleware import SetupRedirectMiddleware, DemoModeMiddleware
+    from nexus.web.middleware import (
+        AdminProtectionMiddleware,
+        DemoModeMiddleware,
+        SecurityHeadersMiddleware,
+        SetupRedirectMiddleware,
+    )
     app.add_middleware(SetupRedirectMiddleware, data_dir=resolved_data_dir)
+    app.add_middleware(AdminProtectionMiddleware, data_dir=resolved_data_dir)
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(DemoModeMiddleware)
 
     # Static files and templates

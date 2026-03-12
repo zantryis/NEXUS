@@ -3,6 +3,10 @@
 <h2>Welcome to Nexus</h2>
 <p class="setup-desc">Choose a model preset to get started. This determines which AI provider powers your briefings.</p>
 
+{% if error %}
+<div class="form-error">{{ error }}</div>
+{% endif %}
+
 <form method="post" action="/setup/step/1">
     <div class="preset-grid">
         {% for name, label, desc, required_key in presets %}

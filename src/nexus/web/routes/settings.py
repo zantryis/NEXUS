@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
+from nexus.config.presets import preset_names
 from nexus.config.writer import write_config, write_env
 from nexus.web.app import get_templates
 
@@ -60,6 +61,7 @@ async def settings_page(request: Request):
     raw = _get_config_dict(request)
 
     saved = request.query_params.get("saved")
+    error = request.query_params.get("error")
 
     # Check OAuth status
     from nexus.llm.oauth import OpenAIOAuthManager
@@ -79,6 +81,7 @@ async def settings_page(request: Request):
         "raw": raw,
         "preset": getattr(config, "preset", raw.get("preset")),
         "saved": saved,
+        "error": error,
         "oauth_connected": oauth_connected,
         "model_choices": MODEL_CHOICES,
         "pipeline_stages": PIPELINE_STAGES,
@@ -233,6 +236,8 @@ async def settings_update_preset(request: Request):
     raw = _get_config_dict(request)
 
     preset = (form.get("preset") or "balanced").strip()
+    if preset not in preset_names():
+        return RedirectResponse(url="/settings?error=invalid-preset", status_code=303)
     raw["preset"] = preset
 
     if preset == "custom":

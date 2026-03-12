@@ -77,6 +77,15 @@ def _find_briefing(data_dir: Path, target_date: date) -> tuple[date, str] | None
     return None
 
 
+def _is_within(parent: Path, child: Path) -> bool:
+    """Return True when child resolves within parent."""
+    try:
+        child.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
 async def _build_topics_data(store, max_threads: int = 3, max_events: int = 2):
     """Build structured topic data for the web briefing."""
     topic_stats = await store.get_topic_stats()
@@ -188,6 +197,7 @@ async def homepage(request: Request):
         "total_sources": len(source_stats),
         "breaking_alerts": breaking_alerts,
         "audio": audio_info,
+        "setup_complete": request.query_params.get("setup") == "complete",
     })
 
 
@@ -256,9 +266,9 @@ async def serve_audio(request: Request, filename: str):
     audio_dir = (data_dir / "artifacts" / "audio").resolve()
     audio_path = (audio_dir / filename).resolve()
 
-    # Prevent path traversal: resolved path must stay within audio directory
+    # Prevent path traversal: resolved path must stay within audio directory.
     if (
-        not str(audio_path).startswith(str(audio_dir) + "/")
+        not _is_within(audio_dir, audio_path)
         or not audio_path.exists()
         or not filename.endswith(".mp3")
     ):

@@ -9,6 +9,23 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
+def _is_loopback_host(host: str) -> bool:
+    """Return True when host clearly binds only to localhost."""
+    return host in {"127.0.0.1", "::1", "localhost"}
+
+
+def _log_bind_warning(host: str, port: int) -> None:
+    """Warn when the dashboard is intentionally exposed beyond localhost."""
+    if _is_loopback_host(host):
+        return
+    logging.getLogger(__name__).warning(
+        "Binding Nexus to http://%s:%s exposes the dashboard on your network. "
+        "Setup/settings stay localhost-only unless NEXUS_ADMIN_TOKEN is set.",
+        host,
+        port,
+    )
+
+
 def _parse_models_override(args: list[str]) -> dict[str, str]:
     """Parse --models-override key=value pairs from CLI args."""
     overrides = {}
@@ -339,6 +356,7 @@ def run_serve():
             host = sys.argv[idx + 1]
 
     app = create_app(db_path)
+    _log_bind_warning(host, port)
     print(f"Starting Nexus dashboard at http://{host}:{port}")
     uvicorn.run(app, host=host, port=port)
 
@@ -352,7 +370,7 @@ def run_all_services():
     data_dir = Path("data")
     config_path = data_dir / "config.yaml"
 
-    host = "0.0.0.0"
+    host = "127.0.0.1"
     port = 8080
     if "--port" in sys.argv:
         idx = sys.argv.index("--port")
@@ -372,10 +390,12 @@ def run_all_services():
         import uvicorn
         from nexus.web.app import create_app
         app = create_app(data_dir / "knowledge.db")
+        _log_bind_warning(host, port)
         uvicorn.run(app, host=host, port=port)
         return
 
     config = load_config(config_path)
+    _log_bind_warning(host, port)
     asyncio.run(run_all(config, data_dir, host=host, port=port))
 
 

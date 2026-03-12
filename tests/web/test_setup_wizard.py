@@ -1,6 +1,7 @@
 """Tests for the web setup wizard."""
 
 import pytest
+from unittest.mock import patch
 from httpx import AsyncClient, ASGITransport
 
 from nexus.engine.knowledge.store import KnowledgeStore
@@ -95,6 +96,16 @@ async def test_setup_step1_free_skips_to_step3(app_no_config):
 
 
 @pytest.mark.asyncio
+async def test_setup_step1_invalid_preset_rejected(app_no_config):
+    """Invalid presets should not be accepted by the web wizard."""
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/setup/step/1", data={"preset": "evil"})
+        assert resp.status_code == 400
+        assert "valid preset" in resp.text
+
+
+@pytest.mark.asyncio
 async def test_setup_step2_empty_key_shows_error(app_no_config):
     """POST /setup/step/2 with empty key should show error."""
     transport = ASGITransport(app=app_no_config)
@@ -124,6 +135,7 @@ async def test_setup_complete_writes_config(app_no_config, tmp_path):
         resp = await client.post("/setup/complete", follow_redirects=False)
 
         assert resp.status_code == 303
+        assert resp.headers["location"] == "/?setup=complete"
         assert (data_dir / "config.yaml").exists()
 
 
@@ -134,3 +146,34 @@ async def test_setup_status_returns_html(app_no_config):
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/setup/status")
         assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_setup_disabled_after_config_exists(app_with_config):
+    """Once config exists, /setup redirects to settings by default."""
+    transport = ASGITransport(app=app_with_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/setup", follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/settings"
+
+
+@pytest.mark.asyncio
+@patch.dict("os.environ", {}, clear=False)
+async def test_remote_setup_requires_admin_token(app_no_config):
+    """Remote setup access is blocked unless an admin token is configured."""
+    transport = ASGITransport(app=app_no_config, client=("203.0.113.10", 12345))
+    async with AsyncClient(transport=transport, base_url="http://192.168.1.50") as client:
+        resp = await client.get("/setup")
+        assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+@patch.dict("os.environ", {"NEXUS_ADMIN_TOKEN": "secret"})
+async def test_remote_setup_accepts_admin_token(app_no_config):
+    """Remote setup access can be explicitly unlocked with an admin token."""
+    transport = ASGITransport(app=app_no_config, client=("203.0.113.10", 12345))
+    async with AsyncClient(transport=transport, base_url="http://192.168.1.50") as client:
+        resp = await client.get("/setup?admin_token=secret", follow_redirects=False)
+        assert resp.status_code == 303
+        assert "nexus_admin=" in resp.headers["set-cookie"]
