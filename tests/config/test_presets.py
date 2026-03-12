@@ -2,7 +2,7 @@
 
 import pytest
 from nexus.config.models import ModelsConfig, NexusConfig
-from nexus.config.presets import PRESETS, apply_preset
+from nexus.config.presets import PRESETS, apply_preset, MODEL_CHOICES, PIPELINE_STAGES, all_model_choices
 
 
 def test_all_presets_valid():
@@ -44,3 +44,36 @@ def test_preset_with_model_override():
     assert config.agent == "deepseek-chat"
     # Rest stays from quality preset
     assert config.synthesis == "gemini-3.1-pro-preview"
+
+
+def test_model_choices_has_all_providers():
+    """MODEL_CHOICES covers all supported providers."""
+    assert "gemini" in MODEL_CHOICES
+    assert "openai" in MODEL_CHOICES
+    assert "anthropic" in MODEL_CHOICES
+    assert "deepseek" in MODEL_CHOICES
+    assert "ollama" in MODEL_CHOICES
+
+
+def test_model_choices_has_latest_models():
+    """Latest models are included in choices."""
+    assert "gpt-5.4" in MODEL_CHOICES["openai"]
+    assert "gpt-5-mini" in MODEL_CHOICES["openai"]
+    assert "claude-sonnet-4-6" in MODEL_CHOICES["anthropic"]
+    assert "claude-haiku-4-5-20251001" in MODEL_CHOICES["anthropic"]
+
+
+def test_pipeline_stages_cover_all_config_fields():
+    """PIPELINE_STAGES should match ModelsConfig fields."""
+    stage_keys = {s[0] for s in PIPELINE_STAGES}
+    config_fields = set(ModelsConfig.model_fields.keys())
+    assert stage_keys == config_fields
+
+
+def test_all_model_choices_returns_flat_list():
+    """all_model_choices() returns a deduplicated flat list."""
+    choices = all_model_choices()
+    assert len(choices) > 10
+    assert len(choices) == len(set(choices))  # no dupes
+    assert "gpt-5.4" in choices
+    assert "claude-sonnet-4-6" in choices

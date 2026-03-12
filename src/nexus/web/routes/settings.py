@@ -68,6 +68,11 @@ async def settings_page(request: Request):
     oauth_tokens = oauth_mgr.load_tokens()
     oauth_connected = oauth_tokens is not None and not oauth_mgr.is_expired(oauth_tokens)
 
+    from nexus.config.presets import MODEL_CHOICES, PIPELINE_STAGES, PRESET_INFO
+
+    # Current models (from config or raw yaml)
+    models_raw = raw.get("models", {})
+
     return templates.TemplateResponse(request, "settings.html", {
         "providers": _provider_status(),
         "config": config,
@@ -75,6 +80,10 @@ async def settings_page(request: Request):
         "preset": getattr(config, "preset", raw.get("preset")),
         "saved": saved,
         "oauth_connected": oauth_connected,
+        "model_choices": MODEL_CHOICES,
+        "pipeline_stages": PIPELINE_STAGES,
+        "preset_info": PRESET_INFO,
+        "models_raw": models_raw,
     })
 
 
@@ -218,12 +227,25 @@ async def settings_remove_topic(request: Request):
 
 @router.post("/settings/preset")
 async def settings_update_preset(request: Request):
-    """Switch model preset."""
+    """Switch model preset or save custom model selection."""
     form = await request.form()
     data_dir = _data_dir(request)
     raw = _get_config_dict(request)
 
-    raw["preset"] = (form.get("preset") or "balanced").strip()
+    preset = (form.get("preset") or "balanced").strip()
+    raw["preset"] = preset
+
+    if preset == "custom":
+        # Save per-stage model selections
+        from nexus.config.presets import PIPELINE_STAGES
+        raw.setdefault("models", {})
+        for stage_key, _, _ in PIPELINE_STAGES:
+            val = (form.get(f"model_{stage_key}") or "").strip()
+            if val:
+                raw["models"][stage_key] = val
+    else:
+        # When switching to a named preset, clear custom model overrides
+        raw.pop("models", None)
 
     write_config(data_dir, raw)
     return RedirectResponse(url="/settings?saved=preset", status_code=303)

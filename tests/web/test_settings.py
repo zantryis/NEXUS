@@ -139,3 +139,66 @@ async def test_settings_toggle_audio(settings_app):
     raw = yaml.safe_load((data_dir / "config.yaml").read_text())
     assert raw["audio"]["enabled"] is False
     assert raw["audio"]["tts_backend"] == "openai"
+
+
+@pytest.mark.asyncio
+async def test_settings_custom_models(settings_app):
+    """POST /settings/preset with custom saves per-stage model selections."""
+    app, data_dir = settings_app
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/settings/preset", data={
+            "preset": "custom",
+            "model_filtering": "gpt-5-mini",
+            "model_synthesis": "claude-sonnet-4-6",
+            "model_agent": "deepseek-chat",
+            "model_dialogue_script": "gemini-3.1-pro-preview",
+            "model_knowledge_summary": "gpt-4.1-nano",
+            "model_breaking_news": "gpt-4.1-nano",
+            "model_discovery": "gpt-4.1-nano",
+        }, follow_redirects=False)
+        assert resp.status_code == 303
+
+    raw = yaml.safe_load((data_dir / "config.yaml").read_text())
+    assert raw["preset"] == "custom"
+    assert raw["models"]["filtering"] == "gpt-5-mini"
+    assert raw["models"]["synthesis"] == "claude-sonnet-4-6"
+    assert raw["models"]["agent"] == "deepseek-chat"
+
+
+@pytest.mark.asyncio
+async def test_settings_preset_clears_custom_models(settings_app):
+    """Switching from custom to a named preset clears custom model overrides."""
+    app, data_dir = settings_app
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # First set custom models
+        await client.post("/settings/preset", data={
+            "preset": "custom",
+            "model_filtering": "gpt-5-mini",
+            "model_synthesis": "claude-sonnet-4-6",
+            "model_agent": "deepseek-chat",
+            "model_dialogue_script": "gemini-3.1-pro-preview",
+            "model_knowledge_summary": "gpt-4.1-nano",
+            "model_breaking_news": "gpt-4.1-nano",
+            "model_discovery": "gpt-4.1-nano",
+        })
+        # Then switch back to a named preset
+        await client.post("/settings/preset", data={"preset": "balanced"})
+
+    raw = yaml.safe_load((data_dir / "config.yaml").read_text())
+    assert raw["preset"] == "balanced"
+    assert "models" not in raw
+
+
+@pytest.mark.asyncio
+async def test_settings_page_shows_model_choices(settings_app):
+    """Settings page should include model selection dropdowns."""
+    app, _ = settings_app
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/settings")
+        assert "custom" in resp.text.lower()
+        assert "gpt-5.4" in resp.text
+        assert "claude-sonnet-4-6" in resp.text
+        assert "deepseek-chat" in resp.text

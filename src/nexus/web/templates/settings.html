@@ -46,27 +46,42 @@
 <!-- Model Preset -->
 <div class="settings-section open">
     <div class="settings-section-header" onclick="this.parentElement.classList.toggle('open')">
-        Model Preset <span class="toggle-icon">+</span>
+        Models <span class="toggle-icon">+</span>
     </div>
     <div class="settings-section-body">
-        <form method="post" action="/settings/preset">
+        <form method="post" action="/settings/preset" id="models-form">
             <div class="form-group">
-                <label for="preset">Active Preset</label>
-                <select name="preset" id="preset" class="form-select">
-                    {% set presets = [
-                        ("free", "Free (Ollama local)"),
-                        ("cheap", "Cheap (DeepSeek ~$0.01/day)"),
-                        ("balanced", "Balanced (Gemini ~$0.05/day)"),
-                        ("quality", "Quality (Gemini Pro ~$0.15/day)"),
-                        ("openai-cheap", "OpenAI Cheap (~$0.03/day)"),
-                        ("openai-balanced", "OpenAI Balanced (~$0.10/day)"),
-                        ("anthropic", "Anthropic (~$0.10/day)"),
-                    ] %}
-                    {% for value, label in presets %}
-                    <option value="{{ value }}" {% if preset == value %}selected{% endif %}>{{ label }}</option>
+                <label for="preset">Preset</label>
+                <select name="preset" id="preset" class="form-select" onchange="toggleCustomModels(this.value)">
+                    {% for pkey, pinfo in preset_info.items() %}
+                    <option value="{{ pkey }}" {% if preset == pkey %}selected{% endif %}>{{ pinfo.label }} ({{ pinfo.cost }})</option>
                     {% endfor %}
+                    <option value="custom" {% if preset == 'custom' %}selected{% endif %}>Custom (pick your own models)</option>
                 </select>
             </div>
+
+            <div id="custom-models" style="{% if preset != 'custom' %}display:none;{% endif %}">
+                <p style="color:var(--nx-text-dim);font-size:0.82rem;margin-bottom:0.75rem;">
+                    Select a model for each pipeline stage. You can mix providers.
+                </p>
+                {% for stage_key, stage_label, stage_desc in pipeline_stages %}
+                <div class="form-group">
+                    <label for="model_{{ stage_key }}">{{ stage_label }}</label>
+                    <select name="model_{{ stage_key }}" id="model_{{ stage_key }}" class="form-select">
+                        {% set current_model = models_raw.get(stage_key, '') %}
+                        {% for provider, models in model_choices.items() %}
+                        <optgroup label="{{ provider | capitalize }}">
+                            {% for model in models %}
+                            <option value="{{ model }}" {% if current_model == model %}selected{% endif %}>{{ model }}</option>
+                            {% endfor %}
+                        </optgroup>
+                        {% endfor %}
+                    </select>
+                    <span class="form-hint">{{ stage_desc }}</span>
+                </div>
+                {% endfor %}
+            </div>
+
             <button type="submit" class="btn-primary">Save</button>
         </form>
     </div>
@@ -292,6 +307,10 @@
 </div>
 
 <script>
+// Toggle custom model selectors
+function toggleCustomModels(value) {
+    document.getElementById('custom-models').style.display = value === 'custom' ? 'block' : 'none';
+}
 // Auto-open sections and toggle accordion
 document.querySelectorAll('.settings-section').forEach(section => {
     const header = section.querySelector('.settings-section-header');

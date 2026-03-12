@@ -65,12 +65,14 @@ Only **one LLM API key** is required to get started. The setup wizard will help 
 | Preset | Provider | Cost/Day | Key Needed |
 |--------|----------|----------|------------|
 | `free` | Ollama (local) | $0 | None |
-| `cheap` | DeepSeek | ~$0.01 | `DEEPSEEK_API_KEY` |
+| `cheap` | DeepSeek V3.2 | ~$0.01 | `DEEPSEEK_API_KEY` |
 | `balanced` | Gemini Flash + Pro | ~$0.05 | `GEMINI_API_KEY` |
 | `quality` | Gemini Pro | ~$0.15 | `GEMINI_API_KEY` |
-| `openai-cheap` | GPT-4.1 Nano/Mini | ~$0.03 | `OPENAI_API_KEY` |
-| `openai-balanced` | GPT-4.1 Mini/Full | ~$0.10 | `OPENAI_API_KEY` |
-| `anthropic` | Claude Haiku/Sonnet | ~$0.10 | `ANTHROPIC_API_KEY` |
+| `openai-cheap` | GPT-4.1 Nano + 5 Mini | ~$0.03 | `OPENAI_API_KEY` |
+| `openai-balanced` | GPT-4.1 Mini + 5.4 | ~$0.10 | `OPENAI_API_KEY` |
+| `openai-quality` | GPT-5 Mini + 5.4 | ~$0.25 | `OPENAI_API_KEY` |
+| `anthropic` | Claude Haiku 4.5 / Sonnet 4.6 | ~$0.10 | `ANTHROPIC_API_KEY` |
+| `custom` | Mix and match | Varies | Any provider key |
 
 **Optional extras** (can be added later via Settings):
 - `TELEGRAM_BOT_TOKEN` — Enable Telegram delivery (get from [@BotFather](https://t.me/BotFather))
