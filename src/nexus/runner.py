@@ -49,6 +49,9 @@ async def run_all(
     store = KnowledgeStore(data_dir / "knowledge.db")
     await store.initialize()
 
+    # Attach store for persistent cost tracking + budget sync
+    await llm.set_store(store)
+
     bot = None
     scheduler = None
 

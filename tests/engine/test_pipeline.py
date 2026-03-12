@@ -5,6 +5,7 @@ from datetime import date
 from unittest.mock import AsyncMock, patch
 from nexus.config.models import NexusConfig, UserConfig, TopicConfig
 from nexus.engine.pipeline import run_pipeline, _event_cap_for_topic
+from nexus.llm.client import UsageTracker
 
 
 @pytest.fixture
@@ -25,6 +26,7 @@ def data_dir(tmp_path):
 @pytest.mark.asyncio
 async def test_pipeline_produces_briefing(config, data_dir):
     mock_llm = AsyncMock()
+    mock_llm.usage = UsageTracker()
 
     with patch("nexus.engine.pipeline.load_source_registry") as mock_registry, \
          patch("nexus.engine.pipeline.poll_all_feeds") as mock_poll, \
@@ -95,6 +97,7 @@ def test_event_cap_max_events_override():
 async def test_run_pipeline_passes_api_keys_to_audio(config, data_dir):
     """run_pipeline should forward openai and elevenlabs keys to run_audio_pipeline."""
     mock_llm = AsyncMock()
+    mock_llm.usage = UsageTracker()
 
     with patch("nexus.engine.pipeline.load_source_registry") as mock_registry, \
          patch("nexus.engine.pipeline.poll_all_feeds") as mock_poll, \

@@ -63,9 +63,10 @@ def compute_run_metrics(
     all_articles: list[ContentItem],
     all_events: list[Event],
     extracted_event_count: int,
+    llm_usage: dict | None = None,
 ) -> dict:
     """Compute all automated metrics for a pipeline run."""
-    return {
+    metrics = {
         "date": date.today().isoformat(),
         "source_diversity_index": source_diversity_index(all_articles),
         "convergence_ratio": convergence_ratio(all_events),
@@ -87,6 +88,9 @@ def compute_run_metrics(
             for s in syntheses
         },
     }
+    if llm_usage:
+        metrics["cost"] = llm_usage
+    return metrics
 
 
 def save_metrics(data_dir: Path, metrics: dict) -> Path:

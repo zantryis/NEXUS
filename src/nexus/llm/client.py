@@ -1,8 +1,10 @@
 """Provider-agnostic LLM client. Supports Gemini, Anthropic, OpenAI, DeepSeek, and Ollama."""
 
+import asyncio
 import logging
 import time
 from collections import defaultdict
+from datetime import date
 from typing import Optional
 
 import httpx
@@ -106,6 +108,7 @@ class LLMClient:
         self._budget_guard: Optional[BudgetGuard] = (
             BudgetGuard(budget_config) if budget_config else None
         )
+        self._store = None  # KnowledgeStore, set via set_store()
 
         # Lazy-init Gemini
         if api_key:
@@ -129,6 +132,16 @@ class LLMClient:
         if openai_api_key:
             from openai import AsyncOpenAI
             self._openai_client = AsyncOpenAI(api_key=openai_api_key)
+
+    async def set_store(self, store) -> None:
+        """Attach a KnowledgeStore for persistent usage logging.
+
+        Also seeds the BudgetGuard with today's existing spend from the store
+        so that budget enforcement survives process restarts.
+        """
+        self._store = store
+        if self._budget_guard:
+            await self._budget_guard.sync_from_store(store)
 
     def set_openai_oauth_token(self, token: str) -> None:
         """Hot-swap OpenAI client to use an OAuth access token."""
@@ -209,9 +222,19 @@ class LLMClient:
         self.usage.record(provider, model, config_key, in_tok, out_tok, elapsed)
 
         # Record cost to budget guard after successful call
+        cost = estimate_cost(model, in_tok, out_tok)
         if self._budget_guard:
-            cost = estimate_cost(model, in_tok, out_tok)
             self._budget_guard.record_cost(cost)
+
+        # Persist to SQLite (fire-and-forget — don't block LLM calls on DB writes)
+        if self._store:
+            try:
+                asyncio.ensure_future(self._store.add_usage_record(
+                    date.today().isoformat(), provider, model, config_key,
+                    in_tok, out_tok, cost,
+                ))
+            except Exception:
+                logger.debug("Failed to persist usage record", exc_info=True)
 
         return text
 

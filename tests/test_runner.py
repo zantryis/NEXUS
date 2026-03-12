@@ -14,7 +14,7 @@ async def test_runner_initializes_store(tmp_path):
     )
 
     with patch("nexus.runner.KnowledgeStore") as MockStore, \
-         patch("nexus.runner.LLMClient"), \
+         patch("nexus.runner.LLMClient") as MockLLM, \
          patch("nexus.runner.AsyncIOScheduler") as MockScheduler, \
          patch("nexus.runner.schedule_jobs"), \
          patch("nexus.runner.create_app") as mock_app, \
@@ -22,6 +22,10 @@ async def test_runner_initializes_store(tmp_path):
 
         mock_store = AsyncMock()
         MockStore.return_value = mock_store
+
+        mock_llm = MagicMock()
+        mock_llm.set_store = AsyncMock()
+        MockLLM.return_value = mock_llm
 
         mock_sched = MagicMock()
         MockScheduler.return_value = mock_sched

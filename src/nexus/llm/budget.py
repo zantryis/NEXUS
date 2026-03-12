@@ -73,6 +73,17 @@ class BudgetGuard:
 
         return "warning"  # cheap ops still allowed in skip_expensive mode
 
+    async def sync_from_store(self, store) -> None:
+        """Load today's accumulated spend from the persistent store.
+
+        Called on startup so budget enforcement survives process restarts.
+        """
+        today = date.today().isoformat()
+        cost = await store.get_daily_cost(today)
+        if cost > 0:
+            self._daily_spend[today] = cost
+            logger.info(f"Budget synced from store: ${cost:.4f} spent today")
+
     @property
     def should_warn(self) -> bool:
         today = date.today().isoformat()

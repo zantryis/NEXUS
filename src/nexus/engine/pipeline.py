@@ -316,6 +316,9 @@ async def run_pipeline(
     store = KnowledgeStore(data_dir / "knowledge.db")
     await store.initialize()
 
+    # Attach store for persistent cost tracking + budget sync
+    await llm.set_store(store)
+
     try:
         for topic in config.topics:
             sources = load_source_registry(data_dir, topic)
@@ -350,7 +353,8 @@ async def run_pipeline(
             topic_events = await store.get_events(slug)
             all_events.extend(topic_events)
 
-        metrics = compute_run_metrics(syntheses, all_articles, all_events, extracted_event_count)
+        metrics = compute_run_metrics(syntheses, all_articles, all_events, extracted_event_count,
+                                       llm_usage=llm.usage.cost_summary())
         metrics_path = save_metrics(data_dir, metrics)
         logger.info(f"Saved metrics: {metrics_path}")
 
@@ -450,6 +454,9 @@ async def run_backtest(
     # Initialize backtest knowledge store
     bt_store = KnowledgeStore(bt_data / "knowledge.db")
     await bt_store.initialize()
+
+    # Attach store for persistent cost tracking
+    await llm.set_store(bt_store)
 
     backtest_start = time.monotonic()
     logger.info(f"=== Backtest started (label={label}) ===")
