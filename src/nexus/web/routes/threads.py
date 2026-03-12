@@ -1,8 +1,9 @@
-"""Thread views — list and detail."""
+"""Thread views — list and tracker detail."""
 
 from fastapi import APIRouter, Request
 
 from nexus.web.app import get_store, get_templates
+from nexus.web.clustering import cluster_threads
 
 router = APIRouter(prefix="/threads")
 
@@ -15,9 +16,14 @@ async def thread_list(request: Request):
     status = request.query_params.get("status")
     topic = request.query_params.get("topic")
     threads = await store.get_all_threads(topic_slug=topic, status=status)
+    # Sort by most recently updated first
+    threads.sort(key=lambda t: t.get("updated_at", ""), reverse=True)
+
+    clusters = cluster_threads(threads)
 
     return templates.TemplateResponse(request, "thread_list.html", {
         "threads": threads,
+        "clusters": clusters,
         "filter_status": status,
         "filter_topic": topic,
     })
@@ -37,14 +43,26 @@ async def thread_detail(request: Request, slug: str):
     events = await store.get_events_for_thread(thread["id"])
     convergence = await store.get_convergence_for_thread(thread["id"])
     divergence = await store.get_divergence_for_thread(thread["id"])
+    topics = await store.get_topics_for_thread(thread["id"])
 
-    # Check for deep-dive page
+    # Build full events with sources for the tracker
+    events_with_sources = []
+    for ev in events:
+        events_with_sources.append({
+            "date": ev.date,
+            "summary": ev.summary,
+            "significance": ev.significance,
+            "sources": ev.sources,
+            "entities": ev.entities,
+        })
+
     page = await store.get_page(f"thread:{slug}")
 
     return templates.TemplateResponse(request, "thread.html", {
         "thread": thread,
-        "events": events,
+        "events": events_with_sources,
         "convergence": convergence,
         "divergence": divergence,
+        "topics": topics,
         "page": page,
     })

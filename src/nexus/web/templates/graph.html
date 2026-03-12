@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Knowledge Graph — Nexus{% endblock %}
+{% block nav_explore %}active{% endblock %}
+{% block main_class %}full-bleed{% endblock %}
+{% block content %}
+
+<div class="graph-page">
+    {# ── HUD-style top bar ── #}
+    <div class="graph-hud">
+        <div class="graph-hud-left">
+            <a href="/explore/" class="graph-hud-back">&larr; Grid</a>
+            <span class="graph-hud-title">&#9670; KNOWLEDGE GRAPH</span>
+            <span class="graph-hud-stat" id="node-count">--</span>
+            <span class="graph-hud-label">entities</span>
+            <span class="graph-hud-stat" id="link-count">--</span>
+            <span class="graph-hud-label">connections</span>
+        </div>
+        <div class="graph-hud-right">
+            <div class="graph-hud-filters">
+                <label class="graph-type-pill person-pill">
+                    <input type="checkbox" class="type-toggle" value="person" checked>
+                    <span>Person</span>
+                </label>
+                <label class="graph-type-pill org-pill">
+                    <input type="checkbox" class="type-toggle" value="org" checked>
+                    <span>Org</span>
+                </label>
+                <label class="graph-type-pill country-pill">
+                    <input type="checkbox" class="type-toggle" value="country" checked>
+                    <span>Country</span>
+                </label>
+                <label class="graph-type-pill concept-pill">
+                    <input type="checkbox" class="type-toggle" value="concept" checked>
+                    <span>Concept</span>
+                </label>
+            </div>
+            <div class="graph-hud-slider">
+                <span class="graph-hud-label">Density</span>
+                <input type="range" id="min-co-slider" min="1" max="10" value="2">
+                <span class="graph-hud-stat" id="min-co-value">2</span>
+            </div>
+        </div>
+    </div>
+
+    {# ── Full-bleed graph canvas ── #}
+    <div class="graph-canvas-wrapper">
+        <svg id="graph-svg"></svg>
+
+        {# Grid overlay for intel aesthetic #}
+        <div class="graph-grid-overlay"></div>
+
+        {# ── Side panel ── #}
+        <div id="entity-panel" class="entity-panel hidden">
+            <button class="panel-close" onclick="document.getElementById('entity-panel').classList.add('hidden')">&times;</button>
+            <div id="panel-content"></div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="/static/graph.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        initGraph({{ focus_entity_id | default('null', true) }});
+    });
+</script>
+{% endblock %}

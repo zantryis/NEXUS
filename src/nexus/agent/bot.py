@@ -2,17 +2,29 @@
 
 import asyncio
 import logging
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from nexus.config.models import NexusConfig
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.llm.client import LLMClient
 from nexus.agent.qa import answer_question
-from nexus.agent.delivery import deliver_briefing, md_to_telegram_html_light, split_message
+from nexus.agent.delivery import (
+    deliver_briefing, md_to_telegram_html_light, split_message,
+    format_breaking_digest,
+)
 from nexus.agent.feedback import build_feedback_keyboard, handle_feedback_callback
 
 logger = logging.getLogger(__name__)
+
+
+def user_today(timezone: str = "UTC") -> date:
+    """Get today's date in the user's configured timezone."""
+    try:
+        return datetime.now(ZoneInfo(timezone)).date()
+    except Exception:
+        return date.today()
 
 
 class NexusBot:
@@ -54,6 +66,7 @@ class NexusBot:
         # Register handlers
         self._application.add_handler(CommandHandler("start", self._handle_start))
         self._application.add_handler(CommandHandler("briefing", self._handle_briefing))
+        self._application.add_handler(CommandHandler("breaking", self._handle_breaking))
         self._application.add_handler(CommandHandler("status", self._handle_status))
         self._application.add_handler(CallbackQueryHandler(self._handle_callback))
         self._application.add_handler(
@@ -86,6 +99,7 @@ class NexusBot:
             "Welcome to Nexus Intelligence Briefing!\n\n"
             "Commands:\n"
             "/briefing — Get today's briefing\n"
+            "/breaking — Check for breaking news now\n"
             "/status — System status\n"
             "Or just send me a question about current events."
         )
@@ -97,12 +111,14 @@ class NexusBot:
             await update.message.reply_text("Unauthorized.")
             return
 
-        today = date.today().isoformat()
+        today = user_today(self._config.user.timezone).isoformat()
         briefing_path = self._data_dir / "artifacts" / "briefings" / f"{today}.md"
         audio_path = self._data_dir / "artifacts" / "audio" / f"{today}.mp3"
 
         if not briefing_path.exists():
-            await update.message.reply_text("No briefing available for today yet.")
+            await update.message.reply_text(
+                f"No briefing available for today ({today}) yet."
+            )
             return
 
         text = briefing_path.read_text()
@@ -125,6 +141,111 @@ class NexusBot:
             reply_markup=keyboard,
         )
 
+    async def _handle_breaking(self, update, context):
+        """Handle /breaking — on-demand breaking news check (animated single bubble)."""
+        chat_id = update.effective_chat.id
+        if not self._is_authorized(chat_id):
+            await update.message.reply_text("Unauthorized.")
+            return
+
+        # Phase 1: initial status message
+        status_msg = await update.message.reply_text(
+            "\U0001f50d Checking wire feeds\u2026"
+        )
+
+        # Animate while running
+        done = asyncio.Event()
+
+        async def _animate():
+            phases = [
+                "\U0001f4e1 Polling sources\u2026",
+                "\U0001f9e0 Scoring headlines\u2026",
+                "\U0001f4ca Filtering results\u2026",
+            ]
+            i = 0
+            while not done.is_set():
+                await asyncio.sleep(2.0)
+                if done.is_set():
+                    break
+                frame = self._SPINNER[i % len(self._SPINNER)]
+                phase = phases[min(i, len(phases) - 1)]
+                try:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=status_msg.message_id,
+                        text=f"{frame} {phase}",
+                    )
+                except Exception:
+                    pass
+                i += 1
+
+        animation_task = asyncio.create_task(_animate())
+
+        try:
+            from nexus.agent.breaking import check_breaking_news
+
+            alerts_by_topic = await check_breaking_news(
+                self._llm, self._config, self._store,
+            )
+            done.set()
+            await animation_task
+
+            if any(alerts_by_topic.values()):
+                digest_text = format_breaking_digest(alerts_by_topic)
+                chunks = split_message(digest_text)
+
+                # First chunk replaces the status message
+                try:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=status_msg.message_id,
+                        text=chunks[0],
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
+                except Exception:
+                    try:
+                        await context.bot.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=status_msg.message_id,
+                            text=chunks[0],
+                        )
+                    except Exception:
+                        pass
+
+                # Overflow chunks as new messages
+                for chunk in chunks[1:]:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=chunk,
+                            parse_mode="HTML",
+                            disable_web_page_preview=True,
+                        )
+                    except Exception:
+                        await context.bot.send_message(
+                            chat_id=chat_id, text=chunk,
+                        )
+            else:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=status_msg.message_id,
+                    text="No breaking news at this time.",
+                )
+
+        except Exception as e:
+            done.set()
+            await animation_task
+            logger.error(f"Breaking news check failed: {e}", exc_info=True)
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=status_msg.message_id,
+                    text="\u26a0\ufe0f Breaking news check failed.",
+                )
+            except Exception:
+                pass
+
     async def _handle_status(self, update, context):
         """Handle /status — system status."""
         chat_id = update.effective_chat.id
@@ -140,9 +261,9 @@ class NexusBot:
                 f"{s['thread_count']} threads (latest: {s['latest_date']})"
             )
 
-        today = date.today().isoformat()
+        today = user_today(self._config.user.timezone).isoformat()
         briefing_path = self._data_dir / "artifacts" / "briefings" / f"{today}.md"
-        lines.append(f"\nToday's briefing: {'available' if briefing_path.exists() else 'pending'}")
+        lines.append(f"\nToday's briefing ({today}): {'available' if briefing_path.exists() else 'pending'}")
 
         await update.message.reply_text(
             "\n".join(lines), parse_mode="HTML",

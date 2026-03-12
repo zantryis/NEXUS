@@ -256,33 +256,59 @@ async def deliver_breaking_alert(
         return False
 
 
-async def deliver_breaking_digest(
-    bot,
-    chat_id: int,
-    alerts: list[dict],
-) -> bool:
-    """Send aggregated breaking news digest as a single message.
+def format_breaking_digest(alerts_by_topic: dict[str, list[dict]]) -> str:
+    """Format topic-grouped breaking news alerts into HTML text.
 
-    Alerts are sorted by significance (highest first) and formatted
-    as a numbered list in one message instead of individual alerts.
+    Topics sorted by max significance (most urgent first).
+    Returns empty string if no alerts.
     """
-    if not alerts:
-        return False
+    if not alerts_by_topic:
+        return ""
 
-    try:
-        sorted_alerts = sorted(alerts, key=lambda a: a.get("significance_score", 0), reverse=True)
+    topic_order = sorted(
+        alerts_by_topic.keys(),
+        key=lambda slug: max(
+            a.get("significance_score", 0) for a in alerts_by_topic[slug]
+        ),
+        reverse=True,
+    )
 
-        lines = ["\U0001f6a8 <b>BREAKING NEWS DIGEST</b>\n"]
-        for i, alert in enumerate(sorted_alerts, 1):
+    lines = ["\U0001f6a8 <b>BREAKING NEWS DIGEST</b>\n"]
+
+    for slug in topic_order:
+        alerts = sorted(
+            alerts_by_topic[slug],
+            key=lambda a: a.get("significance_score", 0),
+            reverse=True,
+        )
+        emoji = _get_topic_emoji(slug)
+        topic_name = slug.replace("-", " ").upper()
+        lines.append(f"\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501")
+        lines.append(f"{emoji}  <b>{topic_name}</b>\n")
+
+        for i, alert in enumerate(alerts, 1):
             sig = alert.get("significance_score", "?")
             headline = html.escape(alert.get("headline", ""))
             url = alert.get("source_url", "")
             lines.append(f"<b>{i}.</b> [{sig}/10] {headline}")
             if url:
-                lines.append(f'   \U0001f4ce <a href="{url}">Source</a>')
-            lines.append("")
+                lines.append(f'   \U0001f517 <a href="{url}">Source</a>')
+        lines.append("")
 
-        text = "\n".join(lines).strip()
+    return "\n".join(lines).strip()
+
+
+async def deliver_breaking_digest(
+    bot,
+    chat_id: int,
+    alerts_by_topic: dict[str, list[dict]],
+) -> bool:
+    """Send topic-grouped breaking news digest as a single consolidated message."""
+    text = format_breaking_digest(alerts_by_topic)
+    if not text:
+        return False
+
+    try:
         chunks = split_message(text)
 
         for chunk in chunks:
@@ -296,7 +322,8 @@ async def deliver_breaking_digest(
             except Exception:
                 await bot.send_message(chat_id=chat_id, text=chunk)
 
-        logger.info(f"Breaking digest delivered: {len(alerts)} alerts to chat {chat_id}")
+        total = sum(len(a) for a in alerts_by_topic.values())
+        logger.info(f"Breaking digest delivered: {total} alerts across {len(alerts_by_topic)} topics to chat {chat_id}")
         return True
 
     except Exception as e:

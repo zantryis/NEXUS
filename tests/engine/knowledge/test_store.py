@@ -736,3 +736,67 @@ async def test_get_related_entities(seeded_store):
     # co_occurrence_count should be populated
     iran_rel = next(r for r in related if r["canonical_name"] == "Iran")
     assert iran_rel["co_occurrence_count"] >= 2  # Both iran events mention both US and Iran
+
+
+# ── find_event_id ────────────────────────────────────────────────
+
+async def test_find_event_id(seeded_store):
+    s = seeded_store["store"]
+    # Match by summary + date + topic_slug
+    eid = await s.find_event_id("Iran sanctions announced", "2026-03-08", "iran-us")
+    assert eid is not None
+    assert eid == seeded_store["iran_event_ids"][0]
+
+
+async def test_find_event_id_no_match(seeded_store):
+    s = seeded_store["store"]
+    # Wrong summary
+    assert await s.find_event_id("Nonexistent event", "2026-03-08", "iran-us") is None
+    # Wrong topic
+    assert await s.find_event_id("Iran sanctions announced", "2026-03-08", "ai-ml") is None
+    # Wrong date
+    assert await s.find_event_id("Iran sanctions announced", "2099-01-01", "iran-us") is None
+
+
+# ── get_threads_for_event ────────────────────────────────────────
+
+async def test_get_threads_for_event(seeded_store):
+    s = seeded_store["store"]
+    eid = seeded_store["iran_event_ids"][0]
+    threads = await s.get_threads_for_event(eid)
+    assert len(threads) >= 1
+    assert any(t["slug"] == "sanctions-escalation" for t in threads)
+
+
+async def test_get_threads_for_event_unlinked(seeded_store):
+    s = seeded_store["store"]
+    # Event that exists but isn't linked to any thread
+    # (ai events are linked, so create a fresh event)
+    e = Event(date="2026-03-10", summary="Orphan event", significance=3,
+              entities=["Test"], sources=[])
+    ids = await s.add_events([e], "test-topic")
+    threads = await s.get_threads_for_event(ids[0])
+    assert threads == []
+
+
+# ── get_topics_for_thread ────────────────────────────────────────
+
+async def test_get_topics_for_thread(seeded_store):
+    s = seeded_store["store"]
+    tid = seeded_store["sanctions_thread_id"]
+    topics = await s.get_topics_for_thread(tid)
+    assert "iran-us" in topics
+
+
+# ── get_related_events ───────────────────────────────────────────
+
+async def test_get_related_events(seeded_store):
+    s = seeded_store["store"]
+    eid = seeded_store["iran_event_ids"][0]
+    # The other iran event shares entities (US, Iran)
+    related = await s.get_related_events(eid, limit=5)
+    assert len(related) >= 1
+    related_ids = {r["id"] for r in related}
+    assert seeded_store["iran_event_ids"][1] in related_ids
+    # Should NOT include the event itself
+    assert eid not in related_ids

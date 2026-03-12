@@ -1,29 +1,44 @@
 {% extends "base.html" %}
-{% block title %}Event {{ event_id }} — Nexus{% endblock %}
+{% block title %}Event — Nexus{% endblock %}
 {% block content %}
-<h2>{{ event.summary }}</h2>
-<p>{{ event.date }} &mdash; Significance: {{ event.significance }}</p>
+
+<div class="page-header">
+    <h2>{{ event.summary }}</h2>
+    <div class="page-subtitle">
+        {{ event.date }} &middot; Significance:
+        <span class="sig-indicator sig-{{ 'high' if event.significance >= 7 else ('med' if event.significance >= 4 else 'low') }}" style="width:22px;height:22px;font-size:0.65rem;vertical-align:middle;">
+            {{ event.significance }}
+        </span>
+    </div>
+</div>
 
 {% if event.entities %}
-<p>Entities:
-    {% for e in event.entities %}
-    <a href="/entities/?q={{ e }}">{{ e }}</a>{% if not loop.last %}, {% endif %}
-    {% endfor %}
-</p>
+<div class="card-section">
+    <div class="card-section-title">Entities</div>
+    <div style="display:flex;flex-wrap:wrap;gap:0.35rem;">
+        {% for e in event.entities %}
+        <a href="/explore/entities/?q={{ e }}" class="entity-tag">{{ e }}</a>
+        {% endfor %}
+    </div>
+</div>
 {% endif %}
 
 {% if event.sources %}
-<section>
-    <h3>Sources</h3>
+<div class="card-section">
+    <div class="card-section-title">Sources</div>
     {% for s in event.sources %}
-    <div class="source-item">
-        <span class="badge badge-{{ s.affiliation }}">{{ s.affiliation }}/{{ s.country }}</span>
-        <strong>{{ s.outlet }}</strong>
+    <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid var(--nx-border);">
+        <span class="badge badge-{{ s.affiliation }}">{{ s.affiliation }}</span>
+        <strong style="font-size:0.9rem;">{{ s.outlet }}</strong>
+        <span style="font-size:0.78rem;color:var(--nx-text-dim);">{{ s.country }}</span>
         {% if s.url %}
-        <a href="{{ s.url }}" target="_blank" rel="noopener">article</a>
+        <a href="{{ s.url }}" target="_blank" rel="noopener" class="source-link" style="margin-left:auto;">
+            Read article <span class="ext-icon">&#8599;</span>
+        </a>
         {% endif %}
     </div>
     {% endfor %}
-</section>
+</div>
 {% endif %}
+
 {% endblock %}

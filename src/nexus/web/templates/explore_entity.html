@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}{{ entity.canonical_name }} — Nexus{% endblock %}
+{% block nav_explore %}active{% endblock %}
+{% block content %}
+
+<div class="entity-header">
+    <div style="display:flex;align-items:center;gap:1rem;">
+        {% if entity.thumbnail_url %}
+        <img src="{{ entity.thumbnail_url }}" alt="" class="entity-avatar-lg">
+        {% else %}
+        <span class="entity-initial entity-initial-lg {{ entity.entity_type }}">{{ entity.canonical_name[0] | upper }}</span>
+        {% endif %}
+        <div>
+            <h2>{{ entity.canonical_name }}</h2>
+            <span class="explore-card-type {{ entity.entity_type }}" style="font-size: 0.8rem;">{{ entity.entity_type }}</span>
+            {% if entity.aliases %}
+            <div class="entity-aliases">
+                Also known as: {{ entity.aliases | join(', ') }}
+            </div>
+            {% endif %}
+            {% if entity.wikipedia_url %}
+            <div style="margin-top: 0.3rem;">
+                <a href="{{ entity.wikipedia_url }}" target="_blank" rel="noopener" class="source-link" style="font-size:0.78rem;">
+                    Wikipedia <span class="ext-icon">&#8599;</span>
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <div style="margin-top: 0.5rem;">
+        <a href="/explore/graph?focus={{ entity.id }}" class="section-link">View in full graph &rarr;</a>
+    </div>
+</div>
+
+<div class="entity-layout">
+    <div>
+        {# SVG Network #}
+        {% if graph_svg %}
+        <div class="graph-container">
+            {{ graph_svg | safe }}
+        </div>
+        {% endif %}
+
+        {# Events #}
+        {% if events %}
+        <div class="card-section">
+            <div class="card-section-title">Events &middot; {{ events | length }}</div>
+        </div>
+        {% for ev in events %}
+        <div class="event-card">
+            <div class="event-card-date">{{ ev.date }}</div>
+            <div class="event-card-summary">{{ ev.summary }}</div>
+            <div class="event-card-footer">
+                <span class="sig-indicator sig-{{ 'high' if ev.significance >= 7 else ('med' if ev.significance >= 4 else 'low') }}" style="width:20px;height:20px;font-size:0.6rem;">
+                    {{ ev.significance }}
+                </span>
+                {% for src in ev.sources %}
+                <a href="{{ src.url }}" target="_blank" rel="noopener" class="source-link">
+                    {{ src.outlet }} <span class="ext-icon">&#8599;</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+
+    <div class="sidebar">
+        {# Threads #}
+        {% if threads %}
+        <div class="sidebar-section">
+            <div class="sidebar-title">Threads</div>
+            {% for t in threads %}
+            <div class="sidebar-thread">
+                <a href="/threads/{{ t.slug }}">{{ t.headline }}</a>
+                <span class="sig-indicator sig-{{ 'high' if t.significance >= 7 else ('med' if t.significance >= 4 else 'low') }}" style="width:20px;height:20px;font-size:0.6rem;">
+                    {{ t.significance }}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# Related Entities #}
+        {% if related %}
+        <div class="sidebar-section">
+            <div class="sidebar-title">Related Entities</div>
+            {% for r in related %}
+            <div class="sidebar-thread">
+                <a href="/explore/entities/{{ r.id }}">{{ r.canonical_name }}</a>
+                <span style="font-size: 0.72rem; color: var(--nx-text-dim);">{{ r.co_occurrence_count }}x</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# Profile Page #}
+        {% if page %}
+        <div class="sidebar-section">
+            <div class="sidebar-title">Analysis</div>
+            <a href="/pages/entity:{{ entity.id }}" class="section-link">Read entity profile &rarr;</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

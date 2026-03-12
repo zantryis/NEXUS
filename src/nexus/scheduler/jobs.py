@@ -1,14 +1,23 @@
 """Scheduled jobs — daily pipeline and breaking news polling."""
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from nexus.config.models import NexusConfig
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
+
+
+def _user_today(config: NexusConfig) -> date:
+    """Get today's date in the user's configured timezone."""
+    try:
+        return datetime.now(ZoneInfo(config.user.timezone)).date()
+    except Exception:
+        return date.today()
 
 
 async def daily_pipeline_job(
@@ -34,7 +43,7 @@ async def daily_pipeline_job(
             from nexus.agent.delivery import deliver_briefing
             from nexus.agent.feedback import build_feedback_keyboard
 
-            today = date.today().isoformat()
+            today = _user_today(config).isoformat()
             text = briefing_path.read_text()
             audio_path = data_dir / "artifacts" / "audio" / f"{today}.mp3"
             audio = audio_path if audio_path.exists() else None
@@ -78,16 +87,17 @@ async def breaking_news_job(
 
     logger.info("Checking for breaking news...")
     try:
-        alerts = await check_breaking_news(llm, config, store)
+        alerts_by_topic = await check_breaking_news(llm, config, store)
 
-        if alerts and bot and config.telegram.chat_id:
+        if any(alerts_by_topic.values()) and bot and config.telegram.chat_id:
             from nexus.agent.delivery import deliver_breaking_digest
             await deliver_breaking_digest(
-                bot._application.bot, config.telegram.chat_id, alerts,
+                bot._application.bot, config.telegram.chat_id, alerts_by_topic,
             )
 
-        if alerts:
-            logger.info(f"Breaking news: {len(alerts)} alerts delivered as digest")
+        total = sum(len(a) for a in alerts_by_topic.values())
+        if total:
+            logger.info(f"Breaking news: {total} alerts across {len(alerts_by_topic)} topics")
         else:
             logger.info("No breaking news")
 

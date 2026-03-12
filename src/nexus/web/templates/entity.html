@@ -1,45 +1,73 @@
 {% extends "base.html" %}
 {% block title %}{{ entity.canonical_name }} — Nexus{% endblock %}
 {% block content %}
-<h2>{{ entity.canonical_name }}</h2>
-<p>Type: {{ entity.entity_type }}
-    {% if entity.aliases %} &mdash; Aliases: {{ entity.aliases | join(', ') }}{% endif %}
-</p>
 
-{% if events %}
-<section>
-    <h3>Events ({{ events | length }})</h3>
-    {% for e in events %}
-    <div class="event-row">
-        <small>{{ e.date }}</small>
-        {{ e.summary }}
+{# Redirect to explore entity detail #}
+<div class="page-header">
+    <h2>{{ entity.canonical_name }}</h2>
+    <div class="page-subtitle">
+        <span class="explore-card-type {{ entity.entity_type }}">{{ entity.entity_type }}</span>
+        {% if entity.aliases %} &middot; Also: {{ entity.aliases | join(', ') }}{% endif %}
     </div>
-    {% endfor %}
-</section>
-{% endif %}
+    <p style="margin-top: 0.5rem;"><a href="/explore/entities/{{ entity.id }}">View in Knowledge Graph Explorer &rarr;</a></p>
+</div>
 
-{% if threads %}
-<section>
-    <h3>Threads</h3>
-    {% for t in threads %}
-    <article class="thread-card">
-        <a href="/threads/{{ t.slug }}">{{ t.headline }}</a>
-        <small><span class="badge badge-{{ t.status }}">{{ t.status }}</span></small>
-    </article>
-    {% endfor %}
-</section>
-{% endif %}
+<div class="entity-layout">
+    <div>
+        {% if events %}
+        <div class="card-section">
+            <div class="card-section-title">Events &middot; {{ events | length }}</div>
+        </div>
+        {% for ev in events %}
+        <div class="event-card">
+            <div class="event-card-date">{{ ev.date }}</div>
+            <div class="event-card-summary">{{ ev.summary }}</div>
+            <div class="event-card-footer">
+                <span class="sig-indicator sig-{{ 'high' if ev.significance >= 7 else ('med' if ev.significance >= 4 else 'low') }}" style="width:20px;height:20px;font-size:0.6rem;">
+                    {{ ev.significance }}
+                </span>
+                {% for s in ev.sources %}
+                <a href="{{ s.url }}" target="_blank" rel="noopener" class="source-link">
+                    {{ s.outlet }} <span class="ext-icon">&#8599;</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
 
-{% if related %}
-<section>
-    <h3>Related Entities</h3>
-    {% for r in related %}
-    <a href="/entities/{{ r.id }}">{{ r.canonical_name }}</a> ({{ r.co_occurrence_count }}){% if not loop.last %}, {% endif %}
-    {% endfor %}
-</section>
-{% endif %}
+    <div class="sidebar">
+        {% if threads %}
+        <div class="sidebar-section">
+            <div class="sidebar-title">Threads</div>
+            {% for t in threads %}
+            <div class="sidebar-thread">
+                <a href="/threads/{{ t.slug }}">{{ t.headline }}</a>
+                <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
 
-{% if page %}
-<p><a href="/pages/entity:{{ entity.id }}">Profile</a></p>
-{% endif %}
+        {% if related %}
+        <div class="sidebar-section">
+            <div class="sidebar-title">Related Entities</div>
+            {% for r in related %}
+            <div class="sidebar-thread">
+                <a href="/explore/entities/{{ r.id }}">{{ r.canonical_name }}</a>
+                <span style="font-size: 0.72rem; color: var(--nx-text-dim);">{{ r.co_occurrence_count }}x</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if page %}
+        <div class="sidebar-section">
+            <a href="/pages/entity:{{ entity.id }}" class="section-link">Read profile &rarr;</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
 {% endblock %}

@@ -1,46 +1,79 @@
 {% extends "base.html" %}
-{% block title %}{{ slug }} — Nexus{% endblock %}
+{% block title %}{{ slug | replace('-', ' ') | title }} — Nexus{% endblock %}
 {% block content %}
-<h2>{{ slug }}</h2>
 
-{% if backstory %}
-<p><a href="/pages/backstory:{{ slug }}">Backstory</a></p>
-{% endif %}
-
-{% if active_threads %}
-<section>
-    <h3>Active Threads</h3>
-    {% for t in active_threads %}
-    <article class="thread-card">
-        <a href="/threads/{{ t.slug }}">{{ t.headline }}</a>
-        <small>
-            <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
-            sig: {{ t.significance }}
-        </small>
-    </article>
-    {% endfor %}
-</section>
-{% endif %}
-
-{% if recent_events %}
-<section>
-    <h3>Recent Events (7 days)</h3>
-    {% for e in recent_events %}
-    <div class="event-row">
-        <small>{{ e.date }}</small>
-        {{ e.summary }}
-        <small class="sig">sig: {{ e.significance }}</small>
+<div class="page-header">
+    <h2>{{ slug | replace('-', ' ') | title }}</h2>
+    <div class="page-subtitle">
+        {% if backstory %}
+        <a href="/pages/backstory:{{ slug }}">Read backstory &rarr;</a> &middot;
+        {% endif %}
+        {% if filter_stats and filter_stats.get('total', 0) > 0 %}
+        <a href="/filters/{{ slug }}/{{ today }}">Filter log</a>:
+        {{ filter_stats.get('accepted', 0) }} accepted /
+        {{ filter_stats.total - filter_stats.get('accepted', 0) }} rejected
+        {% endif %}
     </div>
-    {% endfor %}
-</section>
-{% endif %}
+</div>
 
-{% if filter_stats and filter_stats.get('total', 0) > 0 %}
-<p><a href="/filters/{{ slug }}/{{ today }}">Filter log</a>:
-    {{ filter_stats.get('accepted', 0) }} accepted,
-    {{ filter_stats.total - filter_stats.get('accepted', 0) }} rejected
-</p>
-{% endif %}
+<div class="entity-layout">
+    <div>
+        {# Active Threads #}
+        {% if active_threads %}
+        <div class="card-section">
+            <div class="card-section-title">Active Threads</div>
+        </div>
+        <div class="thread-list">
+            {% for t in active_threads %}
+            <a href="/threads/{{ t.slug }}" class="thread-card">
+                <div class="thread-card-header">
+                    <span class="thread-headline">{{ t.headline }}</span>
+                    <span class="sig-indicator sig-{{ 'high' if t.significance >= 7 else ('med' if t.significance >= 4 else 'low') }}">
+                        {{ t.significance }}
+                    </span>
+                </div>
+                <div class="thread-card-meta">
+                    <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
+                    {% if t.key_entities %}
+                    {% for e in t.key_entities[:3] %}
+                    <span class="entity-tag">{{ e }}</span>
+                    {% endfor %}
+                    {% endif %}
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p style="color: var(--nx-text-dim);">No active threads yet.</p>
+        {% endif %}
 
-<p><a href="/entities/?topic={{ slug }}">View entities</a></p>
+        {# Recent Events #}
+        {% if recent_events %}
+        <div class="card-section" style="margin-top: 2rem;">
+            <div class="card-section-title">Recent Events (7 days)</div>
+        </div>
+        {% for e in recent_events %}
+        <div class="event-card">
+            <div class="event-card-date">{{ e.date }}</div>
+            <div class="event-card-summary">{{ e.summary }}</div>
+            <div class="event-card-footer">
+                <span class="sig-indicator sig-{{ 'high' if e.significance >= 7 else ('med' if e.significance >= 4 else 'low') }}" style="width:20px;height:20px;font-size:0.6rem;">
+                    {{ e.significance }}
+                </span>
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+
+    <div class="sidebar">
+        <div class="sidebar-section">
+            <div class="sidebar-title">Quick Links</div>
+            <div class="sidebar-thread"><a href="/events/?topic={{ slug }}">All events</a></div>
+            <div class="sidebar-thread"><a href="/entities/?topic={{ slug }}">All entities</a></div>
+            <div class="sidebar-thread"><a href="/sources/?topic={{ slug }}">Source stats</a></div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}

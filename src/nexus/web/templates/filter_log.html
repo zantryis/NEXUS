@@ -1,24 +1,37 @@
 {% extends "base.html" %}
 {% block title %}Filter Log — {{ topic_slug }} {{ run_date }}{% endblock %}
 {% block content %}
-<h2>Filter Log: {{ topic_slug }} ({{ run_date }})</h2>
+
+<div class="page-header">
+    <h2>Filter Log: {{ topic_slug | replace('-', ' ') | title }}</h2>
+    <div class="page-subtitle">{{ run_date }}</div>
+</div>
 
 {% if stats.get('total', 0) > 0 %}
-<p>
-    {{ stats.total }} articles polled &rarr;
-    <strong>{{ stats.get('accepted', 0) }} accepted</strong>,
-    {{ stats.total - stats.get('accepted', 0) }} rejected
-</p>
+<div class="card" style="margin-bottom: 1.5rem; display:flex; gap:2rem; padding:1rem 1.25rem;">
+    <div>
+        <span style="font-size:1.5rem;font-weight:700;color:var(--nx-text);">{{ stats.total }}</span>
+        <span style="font-size:0.8rem;color:var(--nx-text-dim);margin-left:0.3rem;">articles polled</span>
+    </div>
+    <div>
+        <span style="font-size:1.5rem;font-weight:700;color:var(--nx-green);">{{ stats.get('accepted', 0) }}</span>
+        <span style="font-size:0.8rem;color:var(--nx-text-dim);margin-left:0.3rem;">accepted</span>
+    </div>
+    <div>
+        <span style="font-size:1.5rem;font-weight:700;color:var(--nx-red);">{{ stats.total - stats.get('accepted', 0) }}</span>
+        <span style="font-size:0.8rem;color:var(--nx-text-dim);margin-left:0.3rem;">rejected</span>
+    </div>
+</div>
 {% endif %}
 
 {% if log %}
-<table>
+<table class="data-table">
     <thead>
         <tr>
             <th>Title</th>
             <th>Source</th>
-            <th>Relevance</th>
-            <th>Significance</th>
+            <th class="num">Relevance</th>
+            <th class="num">Significance</th>
             <th>Outcome</th>
         </tr>
     </thead>
@@ -31,8 +44,8 @@
                     {{ entry.source_id }}/{{ entry.source_country }}
                 </span>
             </td>
-            <td>{{ entry.relevance_score if entry.relevance_score is not none else '-' }}</td>
-            <td>{{ entry.significance_score if entry.significance_score is not none else '-' }}</td>
+            <td class="num">{{ entry.relevance_score if entry.relevance_score is not none else '-' }}</td>
+            <td class="num">{{ entry.significance_score if entry.significance_score is not none else '-' }}</td>
             <td><span class="badge badge-{{ 'accepted' if entry.outcome == 'accepted' else 'rejected' }}">
                 {{ entry.outcome }}
             </span></td>
@@ -41,6 +54,7 @@
     </tbody>
 </table>
 {% else %}
-<p>No filter log for this date.</p>
+<div class="empty-state"><p>No filter log for this date.</p></div>
 {% endif %}
+
 {% endblock %}

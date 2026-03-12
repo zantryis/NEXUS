@@ -50,15 +50,22 @@ audio:
   voice_host_a: "Kore"                        # Host A voice name
   voice_host_b: "Puck"                        # Host B voice name
 
-# Breaking news alerts
+# Breaking news alerts — topic-scoped, scored against your topics
 breaking_news:
   enabled: true
   poll_interval_hours: 3
   threshold: 7                    # 1-10, only alert above this
-  # wire_feeds:                   # Custom wire feed sources (optional)
+  default_feeds: true             # Include Reuters, NYT, BBC, Reddit defaults
+  # wire_feeds:                   # Additional custom wire feeds (merged with defaults)
+  #   - type: reddit
+  #     subreddit: "UkrainianConflict"
+  #     id: reddit-ukraine
+  #   - type: telegram_channel
+  #     channel: "@bbcbreaking"
+  #     id: tg-bbc-breaking
   #   - type: rss
-  #     url: "https://feeds.reuters.com/reuters/topNews"
-  #     id: reuters-wire
+  #     url: "https://feeds.bbci.co.uk/news/technology/rss.xml"
+  #     id: bbc-tech
 
 # Telegram delivery
 telegram:

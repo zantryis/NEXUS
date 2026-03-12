@@ -1,67 +1,122 @@
 {% extends "base.html" %}
 {% block title %}{{ thread.headline }} — Nexus{% endblock %}
+{% block nav_threads %}active{% endblock %}
 {% block content %}
-<h2>{{ thread.headline }}</h2>
-<p>
-    <span class="badge badge-{{ thread.status }}">{{ thread.status }}</span>
-    Significance: {{ thread.significance }}
-</p>
 
-{% if thread.key_entities %}
-<p>Entities:
-    {% for e in thread.key_entities %}
-    <a href="/entities/?q={{ e }}">{{ e }}</a>{% if not loop.last %}, {% endif %}
-    {% endfor %}
-</p>
-{% endif %}
-
-{% if events %}
-<section>
-    <h3>Events</h3>
-    {% for e in events %}
-    <div class="event-row">
-        <small>{{ e.date }}</small>
-        {{ e.summary }}
-        <small class="sig">sig: {{ e.significance }}</small>
-    </div>
-    {% endfor %}
-</section>
-{% endif %}
-
-{% if convergence %}
-<section>
-    <h3>Convergence</h3>
-    {% for c in convergence %}
-    <div class="convergence-item">
-        {{ c.fact_text }}
-        {% if c.confirmed_by %}
-        <small>Confirmed by: {{ c.confirmed_by | join(', ') }}</small>
+{# ── Hero ── #}
+<div class="tracker-hero">
+    <h2>{{ thread.headline }}</h2>
+    <div class="tracker-meta">
+        <span class="status-dot {{ thread.status }}"></span>
+        <span class="badge badge-{{ thread.status }}">{{ thread.status }}</span>
+        <span class="sig-indicator sig-{{ 'high' if thread.significance >= 7 else ('med' if thread.significance >= 4 else 'low') }}">
+            {{ thread.significance }}
+        </span>
+        {% if topics is defined %}
+        {% for t in topics %}
+        <a href="/topics/{{ t }}" class="badge" style="background: var(--nx-accent-soft); color: var(--nx-accent);">{{ t | replace('-', ' ') }}</a>
+        {% endfor %}
         {% endif %}
     </div>
-    {% endfor %}
-</section>
+    {% if thread.key_entities %}
+    <div class="tracker-entities">
+        {% for e in thread.key_entities %}
+        <a href="/explore/entities/?q={{ e }}" class="entity-tag">{{ e }}</a>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% if page %}
+    <div style="margin-top: 0.75rem;">
+        <a href="/pages/thread:{{ thread.slug }}" class="section-link">Read deep dive analysis &rarr;</a>
+    </div>
+    {% endif %}
+</div>
+
+{# ── Convergence / Divergence ── #}
+{% if convergence or divergence %}
+<div class="analysis-panel">
+    {% if convergence %}
+    <div class="analysis-card convergence">
+        <div class="analysis-card-header">What Sources Agree On</div>
+        <div class="analysis-card-body">
+            {% for c in convergence %}
+            <div class="analysis-item">
+                <div class="analysis-fact">{{ c.fact_text }}</div>
+                <div class="analysis-sources">
+                    {% for src in c.confirmed_by %}
+                    <span class="source-badge">{{ src }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if divergence %}
+    <div class="analysis-card divergence">
+        <div class="analysis-card-header">Where They Disagree</div>
+        <div class="analysis-card-body">
+            {% for d in divergence %}
+            <div class="analysis-item">
+                <div class="analysis-fact">{{ d.shared_event }}</div>
+                <div class="divergence-vs">
+                    <div class="divergence-side">
+                        <div class="divergence-source">{{ d.source_a }}</div>
+                        <div class="divergence-framing">{{ d.framing_a }}</div>
+                    </div>
+                    <div class="divergence-side">
+                        <div class="divergence-source">{{ d.source_b }}</div>
+                        <div class="divergence-framing">{{ d.framing_b }}</div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
 {% endif %}
 
-{% if divergence %}
-<section>
-    <h3>Divergence</h3>
-    {% for d in divergence %}
-    <div class="divergence-item">
-        <strong>{{ d.shared_event }}</strong>
-        <div class="framing">
-            <div class="framing-a">
-                <small>{{ d.source_a }}:</small> {{ d.framing_a }}
-            </div>
-            <div class="framing-b">
-                <small>{{ d.source_b }}:</small> {{ d.framing_b }}
-            </div>
+{# ── Event Timeline ── #}
+{% if events %}
+<div class="card-section">
+    <div class="card-section-title">Event Timeline &middot; {{ events | length }} events</div>
+</div>
+
+<div class="tracker-timeline">
+    {% set ns = namespace(last_date='') %}
+    {% for ev in events | reverse %}
+    {% set ev_date = ev.date if ev.date is string else ev.date.isoformat() %}
+    {% if ev_date != ns.last_date %}
+    <div class="timeline-date-marker">{{ ev_date }}</div>
+    {% set ns.last_date = ev_date %}
+    {% endif %}
+
+    <div class="tracker-event {{ 'major' if ev.significance >= 8 }}">
+        <div class="tracker-event-dot"></div>
+        <div class="tracker-event-summary">{{ ev.summary }}</div>
+        <div class="tracker-event-footer">
+            <span class="sig-indicator sig-{{ 'high' if ev.significance >= 7 else ('med' if ev.significance >= 4 else 'low') }}" style="width:22px;height:22px;font-size:0.65rem;">
+                {{ ev.significance }}
+            </span>
+            {% for src in ev.sources %}
+            <a href="{{ src.url }}" target="_blank" rel="noopener" class="source-link">
+                {{ src.outlet }}
+                <span class="ext-icon">&#8599;</span>
+            </a>
+            {% endfor %}
+            {% for e in ev.entities[:4] %}
+            <a href="/explore/entities/?q={{ e }}" class="entity-tag">{{ e }}</a>
+            {% endfor %}
         </div>
     </div>
     {% endfor %}
-</section>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>No events linked to this thread yet.</p>
+</div>
 {% endif %}
 
-{% if page %}
-<p><a href="/pages/thread:{{ thread.slug }}">Deep dive</a></p>
-{% endif %}
 {% endblock %}

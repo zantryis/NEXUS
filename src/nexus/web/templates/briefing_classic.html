@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Nexus &mdash; Briefing {{ briefing_date.isoformat() }}{% endblock %}
+{% block nav_briefing %}active{% endblock %}
+{% block content %}
+
+<div class="briefing-header">
+    <div class="briefing-header-top">
+        <div class="briefing-header-left">
+            <h2>&#9670; Classic Briefing</h2>
+            <div class="briefing-date">{{ briefing_date.strftime('%B %d, %Y') }}</div>
+            <div class="briefing-nav">
+                {% if has_prev %}
+                <a href="/briefings/{{ prev_date.isoformat() }}">&larr; {{ prev_date.strftime('%b %d') }}</a>
+                {% endif %}
+                {% if briefing_date != today %}
+                <a href="/">Today (structured)</a>
+                {% endif %}
+                {% if has_next is defined and has_next %}
+                <a href="/briefings/{{ next_date.isoformat() }}">{{ next_date.strftime('%b %d') }} &rarr;</a>
+                {% endif %}
+            </div>
+        </div>
+        {% if audio.available %}
+        <div class="audio-player-card">
+            <div class="audio-player-header">
+                <span class="audio-player-icon">&#127911;</span>
+                <span class="audio-player-title">Daily Podcast</span>
+                {% if audio.languages | length > 1 %}
+                <select class="audio-lang-select" onchange="switchAudioLang(this)">
+                    {% for lang in audio.languages %}
+                    <option value="/audio/{{ lang.file }}">{{ lang.label }}</option>
+                    {% endfor %}
+                </select>
+                {% endif %}
+            </div>
+            <audio id="briefing-audio" controls preload="none">
+                <source src="/audio/{{ audio.languages[0].file }}" type="audio/mpeg">
+            </audio>
+            <div class="audio-player-actions">
+                <a href="/audio/{{ audio.languages[0].file }}" download id="audio-download" class="audio-download-btn">
+                    &#11015; Download MP3
+                </a>
+                <a href="/feed.xml" class="audio-rss-btn" title="Subscribe via podcast app">
+                    &#128246; RSS Feed
+                </a>
+            </div>
+        </div>
+        <script>
+        function switchAudioLang(sel) {
+            const audio = document.getElementById('briefing-audio');
+            const dl = document.getElementById('audio-download');
+            audio.src = sel.value;
+            audio.load();
+            dl.href = sel.value;
+        }
+        </script>
+        {% endif %}
+    </div>
+</div>
+
+{% if briefing_html %}
+<div class="briefing-layout">
+    <div class="briefing-main">
+        <div class="briefing-content">
+            {{ briefing_html | safe }}
+        </div>
+        <div class="briefing-footer">
+            {{ total_events }} events tracked &middot; {{ total_sources }} sources
+        </div>
+    </div>
+
+    <div class="sidebar">
+        {% if active_threads %}
+        <div class="sidebar-section">
+            <div class="sidebar-title">Active Threads</div>
+            {% for t in active_threads %}
+            <div class="sidebar-thread">
+                <a href="/threads/{{ t.slug }}">{{ t.headline }}</a>
+                <span class="sig-indicator sig-{{ 'high' if t.significance >= 7 else ('med' if t.significance >= 4 else 'low') }}">
+                    {{ t.significance }}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if topic_stats %}
+        <div class="sidebar-section">
+            <div class="sidebar-title">Topics</div>
+            {% for ts in topic_stats %}
+            <a href="/topics/{{ ts.topic_slug }}" class="sidebar-topic">
+                <span>{{ topic_emoji(ts.topic_slug) | safe }} {{ ts.topic_slug | replace('-', ' ') | title }}</span>
+                <span class="topic-count">{{ ts.event_count }} events</span>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="sidebar-section">
+            <div class="sidebar-title">System</div>
+            <div class="sidebar-metric">
+                <span class="sidebar-metric-label">Today's cost</span>
+                <span class="sidebar-metric-value">${{ "%.2f"|format(today_cost) }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>No briefing found for this date.</p>
+    <p><a href="/">Back to today</a></p>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -32,6 +32,10 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     templates = Jinja2Templates(directory=web_dir / "templates")
     app.state.templates = templates
 
+    # Register custom Jinja2 filters
+    from nexus.web.filters import timeago
+    templates.env.filters["timeago"] = timeago
+
     # Register routes
     from nexus.web.routes.dashboard import router as dashboard_router
     from nexus.web.routes.topics import router as topics_router
@@ -44,6 +48,8 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     from nexus.web.routes.podcast import router as podcast_router
     from nexus.web.routes.cost import router as cost_router
     from nexus.web.routes.settings import router as settings_router
+    from nexus.web.routes.explore import router as explore_router
+    from nexus.web.routes.graph import router as graph_router
 
     app.include_router(dashboard_router)
     app.include_router(topics_router)
@@ -56,6 +62,8 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app.include_router(podcast_router)
     app.include_router(cost_router)
     app.include_router(settings_router)
+    app.include_router(explore_router)
+    app.include_router(graph_router)
 
     return app
 

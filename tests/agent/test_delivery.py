@@ -8,7 +8,7 @@ from pathlib import Path
 from nexus.agent.delivery import (
     split_message, _md_to_telegram_html, _get_topic_emoji,
     deliver_briefing, deliver_breaking_alert, deliver_breaking_digest,
-    md_to_telegram_html_light,
+    format_breaking_digest, md_to_telegram_html_light,
     MAX_MESSAGE_LENGTH,
 )
 
@@ -205,32 +205,40 @@ def test_light_html_no_newsletter_header():
 
 async def test_digest_empty():
     bot = AsyncMock()
-    result = await deliver_breaking_digest(bot, 123, [])
+    result = await deliver_breaking_digest(bot, 123, {})
     assert result is False
     bot.send_message.assert_not_called()
 
 
-async def test_digest_multiple_alerts():
+async def test_digest_topic_grouped():
     bot = AsyncMock()
-    alerts = [
-        {"headline": "Alert one", "source_url": "https://a.com", "significance_score": 7},
-        {"headline": "Alert two", "source_url": "https://b.com", "significance_score": 9},
-        {"headline": "Alert three", "source_url": "https://c.com", "significance_score": 8},
-    ]
-    result = await deliver_breaking_digest(bot, 123, alerts)
+    alerts_by_topic = {
+        "iran-us-relations": [
+            {"headline": "Iran alert", "source_url": "https://a.com", "significance_score": 9},
+        ],
+        "ai-ml-research": [
+            {"headline": "AI alert", "source_url": "https://b.com", "significance_score": 7},
+        ],
+    }
+    result = await deliver_breaking_digest(bot, 123, alerts_by_topic)
     assert result is True
     bot.send_message.assert_called()
     text = bot.send_message.call_args.kwargs["text"]
-    # Should be sorted by significance (highest first)
-    assert text.index("Alert two") < text.index("Alert three")
-    assert text.index("Alert three") < text.index("Alert one")
     assert "DIGEST" in text
+    # Topics should appear — most significant first
+    assert "IRAN" in text
+    assert "AI" in text
+    assert text.index("IRAN") < text.index("AI")
 
 
-async def test_digest_single_alert():
+async def test_digest_single_topic():
     bot = AsyncMock()
-    alerts = [{"headline": "Solo alert", "source_url": "https://x.com", "significance_score": 8}]
-    result = await deliver_breaking_digest(bot, 123, alerts)
+    alerts_by_topic = {
+        "test-topic": [
+            {"headline": "Solo alert", "source_url": "https://x.com", "significance_score": 8},
+        ],
+    }
+    result = await deliver_breaking_digest(bot, 123, alerts_by_topic)
     assert result is True
     text = bot.send_message.call_args.kwargs["text"]
     assert "Solo alert" in text

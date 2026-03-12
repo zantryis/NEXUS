@@ -1,33 +1,38 @@
 {% extends "base.html" %}
 {% block title %}Nexus — Cost Dashboard{% endblock %}
 {% block content %}
-<h2>Cost Dashboard</h2>
 
-<article>
-    <h3>Today's Spend</h3>
-    <p class="cost-big">${{ "%.4f"|format(today_cost) }}</p>
-</article>
+<div class="page-header">
+    <h2>Cost Dashboard</h2>
+</div>
+
+<div class="card" style="margin-bottom: 2rem; text-align: center; padding: 2rem;">
+    <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--nx-text-dim); margin-bottom: 0.5rem;">Today's Spend</div>
+    <div class="cost-hero">${{ "%.4f"|format(today_cost) }}</div>
+</div>
 
 {% if daily_costs %}
-<section>
-    <h3>Last 30 Days</h3>
-    <table>
-        <thead>
-            <tr><th>Date</th><th>Tokens (in/out)</th><th>Calls</th><th>Cost</th></tr>
-        </thead>
-        <tbody>
-        {% for row in daily_costs %}
-            <tr>
-                <td>{{ row.date }}</td>
-                <td>{{ row.total_input_tokens }} / {{ row.total_output_tokens }}</td>
-                <td>{{ row.call_count }}</td>
-                <td>${{ "%.4f"|format(row.total_cost_usd) }}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-</section>
+<div class="card-section">
+    <div class="card-section-title">Last 30 Days</div>
+</div>
+<table class="data-table">
+    <thead>
+        <tr><th>Date</th><th class="num">Input Tokens</th><th class="num">Output Tokens</th><th class="num">Calls</th><th class="num">Cost</th></tr>
+    </thead>
+    <tbody>
+    {% for row in daily_costs %}
+        <tr>
+            <td>{{ row.date }}</td>
+            <td class="num">{{ row.total_input_tokens }}</td>
+            <td class="num">{{ row.total_output_tokens }}</td>
+            <td class="num">{{ row.call_count }}</td>
+            <td class="num">${{ "%.4f"|format(row.total_cost_usd) }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
 {% else %}
-<p>No usage data yet. Run the pipeline first.</p>
+<div class="empty-state"><p>No usage data yet. Run the pipeline first.</p></div>
 {% endif %}
+
 {% endblock %}

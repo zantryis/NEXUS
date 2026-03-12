@@ -1,0 +1,56 @@
+{% if entity %}
+<div class="panel-header">
+    <div style="display:flex;align-items:center;gap:0.75rem;">
+        {% if entity.thumbnail_url %}
+        <img src="{{ entity.thumbnail_url }}" alt="" class="entity-avatar-lg">
+        {% else %}
+        <span class="entity-initial entity-initial-lg {{ entity.entity_type }}">{{ entity.canonical_name[0] | upper }}</span>
+        {% endif %}
+        <div>
+            <h3 style="font-size:1.1rem;margin:0;">{{ entity.canonical_name }}</h3>
+            <span class="explore-card-type {{ entity.entity_type }}">{{ entity.entity_type }}</span>
+        </div>
+    </div>
+    {% if entity.aliases %}
+    <div style="font-size:0.75rem;color:var(--nx-text-dim);margin-top:0.5rem;">
+        Also: {{ entity.aliases | join(', ') }}
+    </div>
+    {% endif %}
+</div>
+
+{% if threads %}
+<div class="panel-section">
+    <div class="panel-section-title">Threads</div>
+    {% for t in threads %}
+    <a href="/threads/{{ t.slug }}" class="panel-link">
+        {{ t.headline }}
+        <span class="sig-indicator sig-{{ 'high' if t.significance >= 7 else ('med' if t.significance >= 4 else 'low') }}" style="width:18px;height:18px;font-size:0.55rem;">
+            {{ t.significance }}
+        </span>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if events %}
+<div class="panel-section">
+    <div class="panel-section-title">Recent Events</div>
+    {% for ev in events %}
+    <div class="panel-event">
+        <span class="panel-event-date">{{ ev.date }}</span>
+        <span class="panel-event-summary">{{ ev.summary[:100] }}{% if ev.summary|length > 100 %}...{% endif %}</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div style="margin-top:1rem;display:flex;flex-direction:column;gap:0.4rem;">
+    <a href="/explore/entities/{{ entity.id }}" class="section-link">View full profile &rarr;</a>
+    {% if entity.wikipedia_url %}
+    <a href="{{ entity.wikipedia_url }}" target="_blank" rel="noopener" class="section-link">Wikipedia &#8599;</a>
+    {% endif %}
+</div>
+
+{% else %}
+<div class="empty-state"><p>Entity not found.</p></div>
+{% endif %}

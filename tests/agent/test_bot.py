@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 
 from nexus.config.models import NexusConfig, UserConfig, TelegramConfig, BriefingConfig
-from nexus.agent.bot import NexusBot
+from nexus.agent.bot import NexusBot, user_today
 
 
 @pytest.fixture
@@ -26,6 +26,24 @@ def bot(config, tmp_path):
         store=AsyncMock(),
         data_dir=tmp_path,
     )
+
+
+def test_user_today_utc():
+    """user_today with UTC should return a date."""
+    result = user_today("UTC")
+    assert isinstance(result, date)
+
+
+def test_user_today_timezone():
+    """user_today respects timezone."""
+    result = user_today("America/Denver")
+    assert isinstance(result, date)
+
+
+def test_user_today_invalid_falls_back():
+    """Invalid timezone falls back to UTC date.today()."""
+    result = user_today("Not/A/Timezone")
+    assert isinstance(result, date)
 
 
 def test_is_authorized_matching(bot):
@@ -117,7 +135,7 @@ async def test_handle_briefing_additional_languages(mock_keyboard, mock_deliver,
     )
     b = NexusBot("token", config, AsyncMock(), AsyncMock(), data_dir=tmp_path)
 
-    today = date.today().isoformat()
+    today = user_today().isoformat()
 
     # Create English briefing
     briefing_dir = tmp_path / "artifacts" / "briefings"

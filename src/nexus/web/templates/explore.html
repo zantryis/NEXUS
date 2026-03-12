@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Explore — Nexus{% endblock %}
+{% block nav_explore %}active{% endblock %}
+{% block content %}
+
+<div class="explore-header">
+    <h2>Explore Knowledge Graph</h2>
+    <div class="explore-search">
+        <form action="/explore/" method="get">
+            <input type="text" name="q" placeholder="Search entities..." value="{{ search_query }}"
+                   hx-get="/explore/" hx-trigger="keyup changed delay:300ms" hx-target=".explore-grid"
+                   hx-select=".explore-grid" hx-push-url="true">
+        </form>
+    </div>
+</div>
+
+<div class="type-filters" style="margin-bottom: 1.25rem;">
+    <a href="/explore/" class="type-filter {{ 'active' if not filter_type }}">All</a>
+    <a href="/explore/?type=person" class="type-filter {{ 'active' if filter_type == 'person' }}">Person</a>
+    <a href="/explore/?type=org" class="type-filter {{ 'active' if filter_type == 'org' }}">Organization</a>
+    <a href="/explore/?type=country" class="type-filter {{ 'active' if filter_type == 'country' }}">Country</a>
+    <a href="/explore/?type=concept" class="type-filter {{ 'active' if filter_type == 'concept' }}">Concept</a>
+    <a href="/explore/?type=treaty" class="type-filter {{ 'active' if filter_type == 'treaty' }}">Treaty</a>
+    <a href="/explore/graph" class="type-filter" style="margin-left:auto;">&#9670; Graph View</a>
+</div>
+
+{% if entities %}
+<div class="explore-grid">
+    {% for e in entities %}
+    <a href="/explore/entities/{{ e.id }}" class="explore-card">
+        <div class="explore-card-top">
+            {% if e.thumbnail_url %}
+            <img src="{{ e.thumbnail_url }}" alt="" class="entity-avatar">
+            {% else %}
+            <span class="entity-initial {{ e.entity_type }}">{{ e.canonical_name[0] | upper }}</span>
+            {% endif %}
+            <div>
+                <div class="explore-card-name">{{ e.canonical_name }}</div>
+                <div class="explore-card-type {{ e.entity_type }}">{{ e.entity_type }}</div>
+            </div>
+        </div>
+        <div class="explore-card-stats">
+            First seen {{ e.first_seen }} &middot; Last seen {{ e.last_seen }}
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <p>{% if search_query %}No entities matching "{{ search_query }}".{% else %}No entities found.{% endif %}</p>
+</div>
+{% endif %}
+
+{% endblock %}

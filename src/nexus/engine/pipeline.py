@@ -14,6 +14,7 @@ from nexus.engine.ingestion.dedup import dedup_items
 from nexus.engine.ingestion.ingest import async_ingest_items
 from nexus.engine.knowledge.compression import compress_to_weekly
 from nexus.engine.knowledge.entities import resolve_entities
+from nexus.web.thumbnails import enrich_new_entities
 from nexus.engine.knowledge.events import (
     Event, extract_event, is_duplicate_event, merge_events,
 )
@@ -198,10 +199,25 @@ async def run_topic_pipeline(
             resolve_map[r.raw] = (eid, r.canonical)
 
         timings["entity_resolution"] = time.monotonic() - t0
+
+        new_entity_ids = [
+            eid for r in resolutions if r.is_new
+            for eid in [resolve_map.get(r.raw, (None,))[0]] if eid
+        ]
         logger.info(
             f"[{topic.name}] Resolved {len(all_raw)} entities "
-            f"({sum(1 for r in resolutions if r.is_new)} new)"
+            f"({len(new_entity_ids)} new)"
         )
+
+        # Auto-fetch thumbnails + Wikipedia URLs for new entities (background, non-blocking)
+        if new_entity_ids:
+            async def _enrich_bg(ids=new_entity_ids, topic_name=topic.name):
+                try:
+                    await enrich_new_entities(store, ids)
+                    logger.info(f"[{topic_name}] Enriched {len(ids)} new entities with media")
+                except Exception as e:
+                    logger.warning(f"[{topic_name}] Entity enrichment failed (non-fatal): {e}")
+            asyncio.create_task(_enrich_bg())
 
     if new_events:
         event_ids = await store.add_events(new_events, slug)

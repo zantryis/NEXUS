@@ -1,37 +1,40 @@
 {% extends "base.html" %}
 {% block title %}Nexus — Settings{% endblock %}
 {% block content %}
-<h2>Settings</h2>
+
+<div class="page-header">
+    <h2>Settings</h2>
+</div>
 
 {% if preset %}
-<article>
-    <h3>Active Preset</h3>
-    <p><span class="badge badge-active">{{ preset }}</span></p>
-</article>
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="color:var(--nx-text-secondary);font-size:0.85rem;">Active Preset</span>
+        <span class="badge badge-active">{{ preset }}</span>
+    </div>
+</div>
 {% endif %}
 
-<section>
-    <h3>API Keys</h3>
-    <table>
-        <thead>
-            <tr><th>Provider</th><th>Key Status</th><th>Value</th></tr>
-        </thead>
-        <tbody>
-        {% for p in providers %}
-            <tr>
-                <td>{{ p.name }}</td>
-                <td>
-                    {% if p.is_set %}
-                    <span class="badge badge-active">configured</span>
-                    {% else %}
-                    <span class="badge badge-unknown">not set</span>
-                    {% endif %}
-                </td>
-                <td><code>{{ p.masked }}</code></td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    <small>Keys are configured via <code>.env</code> file or environment variables.</small>
-</section>
+<div class="card-section">
+    <div class="card-section-title">API Keys</div>
+</div>
+
+{% for p in providers %}
+<div class="settings-provider">
+    <div>
+        <div style="font-weight:600;font-size:0.9rem;">{{ p.name }}</div>
+        <code style="font-size:0.78rem;color:var(--nx-text-dim);">{{ p.masked }}</code>
+    </div>
+    {% if p.is_set %}
+    <span class="badge badge-active">configured</span>
+    {% else %}
+    <span class="badge badge-stale">not set</span>
+    {% endif %}
+</div>
+{% endfor %}
+
+<p style="margin-top: 1rem; font-size: 0.82rem; color: var(--nx-text-dim);">
+    Keys are configured via <code>.env</code> file or environment variables.
+</p>
+
 {% endblock %}

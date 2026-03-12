@@ -1,5 +1,7 @@
 """RSS source adapter — delegates to existing poll_feed."""
 
+import asyncio
+
 from nexus.engine.sources.base import SourceAdapter
 from nexus.engine.sources.polling import ContentItem, poll_feed
 
@@ -10,7 +12,8 @@ class RSSAdapter(SourceAdapter):
     source_type = "rss"
 
     async def poll(self, source_config: dict) -> list[ContentItem]:
-        return poll_feed(
+        return await asyncio.to_thread(
+            poll_feed,
             source_config["url"],
             source_config["id"],
             source_language=source_config.get("language"),

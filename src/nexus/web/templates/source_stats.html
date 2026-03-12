@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Sources — Nexus{% endblock %}
 {% block content %}
-<h2>Source Analytics
-    {% if filter_topic %}<small>in {{ filter_topic }}</small>{% endif %}
-</h2>
+
+<div class="page-header">
+    <h2>Source Analytics{% if filter_topic %} <span class="page-subtitle">in {{ filter_topic }}</span>{% endif %}</h2>
+</div>
 
 {% if stats %}
-<table>
+<table class="data-table">
     <thead>
-        <tr><th>Outlet</th><th>Affiliation</th><th>Country</th><th>Language</th><th>Events</th></tr>
+        <tr><th>Outlet</th><th>Affiliation</th><th>Country</th><th>Language</th><th class="num">Events</th></tr>
     </thead>
     <tbody>
         {% for s in stats %}
@@ -17,12 +18,13 @@
             <td><span class="badge badge-{{ s.affiliation }}">{{ s.affiliation }}</span></td>
             <td>{{ s.country }}</td>
             <td>{{ s.language }}</td>
-            <td>{{ s.event_count }}</td>
+            <td class="num">{{ s.event_count }}</td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
 {% else %}
-<p>No source data.</p>
+<div class="empty-state"><p>No source data.</p></div>
 {% endif %}
+
 {% endblock %}

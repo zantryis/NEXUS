@@ -92,20 +92,17 @@ async def test_dashboard_shows_topics(client):
     assert "iran-us" in resp.text
 
 
-async def test_dashboard_has_metrics(client):
-    """Dashboard shows hero metrics grid."""
+async def test_dashboard_shows_briefing_or_empty(client):
+    """Dashboard shows briefing content or welcome message."""
     resp = await client.get("/")
-    assert "metrics-grid" in resp.text
-    assert "Active Threads" in resp.text
-    assert "Topics" in resp.text
-    assert "Events" in resp.text
+    # Should show either briefing content or empty state
+    assert "Intelligence Briefing" in resp.text or "Welcome to Nexus" in resp.text
 
 
-async def test_dashboard_has_thread_cards(client):
-    """Dashboard shows redesigned thread cards with significance."""
+async def test_dashboard_shows_sidebar(client):
+    """Dashboard sidebar has threads and topics."""
     resp = await client.get("/")
-    assert "Sanctions Escalation" in resp.text
-    assert "thread-card-v2" in resp.text
+    assert "Active Threads" in resp.text or "Welcome to Nexus" in resp.text
 
 
 async def test_topic_detail(client):
@@ -124,8 +121,8 @@ async def test_thread_detail(client):
     resp = await client.get("/threads/sanctions-escalation")
     assert resp.status_code == 200
     assert "Sanctions Escalation" in resp.text
-    assert "Convergence" in resp.text
-    assert "Divergence" in resp.text
+    assert "What Sources Agree On" in resp.text
+    assert "Where They Disagree" in resp.text
 
 
 async def test_thread_not_found(client):
@@ -194,3 +191,47 @@ async def test_source_stats(client):
     resp = await client.get("/sources/")
     assert resp.status_code == 200
     assert "reuters" in resp.text
+
+
+async def test_audio_route_serves_mp3(seeded_app, tmp_path):
+    """Audio route serves existing MP3 files."""
+    audio_dir = tmp_path / "artifacts" / "audio"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    (audio_dir / "2026-03-10.mp3").write_bytes(b"\xff\xfb\x90\x00" * 10)
+    seeded_app.state.data_dir = tmp_path
+
+    transport = ASGITransport(app=seeded_app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.get("/audio/2026-03-10.mp3")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "audio/mpeg"
+
+
+async def test_audio_route_404_missing(seeded_app, tmp_path):
+    """Audio route returns 404 for missing files."""
+    seeded_app.state.data_dir = tmp_path
+
+    transport = ASGITransport(app=seeded_app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.get("/audio/nonexistent.mp3")
+        assert resp.status_code == 404
+
+
+async def test_dashboard_shows_audio_player(seeded_app, tmp_path):
+    """Dashboard shows audio player when MP3 exists for briefing date."""
+    # Create briefing + audio
+    briefing_dir = tmp_path / "artifacts" / "briefings"
+    briefing_dir.mkdir(parents=True, exist_ok=True)
+    today = date.today().isoformat()
+    (briefing_dir / f"{today}.md").write_text("# Today's briefing")
+    audio_dir = tmp_path / "artifacts" / "audio"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    (audio_dir / f"{today}.mp3").write_bytes(b"\xff\xfb\x90\x00" * 10)
+    seeded_app.state.data_dir = tmp_path
+
+    transport = ASGITransport(app=seeded_app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.get("/")
+        assert resp.status_code == 200
+        assert "audio-player-card" in resp.text
+        assert "Daily Podcast" in resp.text

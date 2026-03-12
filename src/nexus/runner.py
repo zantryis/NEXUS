@@ -75,7 +75,8 @@ async def run_all(
 
         # 3. Start web dashboard (non-blocking via uvicorn Server)
         app = create_app(data_dir / "knowledge.db")
-        # Set audio dir for podcast RSS
+        # Set data paths
+        app.state.data_dir = data_dir
         app.state.audio_dir = data_dir / "artifacts" / "audio"
         # Inject shared resources into app state
         app.state.store = store

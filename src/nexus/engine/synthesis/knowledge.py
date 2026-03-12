@@ -84,6 +84,10 @@ _SYNTHESIS_BASE_PROMPT = (
     "Only flag when outlets disagree on the same underlying event or claim.\n"
     "4. Note key entities involved\n"
     "5. Rate significance (1-10)\n\n"
+    "## Thread consolidation\n"
+    "Before creating a new thread, check if any existing thread covers substantially "
+    "the same narrative. Threads sharing 3+ entities and describing the same causal "
+    "chain MUST be merged into one. Prefer fewer, richer threads over many sparse ones.\n\n"
 )
 
 _SYNTHESIS_OUTPUT_FORMAT = (
@@ -314,6 +318,16 @@ async def _persist_threads(
 
             tid = await store.upsert_thread(slug, thread.headline, thread.significance, status)
             await store.link_thread_topic(tid, topic_slug)
+
+            # Link thread to its events by matching (summary, date, topic_slug)
+            event_ids = []
+            for ev in thread.events:
+                ev_date = ev.date if isinstance(ev.date, str) else ev.date.isoformat()
+                eid = await store.find_event_id(ev.summary, ev_date, topic_slug)
+                if eid:
+                    event_ids.append(eid)
+            if event_ids:
+                await store.link_thread_events(tid, event_ids)
 
             # Update thread with persistence info
             thread.thread_id = tid

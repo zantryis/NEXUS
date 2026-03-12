@@ -54,6 +54,7 @@ class BreakingNewsConfig(BaseModel):
     poll_interval_hours: int = 3
     threshold: int = 7
     wire_feeds: list[dict] = Field(default_factory=list)
+    default_feeds: bool = True
 
 
 class TelegramConfig(BaseModel):

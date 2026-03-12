@@ -231,7 +231,7 @@ class KnowledgeStore:
         """Look up entity by canonical name or alias."""
         # Try canonical name first
         cursor = await self.db.execute(
-            "SELECT id, canonical_name, entity_type, aliases, first_seen, last_seen "
+            "SELECT id, canonical_name, entity_type, aliases, first_seen, last_seen, thumbnail_url, wikipedia_url "
             "FROM entities WHERE canonical_name = ?",
             (name,),
         )
@@ -241,7 +241,7 @@ class KnowledgeStore:
 
         # Search aliases (JSON array contains check)
         cursor = await self.db.execute(
-            "SELECT id, canonical_name, entity_type, aliases, first_seen, last_seen "
+            "SELECT id, canonical_name, entity_type, aliases, first_seen, last_seen, thumbnail_url, wikipedia_url "
             "FROM entities WHERE aliases LIKE ?",
             (f'%"{name}"%',),
         )
@@ -256,7 +256,7 @@ class KnowledgeStore:
         if topic_slug:
             cursor = await self.db.execute(
                 "SELECT DISTINCT e.id, e.canonical_name, e.entity_type, e.aliases, "
-                "e.first_seen, e.last_seen "
+                "e.first_seen, e.last_seen, e.thumbnail_url, e.wikipedia_url "
                 "FROM entities e "
                 "JOIN event_entities ee ON e.id = ee.entity_id "
                 "JOIN events ev ON ee.event_id = ev.id "
@@ -266,7 +266,7 @@ class KnowledgeStore:
             )
         else:
             cursor = await self.db.execute(
-                "SELECT id, canonical_name, entity_type, aliases, first_seen, last_seen "
+                "SELECT id, canonical_name, entity_type, aliases, first_seen, last_seen, thumbnail_url, wikipedia_url "
                 "FROM entities ORDER BY canonical_name"
             )
         rows = await cursor.fetchall()
@@ -443,6 +443,158 @@ class KnowledgeStore:
                 "INSERT OR IGNORE INTO thread_events (thread_id, event_id) VALUES (?, ?)",
                 (thread_id, eid),
             )
+        await self.db.commit()
+
+    async def find_event_id(
+        self, summary: str, date: str, topic_slug: str,
+    ) -> int | None:
+        """Find an event's DB id by its natural key (summary + date + topic)."""
+        cursor = await self.db.execute(
+            "SELECT id FROM events WHERE summary = ? AND date = ? AND topic_slug = ?",
+            (summary, date, topic_slug),
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else None
+
+    async def get_threads_for_event(self, event_id: int) -> list[dict]:
+        """Get all threads that contain a given event."""
+        cursor = await self.db.execute(
+            "SELECT t.id, t.slug, t.headline, t.status, t.significance "
+            "FROM threads t "
+            "JOIN thread_events te ON t.id = te.thread_id "
+            "WHERE te.event_id = ? "
+            "ORDER BY t.significance DESC",
+            (event_id,),
+        )
+        return [
+            {"id": r[0], "slug": r[1], "headline": r[2], "status": r[3], "significance": r[4]}
+            for r in await cursor.fetchall()
+        ]
+
+    async def get_topics_for_thread(self, thread_id: int) -> list[str]:
+        """Get topic slugs associated with a thread."""
+        cursor = await self.db.execute(
+            "SELECT topic_slug FROM thread_topics WHERE thread_id = ?",
+            (thread_id,),
+        )
+        return [r[0] for r in await cursor.fetchall()]
+
+    async def get_related_events(
+        self, event_id: int, limit: int = 5,
+    ) -> list[dict]:
+        """Find events sharing 2+ entities with the given event."""
+        cursor = await self.db.execute(
+            "SELECT e.id, e.date, e.summary, e.significance, e.topic_slug, "
+            "       COUNT(*) as shared "
+            "FROM events e "
+            "JOIN event_entities ee ON e.id = ee.event_id "
+            "WHERE ee.entity_id IN ("
+            "  SELECT entity_id FROM event_entities WHERE event_id = ?"
+            ") AND e.id != ? "
+            "GROUP BY e.id "
+            "HAVING shared >= 2 "
+            "ORDER BY shared DESC, e.significance DESC "
+            "LIMIT ?",
+            (event_id, event_id, limit),
+        )
+        return [
+            {"id": r[0], "date": r[1], "summary": r[2], "significance": r[3],
+             "topic_slug": r[4], "shared_entities": r[5]}
+            for r in await cursor.fetchall()
+        ]
+
+    async def get_graph_data(
+        self, min_events: int = 3, min_co: int = 2,
+    ) -> dict:
+        """Return nodes + links for the force-directed graph.
+
+        Nodes: entities appearing in >= min_events events.
+        Links: entity pairs co-occurring in >= min_co events.
+        """
+        # Get qualifying entities
+        cursor = await self.db.execute(
+            "SELECT ee.entity_id, COUNT(DISTINCT ee.event_id) as evt_count "
+            "FROM event_entities ee "
+            "GROUP BY ee.entity_id HAVING evt_count >= ?",
+            (min_events,),
+        )
+        entity_counts = {r[0]: r[1] for r in await cursor.fetchall()}
+        if not entity_counts:
+            return {"nodes": [], "links": []}
+
+        entity_ids = list(entity_counts.keys())
+
+        # Get entity details
+        placeholders = ",".join("?" * len(entity_ids))
+        cursor = await self.db.execute(
+            f"SELECT id, canonical_name, entity_type, thumbnail_url "
+            f"FROM entities WHERE id IN ({placeholders})",
+            entity_ids,
+        )
+        nodes = []
+        for r in await cursor.fetchall():
+            nodes.append({
+                "id": r[0],
+                "name": r[1],
+                "type": r[2],
+                "thumbnail_url": r[3] or "",
+                "event_count": entity_counts[r[0]],
+            })
+
+        # Get co-occurrence links
+        cursor = await self.db.execute(
+            f"SELECT ee1.entity_id, ee2.entity_id, COUNT(*) as co "
+            f"FROM event_entities ee1 "
+            f"JOIN event_entities ee2 ON ee1.event_id = ee2.event_id "
+            f"  AND ee1.entity_id < ee2.entity_id "
+            f"WHERE ee1.entity_id IN ({placeholders}) "
+            f"  AND ee2.entity_id IN ({placeholders}) "
+            f"GROUP BY ee1.entity_id, ee2.entity_id "
+            f"HAVING co >= ?",
+            entity_ids + entity_ids + [min_co],
+        )
+        links = []
+        for r in await cursor.fetchall():
+            links.append({
+                "source": r[0],
+                "target": r[1],
+                "weight": r[2],
+            })
+
+        return {"nodes": nodes, "links": links}
+
+    async def merge_threads(self, keep_id: int, absorb_id: int) -> None:
+        """Merge absorb_id thread into keep_id. Reassign events, topics, analysis."""
+        # Reassign thread_events (ignore duplicates)
+        await self.db.execute(
+            "UPDATE OR IGNORE thread_events SET thread_id = ? WHERE thread_id = ?",
+            (keep_id, absorb_id),
+        )
+        # Remove any remaining (duplicate) rows for absorbed thread
+        await self.db.execute(
+            "DELETE FROM thread_events WHERE thread_id = ?", (absorb_id,),
+        )
+        # Reassign thread_topics
+        await self.db.execute(
+            "UPDATE OR IGNORE thread_topics SET thread_id = ? WHERE thread_id = ?",
+            (keep_id, absorb_id),
+        )
+        await self.db.execute(
+            "DELETE FROM thread_topics WHERE thread_id = ?", (absorb_id,),
+        )
+        # Move convergence + divergence
+        await self.db.execute(
+            "UPDATE convergence SET thread_id = ? WHERE thread_id = ?",
+            (keep_id, absorb_id),
+        )
+        await self.db.execute(
+            "UPDATE divergence SET thread_id = ? WHERE thread_id = ?",
+            (keep_id, absorb_id),
+        )
+        # Mark absorbed thread as resolved
+        await self.db.execute(
+            "UPDATE threads SET status = 'resolved' WHERE id = ?", (absorb_id,),
+        )
         await self.db.commit()
 
     async def link_thread_topic(self, thread_id: int, topic_slug: str) -> None:
@@ -840,7 +992,7 @@ class KnowledgeStore:
     async def find_entity_by_id(self, entity_id: int) -> dict | None:
         """Look up entity by ID."""
         cursor = await self.db.execute(
-            "SELECT id, canonical_name, entity_type, aliases, first_seen, last_seen "
+            "SELECT id, canonical_name, entity_type, aliases, first_seen, last_seen, thumbnail_url, wikipedia_url "
             "FROM entities WHERE id = ?",
             (entity_id,),
         )
@@ -849,11 +1001,37 @@ class KnowledgeStore:
             return _entity_row_to_dict(row)
         return None
 
+    async def update_entity_thumbnail(self, entity_id: int, url: str) -> None:
+        """Set the thumbnail URL for an entity."""
+        await self.db.execute(
+            "UPDATE entities SET thumbnail_url = ? WHERE id = ?", (url, entity_id),
+        )
+        await self.db.commit()
+
+    async def update_entity_media(
+        self, entity_id: int, thumbnail_url: str = "", wikipedia_url: str = "",
+    ) -> None:
+        """Set thumbnail and/or Wikipedia URL for an entity."""
+        updates, params = [], []
+        if thumbnail_url:
+            updates.append("thumbnail_url = ?")
+            params.append(thumbnail_url)
+        if wikipedia_url:
+            updates.append("wikipedia_url = ?")
+            params.append(wikipedia_url)
+        if not updates:
+            return
+        params.append(entity_id)
+        await self.db.execute(
+            f"UPDATE entities SET {', '.join(updates)} WHERE id = ?", params,
+        )
+        await self.db.commit()
+
     async def search_entities(self, query: str, limit: int = 20) -> list[dict]:
         """Search entities by canonical name or alias (LIKE match)."""
         pattern = f"%{query}%"
         cursor = await self.db.execute(
-            "SELECT id, canonical_name, entity_type, aliases, first_seen, last_seen "
+            "SELECT id, canonical_name, entity_type, aliases, first_seen, last_seen, thumbnail_url, wikipedia_url "
             "FROM entities "
             "WHERE canonical_name LIKE ? OR aliases LIKE ? "
             "ORDER BY canonical_name "
@@ -924,24 +1102,68 @@ class KnowledgeStore:
     async def add_breaking_alert(
         self, headline_hash: str, headline: str,
         source_url: str, significance_score: int,
+        topic_slug: str = "",
     ) -> int:
-        """Record a breaking news alert (dedup by headline_hash)."""
+        """Record a breaking news alert (dedup by headline_hash + topic_slug)."""
         cursor = await self.db.execute(
             "INSERT OR IGNORE INTO breaking_alerts "
-            "(headline_hash, headline, source_url, significance_score) "
-            "VALUES (?, ?, ?, ?)",
-            (headline_hash, headline, source_url, significance_score),
+            "(headline_hash, headline, source_url, significance_score, topic_slug) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (headline_hash, headline, source_url, significance_score, topic_slug),
         )
         await self.db.commit()
         return cursor.lastrowid or 0
 
-    async def is_alerted(self, headline_hash: str) -> bool:
-        """Check if a headline has already been alerted."""
+    async def is_alerted(self, headline_hash: str, topic_slug: str = "") -> bool:
+        """Check if a headline has already been alerted for a topic."""
         cursor = await self.db.execute(
-            "SELECT 1 FROM breaking_alerts WHERE headline_hash = ?",
-            (headline_hash,),
+            "SELECT 1 FROM breaking_alerts WHERE headline_hash = ? AND topic_slug = ?",
+            (headline_hash, topic_slug),
         )
         return (await cursor.fetchone()) is not None
+
+    async def get_alerted_hashes(
+        self, hashes: list[str], topic_slug: str = "",
+    ) -> set[str]:
+        """Batch check which headline hashes are already alerted for a topic."""
+        if not hashes:
+            return set()
+        placeholders = ",".join("?" for _ in hashes)
+        cursor = await self.db.execute(
+            f"SELECT headline_hash FROM breaking_alerts "
+            f"WHERE topic_slug = ? AND headline_hash IN ({placeholders})",
+            [topic_slug, *hashes],
+        )
+        return {r[0] for r in await cursor.fetchall()}
+
+    async def get_recent_breaking_alerts(
+        self, hours: int = 24, topic_slug: str | None = None,
+    ) -> list[dict]:
+        """Get recent breaking alerts, optionally filtered by topic."""
+        if topic_slug is not None:
+            cursor = await self.db.execute(
+                "SELECT headline, source_url, significance_score, topic_slug, alerted_at "
+                "FROM breaking_alerts "
+                "WHERE alerted_at >= datetime('now', ?) AND topic_slug = ? "
+                "ORDER BY alerted_at DESC",
+                (f"-{hours} hours", topic_slug),
+            )
+        else:
+            cursor = await self.db.execute(
+                "SELECT headline, source_url, significance_score, topic_slug, alerted_at "
+                "FROM breaking_alerts "
+                "WHERE alerted_at >= datetime('now', ?) "
+                "ORDER BY alerted_at DESC",
+                (f"-{hours} hours",),
+            )
+        return [
+            {
+                "headline": r[0], "source_url": r[1],
+                "significance_score": r[2], "topic_slug": r[3],
+                "alerted_at": r[4],
+            }
+            for r in await cursor.fetchall()
+        ]
 
     # ── Feedback ─────────────────────────────────────────────────────
 
@@ -1071,7 +1293,7 @@ class KnowledgeStore:
 
 def _entity_row_to_dict(row) -> dict:
     """Convert an entity row to a dict."""
-    return {
+    d = {
         "id": row[0],
         "canonical_name": row[1],
         "entity_type": row[2],
@@ -1079,3 +1301,6 @@ def _entity_row_to_dict(row) -> dict:
         "first_seen": row[4],
         "last_seen": row[5],
     }
+    d["thumbnail_url"] = row[6] if len(row) > 6 else ""
+    d["wikipedia_url"] = row[7] if len(row) > 7 else ""
+    return d

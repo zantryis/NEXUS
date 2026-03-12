@@ -46,7 +46,7 @@ async def test_daily_pipeline_job_error(config, tmp_path):
 
 async def test_breaking_news_job_success(config):
     with patch("nexus.agent.breaking.check_breaking_news", new_callable=AsyncMock) as mock_check:
-        mock_check.return_value = []
+        mock_check.return_value = {}
         await breaking_news_job(config, AsyncMock(), AsyncMock())
         mock_check.assert_called_once()
 
@@ -57,7 +57,7 @@ async def test_breaking_news_job_disabled():
         breaking_news=BreakingNewsConfig(enabled=False),
     )
     with patch("nexus.agent.breaking.check_breaking_news", new_callable=AsyncMock) as mock_check:
-        mock_check.return_value = []
+        mock_check.return_value = {}
         await breaking_news_job(config, AsyncMock(), AsyncMock())
 
 

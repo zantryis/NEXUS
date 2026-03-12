@@ -6,7 +6,7 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 4
+CURRENT_VERSION = 7
 
 DDL = """
 -- Schema version tracking
@@ -228,6 +228,36 @@ CREATE INDEX IF NOT EXISTS idx_usage_log_date ON usage_log(date);
 """
 
 
+MIGRATION_V5 = """
+-- Entity thumbnails (v5)
+ALTER TABLE entities ADD COLUMN thumbnail_url TEXT NOT NULL DEFAULT '';
+"""
+
+MIGRATION_V6 = """
+-- Entity Wikipedia URLs (v6)
+ALTER TABLE entities ADD COLUMN wikipedia_url TEXT NOT NULL DEFAULT '';
+"""
+
+MIGRATION_V7 = """
+-- Topic-scoped breaking alerts (v7): recreate table with composite unique
+CREATE TABLE IF NOT EXISTS breaking_alerts_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    headline_hash TEXT NOT NULL,
+    headline TEXT NOT NULL,
+    source_url TEXT NOT NULL,
+    significance_score INTEGER NOT NULL,
+    topic_slug TEXT NOT NULL DEFAULT '',
+    alerted_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(headline_hash, topic_slug)
+);
+INSERT OR IGNORE INTO breaking_alerts_new (id, headline_hash, headline, source_url, significance_score, alerted_at)
+    SELECT id, headline_hash, headline, source_url, significance_score, alerted_at FROM breaking_alerts;
+DROP TABLE IF EXISTS breaking_alerts;
+ALTER TABLE breaking_alerts_new RENAME TO breaking_alerts;
+CREATE INDEX IF NOT EXISTS idx_breaking_alerts_hash_topic ON breaking_alerts(headline_hash, topic_slug);
+"""
+
+
 async def initialize_schema(db: aiosqlite.Connection) -> None:
     """Create all tables and indexes. Idempotent."""
     await db.executescript(DDL)
@@ -251,6 +281,18 @@ async def initialize_schema(db: aiosqlite.Connection) -> None:
     if current < 4:
         await db.executescript(MIGRATION_V4)
         logger.info("Applied migration v4: usage_log table")
+
+    if current < 5:
+        await db.executescript(MIGRATION_V5)
+        logger.info("Applied migration v5: entity thumbnail_url column")
+
+    if current < 6:
+        await db.executescript(MIGRATION_V6)
+        logger.info("Applied migration v6: entity wikipedia_url column")
+
+    if current < 7:
+        await db.executescript(MIGRATION_V7)
+        logger.info("Applied migration v7: topic-scoped breaking_alerts")
 
     if current < CURRENT_VERSION:
         await db.execute(
