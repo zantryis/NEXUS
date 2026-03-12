@@ -106,6 +106,39 @@ def test_audio_config_defaults():
     assert audio.voice_host_b == "Puck"
 
 
+def test_audio_elevenlabs_defaults():
+    from nexus.config.models import AudioConfig
+    audio = AudioConfig()
+    assert audio.elevenlabs_stability == 0.7
+    assert audio.elevenlabs_similarity_boost == 0.8
+    assert audio.elevenlabs_style == 0.35
+    assert audio.elevenlabs_speaker_boost is True
+
+
+def test_audio_elevenlabs_custom():
+    from nexus.config.models import AudioConfig
+    audio = AudioConfig(
+        elevenlabs_stability=0.9,
+        elevenlabs_similarity_boost=0.6,
+        elevenlabs_style=0.5,
+        elevenlabs_speaker_boost=False,
+    )
+    assert audio.elevenlabs_stability == 0.9
+    assert audio.elevenlabs_speaker_boost is False
+
+
+def test_audio_elevenlabs_stability_too_high():
+    from nexus.config.models import AudioConfig
+    with pytest.raises(ValidationError):
+        AudioConfig(elevenlabs_stability=1.5)
+
+
+def test_audio_elevenlabs_similarity_negative():
+    from nexus.config.models import AudioConfig
+    with pytest.raises(ValidationError):
+        AudioConfig(elevenlabs_similarity_boost=-0.1)
+
+
 def test_breaking_news_config_defaults():
     from nexus.config.models import BreakingNewsConfig
     bn = BreakingNewsConfig()

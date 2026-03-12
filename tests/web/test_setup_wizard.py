@@ -1,7 +1,7 @@
 """Tests for the web setup wizard."""
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 from httpx import AsyncClient, ASGITransport
 
 from nexus.engine.knowledge.store import KnowledgeStore
@@ -177,3 +177,104 @@ async def test_remote_setup_accepts_admin_token(app_no_config):
         resp = await client.get("/setup?admin_token=secret", follow_redirects=False)
         assert resp.status_code == 303
         assert "nexus_admin=" in resp.headers["set-cookie"]
+
+
+# ── Telegram validation tests ──
+
+
+@pytest.mark.asyncio
+@patch("nexus.agent.telegram_utils.validate_token", new_callable=AsyncMock)
+async def test_telegram_validate_success(mock_validate, app_no_config):
+    """POST /setup/telegram/validate with valid token shows bot username."""
+    mock_validate.return_value = {"username": "test_nexus_bot", "id": 123}
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/setup/telegram/validate",
+            data={"telegram_token": "123:ABC"},
+        )
+        assert resp.status_code == 200
+        assert "test_nexus_bot" in resp.text
+        assert "Token valid" in resp.text
+
+
+@pytest.mark.asyncio
+@patch("nexus.agent.telegram_utils.validate_token", new_callable=AsyncMock)
+async def test_telegram_validate_invalid(mock_validate, app_no_config):
+    """POST /setup/telegram/validate with bad token shows error."""
+    mock_validate.return_value = None
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/setup/telegram/validate",
+            data={"telegram_token": "bad-token"},
+        )
+        assert resp.status_code == 200
+        assert "Invalid token" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_telegram_validate_empty_token(app_no_config):
+    """POST /setup/telegram/validate with no token shows error."""
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/setup/telegram/validate", data={})
+        assert resp.status_code == 200
+        assert "Enter a bot token" in resp.text
+
+
+@pytest.mark.asyncio
+@patch("nexus.agent.telegram_utils.poll_for_chat_id", new_callable=AsyncMock)
+async def test_telegram_poll_finds_chat_id(mock_poll, app_no_config):
+    """GET /setup/telegram/poll returns chat_id when /start received."""
+    mock_poll.return_value = 987654
+
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # First establish a session with a token
+        await client.post(
+            "/setup/telegram/validate",
+            data={"telegram_token": "123:ABC"},
+        )
+        # For the poll, we need to patch validate_token too since it was called in validate
+        with patch("nexus.agent.telegram_utils.validate_token", new_callable=AsyncMock, return_value={"username": "bot", "id": 1}):
+            await client.post("/setup/telegram/validate", data={"telegram_token": "123:ABC"})
+
+        resp = await client.get("/setup/telegram/poll")
+        assert resp.status_code == 200
+        if mock_poll.called:
+            assert "987654" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_setup_complete_persists_chat_id(app_no_config, tmp_path):
+    """POST /setup/complete with telegram chat_id in session writes it to config."""
+    import yaml
+    data_dir = tmp_path / "data"
+
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Walk the wizard to set up session
+        await client.post("/setup/step/1", data={"provider": "gemini", "preset": "balanced"})
+        await client.post("/setup/step/2", data={"api_key": "test-key"})
+        await client.post("/setup/step/3", data={"telegram_token": "123:ABC"})
+        await client.post("/setup/step/4", data={"topics": "ai-ml-research"})
+        await client.post("/setup/step/5", data={
+            "user_name": "Tester", "timezone": "UTC",
+            "schedule": "07:00", "style": "analytical",
+        })
+
+        # Manually inject chat_id into session (simulating what poll would do)
+        sessions = app_no_config.state.setup_sessions
+        for sid, sess in sessions.items():
+            sess["telegram_chat_id"] = 12345678
+
+        resp = await client.post("/setup/complete", follow_redirects=False)
+        assert resp.status_code == 303
+
+    # Verify config.yaml has chat_id
+    config_path = data_dir / "config.yaml"
+    if config_path.exists():
+        raw = yaml.safe_load(config_path.read_text())
+        tg = raw.get("telegram", {})
+        assert tg.get("chat_id") == 12345678

@@ -179,6 +179,7 @@ async def setup_step3_get(request: Request):
         "telegram_set": "TELEGRAM_BOT_TOKEN" in keys,
         "elevenlabs_set": "ELEVENLABS_API_KEY" in keys,
         "has_key_step": bool(session.get("required_key")),
+        "telegram_chat_id": session.get("telegram_chat_id"),
         "step": 3,
         "total_steps": 6,
     })
@@ -206,6 +207,92 @@ async def setup_step3_post(request: Request):
 
     response = RedirectResponse(url="/setup/step/4", status_code=303)
     return _set_cookie(response, session_id)
+
+
+@router.post("/setup/telegram/validate")
+async def setup_telegram_validate(request: Request):
+    """Validate Telegram bot token and show bot info (HTMX fragment)."""
+    from nexus.agent.telegram_utils import validate_token
+    from html import escape
+
+    session_id, session = _get_session(request)
+    form = await request.form()
+    token = (form.get("telegram_token") or "").strip()
+
+    if not token:
+        # Try token already stored in session
+        token = session.get("keys", {}).get("TELEGRAM_BOT_TOKEN", "")
+
+    if not token:
+        resp = HTMLResponse(
+            '<div id="telegram-status" class="form-hint" style="color:var(--danger)">'
+            'Enter a bot token first.</div>'
+        )
+        return _set_cookie(resp, session_id)
+
+    bot_info = await validate_token(token)
+    if bot_info:
+        username = escape(bot_info.get("username", ""))
+        session.setdefault("keys", {})["TELEGRAM_BOT_TOKEN"] = token
+        session["telegram_enabled"] = True
+        session["telegram_bot_username"] = username
+        resp = HTMLResponse(
+            f'<div id="telegram-status">'
+            f'<div class="form-hint" style="color:var(--success)">Token valid! Bot: @{username}</div>'
+            f'<div style="margin-top:0.5rem">'
+            f'<span class="form-hint">Now open Telegram and send <code>/start</code> to '
+            f'<a href="https://t.me/{username}" target="_blank">@{username}</a></span>'
+            f'</div>'
+            f'<div id="telegram-poll" hx-get="/setup/telegram/poll" hx-trigger="every 3s" '
+            f'hx-swap="outerHTML" style="margin-top:0.5rem">'
+            f'<span class="form-hint">Waiting for /start...</span>'
+            f'</div></div>'
+        )
+    else:
+        resp = HTMLResponse(
+            '<div id="telegram-status" class="form-hint" style="color:var(--danger)">'
+            'Invalid token. Check with <a href="https://t.me/BotFather" target="_blank">@BotFather</a>.'
+            '</div>'
+        )
+    return _set_cookie(resp, session_id)
+
+
+@router.get("/setup/telegram/poll")
+async def setup_telegram_poll(request: Request):
+    """Poll for /start message to capture chat_id (HTMX fragment)."""
+    from nexus.agent.telegram_utils import poll_for_chat_id
+
+    session_id, session = _get_session(request)
+    token = session.get("keys", {}).get("TELEGRAM_BOT_TOKEN", "")
+
+    if not token:
+        resp = HTMLResponse('<div id="telegram-poll"></div>')
+        return _set_cookie(resp, session_id)
+
+    # Already captured?
+    if session.get("telegram_chat_id"):
+        chat_id = session["telegram_chat_id"]
+        resp = HTMLResponse(
+            f'<div id="telegram-poll" class="form-hint" style="color:var(--success)">'
+            f'Connected! Chat ID: {chat_id}</div>'
+        )
+        return _set_cookie(resp, session_id)
+
+    chat_id = await poll_for_chat_id(token, timeout=3.0)
+    if chat_id:
+        session["telegram_chat_id"] = chat_id
+        resp = HTMLResponse(
+            f'<div id="telegram-poll" class="form-hint" style="color:var(--success)">'
+            f'Connected! Chat ID: {chat_id}</div>'
+        )
+    else:
+        resp = HTMLResponse(
+            '<div id="telegram-poll" hx-get="/setup/telegram/poll" hx-trigger="every 3s" '
+            'hx-swap="outerHTML">'
+            '<span class="form-hint">Waiting for /start...</span>'
+            '</div>'
+        )
+    return _set_cookie(resp, session_id)
 
 
 @router.get("/setup/step/4")
@@ -346,7 +433,10 @@ async def setup_complete(request: Request):
         },
         "audio": audio_config,
         "breaking_news": {"enabled": True, "threshold": 7},
-        "telegram": {"enabled": session.get("telegram_enabled", False)},
+        "telegram": {
+            "enabled": session.get("telegram_enabled", False),
+            "chat_id": session.get("telegram_chat_id"),
+        },
     }
 
     write_config(data_dir, config_dict)
@@ -511,8 +601,14 @@ async def setup_launch(request: Request):
                     async with tg_bot:
                         await deliver_briefing(tg_bot, config.telegram.chat_id, text, audio)
                     logger.info("Briefing delivered via Telegram")
+                    status["telegram_delivered"] = True
                 except Exception as tg_err:
                     logger.warning(f"Telegram delivery failed (non-blocking): {tg_err}")
+                    status["telegram_delivered"] = False
+                    status["telegram_error"] = str(tg_err)
+            elif config.telegram.enabled and not config.telegram.chat_id:
+                status["telegram_delivered"] = False
+                status["telegram_error"] = "No chat_id — send /start to your bot"
         except Exception as e:
             logger.error(f"Background pipeline failed: {e}", exc_info=True)
             request.app.state.pipeline_status = {
@@ -547,10 +643,16 @@ async def setup_status(request: Request):
             f'Pipeline error: {escape(str(error))}</div>'
         )
     if done:
+        tg_note = ""
+        if status.get("telegram_delivered"):
+            tg_note = " Briefing delivered to Telegram."
+        elif "telegram_error" in status:
+            from html import escape as _esc
+            tg_note = f' <span style="color:var(--warning)">Telegram: {_esc(status["telegram_error"])}</span>'
         return HTMLResponse(
-            '<div class="pipeline-status pipeline-done" id="pipeline-bar">'
-            'Pipeline complete! <a href="/" onclick="location.reload()">View your first briefing</a>'
-            '</div>'
+            f'<div class="pipeline-status pipeline-done" id="pipeline-bar">'
+            f'Pipeline complete!{tg_note} <a href="/" onclick="location.reload()">View your first briefing</a>'
+            f'</div>'
         )
 
     # Build label from stage

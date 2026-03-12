@@ -22,7 +22,13 @@ BACKEND_DEFAULTS = {
         "model": "eleven_multilingual_v2",
         "voice_a": "Rachel",
         "voice_b": "Drew",
-        "known_voices": {"Rachel", "Drew", "Clyde", "Domi", "Bella", "Josh", "Adam"},
+        "known_voices": {
+            # Modern recommended voices
+            "Sarah", "Laura", "Charlie", "George", "Callum",
+            "River", "Lily", "Bill", "Will", "Jessica", "Aria",
+            # Legacy built-in voices
+            "Rachel", "Drew", "Clyde", "Domi", "Bella", "Josh", "Adam",
+        },
     },
     "openai": {
         "model": "tts-1-hd",
@@ -109,8 +115,21 @@ class GeminiTTS(TTSBackend):
 class ElevenLabsTTS(TTSBackend):
     """ElevenLabs text-to-speech backend via REST API."""
 
-    # Default voice IDs (ElevenLabs built-in voices)
+    # Voice name → ElevenLabs voice ID mapping
     DEFAULT_VOICES = {
+        # Modern recommended voices
+        "Sarah": "EXAVITQu4vr4xnSDxMaL",
+        "Laura": "FGY2WhTYpPnrIDTdsKH5",
+        "Charlie": "IKne3meq5aSn9XLyUdCD",
+        "George": "JBFqnCBsd6RMkjVDRZzb",
+        "Callum": "N2lVS1w4EtoT3dr4eOWO",
+        "River": "SAz9YHcvj6GT2YYXdXww",
+        "Lily": "pFZP5JQG7iQjIQuC4Bku",
+        "Bill": "pqHfZKP75CvOlQylNhV4",
+        "Will": "bIHbv24MWmeRgasZH58o",
+        "Jessica": "cgSgspJ2msm6clMCkdW9",
+        "Aria": "9BWtsMINqrJLrRacOk9x",
+        # Legacy built-in voices
         "Rachel": "21m00Tcm4TlvDq8ikWAM",
         "Drew": "29vD33N1CtxCmqQRPOHJ",
         "Clyde": "2EiwWnXFnvU5JabPnv8n",
@@ -123,11 +142,19 @@ class ElevenLabsTTS(TTSBackend):
     def __init__(
         self, api_key: str, voice_a: str = "Rachel", voice_b: str = "Drew",
         model: str = "eleven_multilingual_v2",
+        stability: float = 0.7,
+        similarity_boost: float = 0.8,
+        style: float = 0.35,
+        speaker_boost: bool = True,
     ):
         self._api_key = api_key
         self._voice_a = voice_a
         self._voice_b = voice_b
         self._model = model
+        self._stability = stability
+        self._similarity_boost = similarity_boost
+        self._style = style
+        self._speaker_boost = speaker_boost
 
     async def synthesize(self, turn: DialogueTurn) -> bytes:
         voice_name = self._voice_a if turn.speaker == "A" else self._voice_b
@@ -145,8 +172,10 @@ class ElevenLabsTTS(TTSBackend):
                     "text": turn.text,
                     "model_id": self._model,
                     "voice_settings": {
-                        "stability": 0.5,
-                        "similarity_boost": 0.75,
+                        "stability": self._stability,
+                        "similarity_boost": self._similarity_boost,
+                        "style": self._style,
+                        "use_speaker_boost": self._speaker_boost,
                     },
                 },
                 timeout=60.0,
@@ -212,6 +241,10 @@ def get_tts_backend(
             voice_a=voice_a,
             voice_b=voice_b,
             model=model,
+            stability=config.elevenlabs_stability,
+            similarity_boost=config.elevenlabs_similarity_boost,
+            style=config.elevenlabs_style,
+            speaker_boost=config.elevenlabs_speaker_boost,
         )
     elif backend == "openai":
         if not openai_api_key:

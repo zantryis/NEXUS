@@ -130,3 +130,76 @@ def test_openai_tts_requires_key():
     config = AudioConfig(tts_backend="openai")
     with pytest.raises(ValueError, match="OPENAI_API_KEY"):
         get_tts_backend(config)
+
+
+# ── ElevenLabs voice settings from config ──
+
+
+def test_get_tts_backend_elevenlabs_passes_config():
+    """Factory should pass ElevenLabs voice tuning params from config."""
+    config = AudioConfig(
+        tts_backend="elevenlabs",
+        voice_host_a="Rachel",
+        voice_host_b="Drew",
+        elevenlabs_stability=0.9,
+        elevenlabs_similarity_boost=0.6,
+        elevenlabs_style=0.5,
+        elevenlabs_speaker_boost=False,
+    )
+    backend = get_tts_backend(config, elevenlabs_api_key="fake-key")
+    assert isinstance(backend, ElevenLabsTTS)
+    assert backend._stability == 0.9
+    assert backend._similarity_boost == 0.6
+    assert backend._style == 0.5
+    assert backend._speaker_boost is False
+
+
+def test_get_tts_backend_elevenlabs_default_voice_settings():
+    """Default config should produce the new recommended defaults."""
+    config = AudioConfig(tts_backend="elevenlabs")
+    backend = get_tts_backend(config, elevenlabs_api_key="fake-key")
+    assert backend._stability == 0.7
+    assert backend._similarity_boost == 0.8
+    assert backend._style == 0.35
+    assert backend._speaker_boost is True
+
+
+async def test_elevenlabs_synthesize_uses_config_voice_settings():
+    """ElevenLabs synthesize should send config voice settings in API call."""
+    tts = ElevenLabsTTS(
+        api_key="fake-key",
+        voice_a="Rachel",
+        stability=0.9,
+        similarity_boost=0.6,
+        style=0.5,
+        speaker_boost=False,
+    )
+
+    mock_response = MagicMock()
+    mock_response.content = b"audio"
+    mock_response.raise_for_status = MagicMock()
+
+    with patch("nexus.engine.audio.tts.httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        await tts.synthesize(DialogueTurn(speaker="A", text="Test"))
+
+        # Verify the voice_settings in the POST body
+        call_kwargs = mock_client.post.call_args
+        json_body = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
+        voice_settings = json_body["voice_settings"]
+        assert voice_settings["stability"] == 0.9
+        assert voice_settings["similarity_boost"] == 0.6
+        assert voice_settings["style"] == 0.5
+        assert voice_settings["use_speaker_boost"] is False
+
+
+def test_elevenlabs_expanded_voice_list():
+    """DEFAULT_VOICES should include modern voices."""
+    assert "Sarah" in ElevenLabsTTS.DEFAULT_VOICES
+    assert "Charlie" in ElevenLabsTTS.DEFAULT_VOICES
+    assert "River" in ElevenLabsTTS.DEFAULT_VOICES
+    assert "Rachel" in ElevenLabsTTS.DEFAULT_VOICES  # legacy still present

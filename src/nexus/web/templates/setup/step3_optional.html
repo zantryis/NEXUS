@@ -11,9 +11,21 @@
             <span class="badge badge-active" style="margin-left:0.5rem;font-size:0.7rem;">Set</span>
             {% endif %}
         </label>
-        <input type="password" id="telegram_token" name="telegram_token" class="form-input"
-               placeholder="{% if telegram_set %}Leave blank to keep current token{% else %}1234567890:ABC...{% endif %}" autocomplete="off">
-        <span class="form-hint">Get a token from <a href="https://t.me/BotFather" target="_blank">@BotFather</a>. After setup, message your bot <code>/start</code> to activate delivery.</span>
+        <div style="display:flex;gap:0.5rem;align-items:start;">
+            <input type="password" id="telegram_token" name="telegram_token" class="form-input" style="flex:1;"
+                   placeholder="{% if telegram_set %}Leave blank to keep current token{% else %}1234567890:ABC...{% endif %}" autocomplete="off">
+            <button type="button" class="btn-secondary" style="white-space:nowrap;"
+                    hx-post="/setup/telegram/validate"
+                    hx-include="#telegram_token"
+                    hx-target="#telegram-status"
+                    hx-swap="innerHTML">Validate</button>
+        </div>
+        <span class="form-hint">Get a token from <a href="https://t.me/BotFather" target="_blank">@BotFather</a>.</span>
+        <div id="telegram-status" style="margin-top:0.5rem;">
+            {% if telegram_chat_id %}
+            <span class="form-hint" style="color:var(--success)">Connected! Chat ID: {{ telegram_chat_id }}</span>
+            {% endif %}
+        </div>
     </div>
 
     <div class="form-group">

@@ -200,6 +200,46 @@
                 </select>
             </div>
         </div>
+        <div id="elevenlabs-fetch" style="display:{% if current_backend == 'elevenlabs' %}block{% else %}none{% endif %};margin-bottom:0.75rem;">
+            <button type="button" class="btn-secondary" onclick="fetchElevenLabsVoices()" style="font-size:0.8rem;">Fetch My Voices</button>
+            <span id="elevenlabs-fetch-status" class="form-hint" style="margin-left:0.5rem;"></span>
+        </div>
+        <!-- ElevenLabs voice tuning -->
+        <div id="elevenlabs-params" style="display:{% if current_backend == 'elevenlabs' %}block{% else %}none{% endif %};">
+            {% set el_stability = config.audio.elevenlabs_stability if config else raw.get('audio', {}).get('elevenlabs_stability', 0.7) %}
+            {% set el_similarity = config.audio.elevenlabs_similarity_boost if config else raw.get('audio', {}).get('elevenlabs_similarity_boost', 0.8) %}
+            {% set el_style = config.audio.elevenlabs_style if config else raw.get('audio', {}).get('elevenlabs_style', 0.35) %}
+            {% set el_boost = config.audio.elevenlabs_speaker_boost if config else raw.get('audio', {}).get('elevenlabs_speaker_boost', true) %}
+            <div class="form-group">
+                <label>Stability <span id="stability-val">{{ '%.2f'|format(el_stability) }}</span></label>
+                <input type="range" name="elevenlabs_stability" min="0" max="1" step="0.05"
+                       value="{{ el_stability }}" oninput="document.getElementById('stability-val').textContent=parseFloat(this.value).toFixed(2)"
+                       style="width:100%;">
+                <span class="form-hint">Higher = more consistent, lower = more expressive</span>
+            </div>
+            <div class="form-group">
+                <label>Similarity Boost <span id="similarity-val">{{ '%.2f'|format(el_similarity) }}</span></label>
+                <input type="range" name="elevenlabs_similarity_boost" min="0" max="1" step="0.05"
+                       value="{{ el_similarity }}" oninput="document.getElementById('similarity-val').textContent=parseFloat(this.value).toFixed(2)"
+                       style="width:100%;">
+                <span class="form-hint">Higher = closer to original voice</span>
+            </div>
+            <div class="form-group">
+                <label>Style <span id="style-val">{{ '%.2f'|format(el_style) }}</span></label>
+                <input type="range" name="elevenlabs_style" min="0" max="1" step="0.05"
+                       value="{{ el_style }}" oninput="document.getElementById('style-val').textContent=parseFloat(this.value).toFixed(2)"
+                       style="width:100%;">
+                <span class="form-hint">Higher = more expressive style</span>
+            </div>
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                    <input type="checkbox" name="elevenlabs_speaker_boost"
+                           {% if el_boost %}checked{% endif %}>
+                    Speaker Boost
+                </label>
+                <span class="form-hint">Enhances speaker clarity</span>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -215,7 +255,21 @@
                        {% if config and config.telegram.enabled %}checked{% endif %}>
                 Enable Telegram delivery
             </label>
-            <span class="form-hint">Requires TELEGRAM_BOT_TOKEN set in API Keys. Message your bot <code>/start</code> to activate delivery.</span>
+        </div>
+        <div class="form-group">
+            <button type="button" class="btn-secondary" style="font-size:0.8rem;"
+                    hx-post="/settings/telegram/validate"
+                    hx-target="#telegram-settings-status"
+                    hx-swap="outerHTML">Test Connection</button>
+            <div id="telegram-settings-status" style="margin-top:0.5rem;">
+                {% if config and config.telegram.enabled and config.telegram.chat_id %}
+                <span class="form-hint" style="color:var(--success)">Connected (chat_id: {{ config.telegram.chat_id }})</span>
+                {% elif config and config.telegram.enabled %}
+                <span class="form-hint" style="color:var(--warning)">Not connected — click "Test Connection" then send /start to your bot</span>
+                {% else %}
+                <span class="form-hint">Set TELEGRAM_BOT_TOKEN in API Keys, then enable and test.</span>
+                {% endif %}
+            </div>
         </div>
         {% if config and config.telegram.chat_id %}
         <div class="form-group">
@@ -372,6 +426,42 @@ function updateVoiceOptions() {
     if (voices.includes(currentB)) selectB.value = currentB;
     else if (voices.length > 1) selectB.value = voices[1];
     else if (voices.length > 0) selectB.value = voices[0];
+
+    // Show/hide ElevenLabs-specific controls
+    const isEL = backend === 'elevenlabs';
+    document.getElementById('elevenlabs-params').style.display = isEL ? 'block' : 'none';
+    document.getElementById('elevenlabs-fetch').style.display = isEL ? 'block' : 'none';
+}
+
+function fetchElevenLabsVoices() {
+    const status = document.getElementById('elevenlabs-fetch-status');
+    status.textContent = 'Fetching...';
+    fetch('/settings/elevenlabs/voices')
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { status.textContent = data.error; return; }
+            const voices = data.voices || [];
+            if (voices.length === 0) { status.textContent = 'No voices found.'; return; }
+            const selectA = document.getElementById('voice_host_a');
+            const selectB = document.getElementById('voice_host_b');
+            const currentA = selectA.value;
+            const currentB = selectB.value;
+            [selectA, selectB].forEach(sel => {
+                sel.innerHTML = '';
+                voices.forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v.name;
+                    opt.textContent = v.name + (v.category ? ' (' + v.category + ')' : '');
+                    sel.appendChild(opt);
+                });
+            });
+            // Restore or default
+            const names = voices.map(v => v.name);
+            selectA.value = names.includes(currentA) ? currentA : (names[0] || '');
+            selectB.value = names.includes(currentB) ? currentB : (names[1] || names[0] || '');
+            status.textContent = voices.length + ' voices loaded.';
+        })
+        .catch(e => { status.textContent = 'Error: ' + e.message; });
 }
 
 // Toggle custom model selectors
