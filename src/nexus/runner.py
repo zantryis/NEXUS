@@ -109,10 +109,10 @@ async def run_all(
         if bot:
             try:
                 await bot.stop()
-            except Exception:
+            except BaseException:
                 pass
         try:
             await store.close()
-        except Exception:
+        except BaseException:
             pass
         logger.info("Nexus shutdown complete")

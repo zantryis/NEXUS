@@ -11,7 +11,8 @@ from nexus.web.app import create_app
 @pytest.fixture
 async def app_with_usage(tmp_path):
     db_path = tmp_path / "test.db"
-    app = create_app(db_path)
+    (tmp_path / "config.yaml").write_text("preset: balanced\ntopics:\n  - name: test\n")
+    app = create_app(db_path, data_dir=tmp_path)
     store = KnowledgeStore(db_path)
     await store.initialize()
 

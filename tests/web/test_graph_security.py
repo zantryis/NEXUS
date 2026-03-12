@@ -48,7 +48,8 @@ def test_normal_names_unchanged():
 async def graph_client(tmp_path):
     """Async HTTP client for graph route tests."""
     db_path = tmp_path / "test.db"
-    app = create_app(db_path)
+    (tmp_path / "config.yaml").write_text("preset: balanced\ntopics:\n  - name: test\n")
+    app = create_app(db_path, data_dir=tmp_path)
     store = KnowledgeStore(db_path)
     await store.initialize()
     app.state.store = store

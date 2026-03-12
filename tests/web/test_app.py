@@ -13,7 +13,8 @@ from nexus.web.app import create_app
 async def seeded_app(tmp_path):
     """Create an app with a seeded in-memory DB."""
     db_path = tmp_path / "test.db"
-    app = create_app(db_path)
+    (tmp_path / "config.yaml").write_text("preset: balanced\ntopics:\n  - name: test\n")
+    app = create_app(db_path, data_dir=tmp_path)
 
     # Manually initialize and seed the store before tests
     store = KnowledgeStore(db_path)

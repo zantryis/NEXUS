@@ -11,7 +11,8 @@ from nexus.web.app import create_app
 async def podcast_app(tmp_path):
     """App with seeded audio files."""
     db_path = tmp_path / "test.db"
-    app = create_app(db_path)
+    (tmp_path / "config.yaml").write_text("preset: balanced\ntopics:\n  - name: test\n")
+    app = create_app(db_path, data_dir=tmp_path)
 
     # Create fake audio files
     audio_dir = tmp_path / "audio"
@@ -54,7 +55,8 @@ async def test_feed_xml_contains_episodes(client):
 async def test_feed_xml_empty_dir(tmp_path):
     """Feed should still return valid RSS with no episodes."""
     db_path = tmp_path / "test.db"
-    app = create_app(db_path)
+    (tmp_path / "config.yaml").write_text("preset: balanced\ntopics:\n  - name: test\n")
+    app = create_app(db_path, data_dir=tmp_path)
     app.state.audio_dir = tmp_path / "empty_audio"
 
     store = KnowledgeStore(db_path)
