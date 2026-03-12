@@ -1,6 +1,5 @@
 """E2E smoke test runner — minimal pipeline run with real APIs, verifies outputs."""
 
-import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
@@ -8,7 +7,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
-from nexus.config.models import NexusConfig, TopicConfig, UserConfig, ModelsConfig, BudgetConfig
+from nexus.config.models import NexusConfig, TopicConfig, UserConfig, BudgetConfig
 from nexus.engine.pipeline import run_pipeline
 from nexus.llm.client import LLMClient
 
@@ -157,10 +156,11 @@ async def run_smoke_test(config: SmokeTestConfig) -> SmokeTestResult:
         return result
 
     try:
-        # Run pipeline (max_events=5 + narrow scope keeps volume low)
+        # Run pipeline with capped ingestion for speed
         briefing_path = await run_pipeline(
             nexus_cfg, llm, data_dir,
             gemini_api_key=api_key,
+            max_ingest=SMOKE_MAX_INGEST,
         )
 
         # Check 3: Briefing generated

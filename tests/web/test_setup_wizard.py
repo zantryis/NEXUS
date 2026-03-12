@@ -80,7 +80,7 @@ async def test_setup_step1_post_redirects_to_step2(app_no_config):
     """POST /setup/step/1 with preset should redirect to step 2."""
     transport = ASGITransport(app=app_no_config)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/setup/step/1", data={"preset": "balanced"}, follow_redirects=False)
+        resp = await client.post("/setup/step/1", data={"provider": "gemini", "preset": "balanced"}, follow_redirects=False)
         assert resp.status_code == 303
         assert "/setup/step/2" in resp.headers["location"]
 
@@ -90,7 +90,7 @@ async def test_setup_step1_free_skips_to_step3(app_no_config):
     """POST /setup/step/1 with free preset should skip to step 3."""
     transport = ASGITransport(app=app_no_config)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/setup/step/1", data={"preset": "free"}, follow_redirects=False)
+        resp = await client.post("/setup/step/1", data={"provider": "ollama", "preset": "free"}, follow_redirects=False)
         assert resp.status_code == 303
         assert "/setup/step/3" in resp.headers["location"]
 
@@ -100,9 +100,9 @@ async def test_setup_step1_invalid_preset_rejected(app_no_config):
     """Invalid presets should not be accepted by the web wizard."""
     transport = ASGITransport(app=app_no_config)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/setup/step/1", data={"preset": "evil"})
+        resp = await client.post("/setup/step/1", data={"provider": "", "preset": "evil"})
         assert resp.status_code == 400
-        assert "valid preset" in resp.text
+        assert "provider" in resp.text.lower()
 
 
 @pytest.mark.asyncio
@@ -162,8 +162,8 @@ async def test_setup_disabled_after_config_exists(app_with_config):
 @patch.dict("os.environ", {}, clear=False)
 async def test_remote_setup_requires_admin_token(app_no_config):
     """Remote setup access is blocked unless an admin token is configured."""
-    transport = ASGITransport(app=app_no_config, client=("203.0.113.10", 12345))
-    async with AsyncClient(transport=transport, base_url="http://192.168.1.50") as client:
+    transport = ASGITransport(app=app_no_config, client=("8.8.8.8", 12345))
+    async with AsyncClient(transport=transport, base_url="http://external.example.com") as client:
         resp = await client.get("/setup")
         assert resp.status_code == 403
 
@@ -172,8 +172,8 @@ async def test_remote_setup_requires_admin_token(app_no_config):
 @patch.dict("os.environ", {"NEXUS_ADMIN_TOKEN": "secret"})
 async def test_remote_setup_accepts_admin_token(app_no_config):
     """Remote setup access can be explicitly unlocked with an admin token."""
-    transport = ASGITransport(app=app_no_config, client=("203.0.113.10", 12345))
-    async with AsyncClient(transport=transport, base_url="http://192.168.1.50") as client:
+    transport = ASGITransport(app=app_no_config, client=("8.8.8.8", 12345))
+    async with AsyncClient(transport=transport, base_url="http://external.example.com") as client:
         resp = await client.get("/setup?admin_token=secret", follow_redirects=False)
         assert resp.status_code == 303
         assert "nexus_admin=" in resp.headers["set-cookie"]

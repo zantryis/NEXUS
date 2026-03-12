@@ -9,7 +9,6 @@ from pathlib import Path
 
 from nexus.config.models import ModelsConfig
 from nexus.engine.sources.discovery import discover_sources
-from nexus.engine.sources.diversity import compute_diversity
 from nexus.llm.client import LLMClient
 
 

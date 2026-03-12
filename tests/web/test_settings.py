@@ -236,8 +236,8 @@ async def test_graph_invalid_params_return_400(settings_app):
 async def test_remote_settings_requires_localhost_or_token(settings_app):
     """Remote settings access is blocked by default."""
     app, _ = settings_app
-    transport = ASGITransport(app=app, client=("203.0.113.10", 12345))
-    async with AsyncClient(transport=transport, base_url="http://192.168.1.50") as client:
+    transport = ASGITransport(app=app, client=("8.8.8.8", 12345))
+    async with AsyncClient(transport=transport, base_url="http://external.example.com") as client:
         resp = await client.get("/settings")
         assert resp.status_code == 403
 
@@ -247,8 +247,8 @@ async def test_remote_settings_requires_localhost_or_token(settings_app):
 async def test_remote_settings_token_unlocks_session(settings_app):
     """Remote settings can be used when an explicit admin token is provided."""
     app, data_dir = settings_app
-    transport = ASGITransport(app=app, client=("203.0.113.10", 12345))
-    async with AsyncClient(transport=transport, base_url="http://192.168.1.50") as client:
+    transport = ASGITransport(app=app, client=("8.8.8.8", 12345))
+    async with AsyncClient(transport=transport, base_url="http://external.example.com") as client:
         resp = await client.get("/settings?admin_token=secret", follow_redirects=False)
         assert resp.status_code == 303
         assert resp.headers["location"] == "/settings"

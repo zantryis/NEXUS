@@ -2,7 +2,6 @@
 
 import os
 import pytest
-from pathlib import Path
 
 
 def _has_api_keys() -> bool:

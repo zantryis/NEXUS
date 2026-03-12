@@ -99,6 +99,7 @@ async def run_topic_pipeline(
     sources: list[dict],
     store: KnowledgeStore,
     capture: FixtureCapture | None = None,
+    max_ingest: int | None = None,
 ) -> TopicSynthesis:
     """Run the pipeline for a single topic: poll → ingest → filter → events → synthesize."""
     slug = topic.name.lower().replace(" ", "-").replace("/", "-")
@@ -127,7 +128,7 @@ async def run_topic_pipeline(
 
     # Cap ingestion to avoid excessive LLM filtering costs
     # Prioritize items with published dates (most recent first), then undated
-    MAX_INGEST = 250
+    MAX_INGEST = max_ingest or 250
     if len(unique_items) > MAX_INGEST:
         dated = sorted(
             [i for i in unique_items if i.published],
@@ -300,6 +301,7 @@ async def run_pipeline(
     gemini_api_key: str | None = None,
     openai_api_key: str | None = None,
     elevenlabs_api_key: str | None = None,
+    max_ingest: int | None = None,
 ) -> Path:
     """Run the full daily engine pipeline. Returns path to generated briefing."""
     pipeline_start = time.monotonic()
@@ -328,7 +330,8 @@ async def run_pipeline(
                 cap = FixtureCapture(fixture_dir, slug)
             try:
                 syn = await run_topic_pipeline(llm, topic, data_dir, sources,
-                                               store=store, capture=cap)
+                                               store=store, capture=cap,
+                                               max_ingest=max_ingest)
                 syntheses.append(syn)
             except Exception:
                 logger.exception(f"[{topic.name}] Topic pipeline failed — skipping")

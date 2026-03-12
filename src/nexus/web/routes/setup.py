@@ -8,8 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse, HTMLResponse
 
-from nexus.cli.setup import PRESET_INFO, PROVIDER_INFO, PROVIDER_TIERS, TOPIC_CHOICES
-from nexus.config.presets import preset_names
+from nexus.cli.setup import PROVIDER_INFO, PROVIDER_TIERS, TOPIC_CHOICES
 from nexus.config.writer import write_config, write_env
 from nexus.web.app import get_templates
 

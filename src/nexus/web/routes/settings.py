@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from starlette.background import BackgroundTask
 
 from nexus.config.presets import preset_names

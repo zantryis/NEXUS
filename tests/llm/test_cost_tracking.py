@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from nexus.config.models import BudgetConfig, ModelsConfig
 from nexus.engine.knowledge.store import KnowledgeStore
-from nexus.llm.budget import BudgetGuard
 from nexus.llm.client import LLMClient
 
 

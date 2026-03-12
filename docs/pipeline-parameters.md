@@ -17,7 +17,7 @@ All others are code constants — modify in source or wait for future config sup
 
 | Parameter | Value | Location | Notes |
 |-----------|-------|----------|-------|
-| `MAX_INGEST` | 250 articles | `pipeline.py` | Cap per topic — prioritizes most recent dated items |
+| `MAX_INGEST` | 250 articles (default) | `pipeline.py:131` | Cap per topic — overridable via `max_ingest` param. Smoke tests use 20 |
 | Global concurrency | 10 | `ingest.py` semaphore | Max concurrent HTTP fetches |
 | Per-domain concurrency | 2 | `ingest.py` semaphore | Rate-limits per domain |
 
@@ -151,7 +151,54 @@ Pricing table in `cost.py:6-29`. Formula:
 cost = (input_tokens / 1M) × input_price + (output_tokens / 1M) × output_price
 ```
 
-## 11. Quality Evaluation (Judge)
+## 11. Source Discovery
+
+### Discovery Flow
+
+| Step | Description | Location |
+|------|-------------|----------|
+| 1. Global registry matching | LLM scores curated feeds against topic relevance | `discovery.py:87-154` |
+| 2. Google News RSS | Free, always-valid RSS feeds via Google News search | `discovery.py:160-194` |
+| 3. Web search discovery | DuckDuckGo search for RSS feed URLs | `discovery.py:200-245` |
+| 4. Metadata classification | LLM classifies affiliation, country, tier for unknowns | `discovery.py:287-330` |
+| 5. Diversity scoring | Shannon entropy across geographic, affiliation, language axes | `diversity.py` |
+
+### Discovery Parameters
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| Max registry matches | 20 | `discovery.py:93` | Top curated feeds scored ≥ 5/10 |
+| Registry relevance threshold | 5 | `discovery.py:127` | Score 1–10, below 5 excluded |
+| Google News subtopic limit | 3 | `discovery.py:164` | Max subtopic queries for Google News RSS |
+| Web search results per query | 8 | `websearch.py` via `_find_rss_feeds` | DuckDuckGo results per query |
+| Feed validation concurrency | 5 | `discovery.py:404` | Semaphore for parallel URL validation |
+| Max web URLs to validate | 30 | `discovery.py:410` | Cap on web-discovered URLs to check |
+| Default max feeds | 25 | `discovery.py:355` | Total feeds returned per topic |
+| Smoke test max feeds | 8 | `smoke.py:27` | Reduced for speed |
+
+### Diversity Scoring
+
+| Metric | Formula | Thresholds |
+|--------|---------|------------|
+| Geographic | Shannon entropy of country distribution | `< 1.0` → warning |
+| Affiliation | Shannon entropy of affiliation distribution | `< 0.8` → warning |
+| Language | Shannon entropy of language distribution | `< 0.5` → warning |
+| Overall | Mean of geographic, affiliation, language scores | — |
+
+Warnings triggered by:
+- Geographic concentration: `< 1.0` entropy (< 3 countries effectively)
+- Single perspective: only 1 affiliation type
+- Unknown affiliations: > 50% feeds with `affiliation="unknown"`
+
+### LLM Prompts
+
+| Prompt | Location | Purpose |
+|--------|----------|---------|
+| `QUERY_SYSTEM_PROMPT` | `discovery.py:28-38` | Generate search queries for finding RSS feeds |
+| `REGISTRY_MATCH_PROMPT` | `discovery.py:40-49` | Score curated sources against topic relevance |
+| `CLASSIFY_PROMPT` | `discovery.py:51-59` | Classify feed metadata (affiliation, country, tier) |
+
+## 12. Quality Evaluation (Judge)
 
 **Rubric** (system prompt at `judge.py:12-34`):
 > Score on 5 dimensions (1–10 each): completeness, source balance, convergence accuracy, divergence detection, entity coverage.
