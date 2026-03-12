@@ -67,3 +67,7 @@ asyncio_mode = "auto"
 filterwarnings = [
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",
 ]
+markers = [
+    "e2e: End-to-end tests hitting real APIs (run with: -m e2e)",
+    "integration: Integration tests (run with: -m integration)",
+]

@@ -436,6 +436,63 @@ def run_all_services():
     asyncio.run(run_all(config, data_dir, host=host, port=port))
 
 
+def run_test():
+    """Run E2E smoke test with real APIs."""
+    load_dotenv()
+    from nexus.testing.smoke import SmokeTestConfig, run_smoke_test
+
+    topic = "AI/ML Research"
+    test_telegram = False
+    test_audio = False
+
+    args = sys.argv[2:]
+    i = 0
+    while i < len(args):
+        if args[i] == "--topic" and i + 1 < len(args):
+            topic = args[i + 1]
+            i += 2
+        elif args[i] == "--telegram":
+            test_telegram = True
+            i += 1
+        elif args[i] == "--audio":
+            test_audio = True
+            i += 1
+        else:
+            i += 1
+
+    config = SmokeTestConfig(
+        topic_name=topic,
+        test_telegram=test_telegram,
+        test_audio=test_audio,
+    )
+
+    print(f"Running smoke test: topic='{topic}'")
+    print(f"  telegram={test_telegram}, audio={test_audio}")
+    print()
+
+    result = asyncio.run(run_smoke_test(config))
+
+    # Print results
+    print(f"{'=' * 50}")
+    print(f"Smoke Test Results  ({result.timing_s}s)")
+    print(f"{'=' * 50}")
+    for check in result.checks:
+        status = "PASS" if check.passed else "FAIL"
+        print(f"  [{status}] {check.name}: {check.detail}")
+
+    if result.errors:
+        print(f"\nErrors:")
+        for err in result.errors:
+            print(f"  - {err}")
+
+    print(f"\nSummary: events={result.events_found}, "
+          f"briefing={result.briefing_chars} chars, "
+          f"cost=${result.cost_usd:.4f}")
+    print(f"Result: {'PASS' if result.success else 'FAIL'}")
+
+    sys.exit(0 if result.success else 1)
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -450,7 +507,8 @@ def main():
               "  engine    Run the pipeline once\n"
               "  serve     Start dashboard only\n"
               "  sources   Manage feeds (check | list | build | discover)\n"
-              "  evaluate  Judge synthesis quality\n")
+              "  evaluate  Judge synthesis quality\n"
+              "  test      Run E2E smoke test with real APIs\n")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -468,6 +526,8 @@ def main():
     elif command == "setup":
         from nexus.cli.setup import run_setup
         run_setup(Path("data"))
+    elif command == "test":
+        run_test()
     else:
         print(f"Unknown command: {command}")
         sys.exit(1)
