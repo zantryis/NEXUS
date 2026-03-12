@@ -1,6 +1,9 @@
 """Tests for audio concatenation."""
 
 import struct
+import shutil
+
+import pytest
 
 from nexus.engine.audio.concat import concatenate_audio, _make_wav_silence
 
@@ -36,6 +39,10 @@ def test_make_wav_silence():
     assert b"WAVE" in silence[:12]
 
 
+@pytest.mark.skipif(
+    shutil.which("ffmpeg") is None and shutil.which("avconv") is None,
+    reason="ffmpeg/avconv is required for MP3 export tests",
+)
 async def test_concatenate_audio_single_segment(tmp_path):
     """Single segment should produce a valid output file."""
     segments = [_make_tiny_wav(100)]
@@ -47,6 +54,10 @@ async def test_concatenate_audio_single_segment(tmp_path):
     assert result.stat().st_size > 0
 
 
+@pytest.mark.skipif(
+    shutil.which("ffmpeg") is None and shutil.which("avconv") is None,
+    reason="ffmpeg/avconv is required for MP3 export tests",
+)
 async def test_concatenate_audio_multiple_segments(tmp_path):
     """Multiple segments should be concatenated with silence gaps."""
     segments = [_make_tiny_wav(100), _make_tiny_wav(100), _make_tiny_wav(100)]
@@ -56,3 +67,13 @@ async def test_concatenate_audio_multiple_segments(tmp_path):
 
     assert result.exists()
     assert result.stat().st_size > 0
+
+
+@pytest.mark.skipif(
+    shutil.which("ffmpeg") is not None or shutil.which("avconv") is not None,
+    reason="Missing-binary behavior only applies when ffmpeg/avconv is unavailable",
+)
+async def test_concatenate_audio_requires_ffmpeg(tmp_path):
+    """Missing ffmpeg should raise a clear runtime error instead of a traceback."""
+    with pytest.raises(RuntimeError, match="ffmpeg is required"):
+        await concatenate_audio([_make_tiny_wav(100)], tmp_path / "output.mp3")

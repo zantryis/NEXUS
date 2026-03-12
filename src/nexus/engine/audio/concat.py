@@ -2,8 +2,9 @@
 
 import asyncio
 import io
-import struct
 import logging
+import shutil
+import struct
 from pathlib import Path
 
 from pydub import AudioSegment
@@ -40,6 +41,10 @@ async def concatenate_audio(
     silence_ms: int = 300,
 ) -> Path:
     """Concatenate WAV audio segments with silence gaps, export as MP3."""
+    if not shutil.which("ffmpeg") and not shutil.which("avconv"):
+        raise RuntimeError(
+            "ffmpeg is required to export podcast audio. Install ffmpeg and retry."
+        )
 
     def _concat():
         combined = AudioSegment.empty()
