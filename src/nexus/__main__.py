@@ -63,11 +63,13 @@ def run_engine():
             else:
                 print(f"  Warning: unknown model key '{key}'")
 
+    ollama_base_url = os.getenv("OLLAMA_BASE_URL")
     llm = LLMClient(
         config.models, api_key=api_key,
         anthropic_api_key=anthropic_api_key,
         deepseek_api_key=deepseek_api_key,
         openai_api_key=openai_api_key,
+        ollama_base_url=ollama_base_url,
         budget_config=config.budget,
     )
 

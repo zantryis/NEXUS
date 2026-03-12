@@ -32,6 +32,8 @@ Open `http://localhost:8080` — the web setup wizard will guide you through con
 
 ### Without Docker
 
+Requires Python 3.11+ and [ffmpeg](https://ffmpeg.org/) (for podcast audio).
+
 ```bash
 git clone https://github.com/Tyan3001/NEXUS.git
 cd NEXUS
@@ -81,10 +83,12 @@ Only **one LLM API key** is required to get started. The setup wizard will help 
 
 ```bash
 python -m nexus run                     # Start all services (dashboard + scheduler + Telegram bot)
+python -m nexus run --port 9090         # Start on a different port (default: 8080)
+python -m nexus run --host 127.0.0.1    # Bind to localhost only (default: 0.0.0.0)
 python -m nexus engine                  # Run pipeline once
 python -m nexus engine --topic <slug>   # Run pipeline for one topic
 python -m nexus engine --capture        # Run pipeline and save fixtures for backtesting
-python -m nexus serve                   # Dashboard only
+python -m nexus serve                   # Dashboard only (also accepts --port/--host)
 python -m nexus setup                   # Interactive CLI setup wizard
 python -m nexus sources check           # Test RSS feed health
 python -m nexus sources list            # List all global sources
@@ -105,8 +109,11 @@ python -m nexus evaluate compare <path> <path>  # Compare two syntheses
 | `DEEPSEEK_API_KEY` | For DeepSeek preset | LLM completions |
 | `TELEGRAM_BOT_TOKEN` | No | Telegram delivery (get from [@BotFather](https://t.me/BotFather)) |
 | `ELEVENLABS_API_KEY` | No | Alternative TTS provider |
+| `OLLAMA_BASE_URL` | No | Ollama server URL (default: `http://localhost:11434`) |
 
 At least one LLM API key is required (unless using the free/Ollama preset).
+
+> **Ollama + Docker:** The `free` preset expects Ollama at `localhost:11434`. In Docker, set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in `.env` to reach a host-side Ollama server, or add an Ollama service to `docker-compose.yml`.
 
 ### Topics (`data/config.yaml`)
 

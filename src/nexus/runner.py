@@ -1,5 +1,6 @@
 """Unified runner — starts dashboard + scheduler + Telegram bot."""
 
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -32,6 +33,8 @@ async def run_all(
     openai_api_key = os.getenv("OPENAI_API_KEY")
     elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
 
+    ollama_base_url = os.getenv("OLLAMA_BASE_URL")
+
     # Initialize shared resources
     llm = LLMClient(
         config.models,
@@ -39,6 +42,7 @@ async def run_all(
         anthropic_api_key=anthropic_api_key,
         deepseek_api_key=deepseek_api_key,
         openai_api_key=openai_api_key,
+        ollama_base_url=ollama_base_url,
         budget_config=config.budget,
     )
 
@@ -95,12 +99,20 @@ async def run_all(
         # Run uvicorn — blocks until shutdown signal
         await server.serve()
 
+    except asyncio.CancelledError:
+        pass  # Normal Ctrl+C shutdown
     finally:
         # Graceful shutdown
         if scheduler:
             scheduler.shutdown(wait=False)
             logger.info("Scheduler stopped")
         if bot:
-            await bot.stop()
-        await store.close()
+            try:
+                await bot.stop()
+            except Exception:
+                pass
+        try:
+            await store.close()
+        except Exception:
+            pass
         logger.info("Nexus shutdown complete")

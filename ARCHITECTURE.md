@@ -238,11 +238,12 @@ Each pipeline stage has a `config_key` mapping to a model:
 |--------|-----------|-------------|----------|
 | `free` | ollama/qwen2 | ollama/qwen2 | $0 |
 | `cheap` | deepseek-chat | deepseek-chat | ~$0.01 |
-| `balanced` | gemini-3-flash | gemini-3.1-pro | ~$0.05 |
-| `quality` | gemini-3-flash | gemini-3.1-pro | ~$0.15 |
-| `openai-cheap` | gpt-4.1-nano | gpt-4.1-mini | ~$0.03 |
-| `openai-balanced` | gpt-4.1-mini | gpt-4.1 | ~$0.10 |
-| `anthropic` | claude-haiku | claude-sonnet | ~$0.10 |
+| `balanced` | gemini-3-flash-preview | gemini-3.1-pro-preview | ~$0.05 |
+| `quality` | gemini-3-flash-preview | gemini-3.1-pro-preview | ~$0.15 |
+| `openai-cheap` | gpt-4.1-nano | gpt-5-mini | ~$0.03 |
+| `openai-balanced` | gpt-4.1-mini | gpt-5.4 | ~$0.10 |
+| `openai-quality` | gpt-5-mini | gpt-5.4 | ~$0.25 |
+| `anthropic` | claude-haiku-4-5 | claude-sonnet-4-6 | ~$0.10 |
 
 ---
 
