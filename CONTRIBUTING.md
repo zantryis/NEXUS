@@ -49,7 +49,7 @@ We follow **TDD** (test-driven development):
 
 ## Project Structure
 
-See [ARCHITECTURE.md](../ARCHITECTURE.md) for a detailed system overview.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for a detailed system overview.
 
 ```
 src/nexus/
