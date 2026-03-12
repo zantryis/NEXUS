@@ -460,16 +460,17 @@ async def setup_launch(request: Request):
                 if not registry_path.exists():
                     status["stage"] = f"discovering:{topic_cfg.name}"
                     try:
-                        discovered = await discover_sources(
+                        result = await discover_sources(
                             llm, topic_cfg.name,
                             subtopics=topic_cfg.subtopics,
+                            data_dir=data_dir,
                         )
-                        if discovered:
+                        if result.feeds:
                             registry_path.parent.mkdir(parents=True, exist_ok=True)
                             registry_path.write_text(
-                                _yaml.dump({"sources": discovered}, default_flow_style=False)
+                                _yaml.dump({"sources": result.feeds}, default_flow_style=False)
                             )
-                            logger.info(f"Discovered {len(discovered)} sources for {topic_cfg.name}")
+                            logger.info(f"Discovered {len(result.feeds)} sources for {topic_cfg.name}")
                     except Exception as disc_err:
                         logger.warning(f"Source discovery failed for {topic_cfg.name}: {disc_err}")
 

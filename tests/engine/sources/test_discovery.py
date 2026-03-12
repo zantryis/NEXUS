@@ -62,26 +62,32 @@ async def test_validate_feed_invalid(mock_fp):
     assert result is None
 
 
+@patch("nexus.engine.sources.discovery.classify_feed_metadata", new_callable=AsyncMock)
 @patch("nexus.engine.sources.discovery._validate_feed")
 @patch("nexus.engine.sources.discovery._find_rss_feeds")
 @patch("nexus.engine.sources.discovery._generate_search_queries")
-async def test_discover_sources_pipeline(mock_queries, mock_find, mock_validate):
+@patch("nexus.engine.sources.discovery._discover_from_google_news")
+async def test_discover_sources_pipeline(mock_gnews, mock_queries, mock_find, mock_validate, mock_classify):
     """Full discovery pipeline: queries -> search -> validate."""
+    mock_gnews.return_value = []
     mock_queries.return_value = ["horticulture RSS"]
     mock_find.return_value = ["https://garden.org/rss", "https://plants.com/feed"]
     mock_validate.side_effect = [
         {"id": "garden-org", "url": "https://garden.org/rss", "type": "rss",
-         "language": "en", "affiliation": "unknown", "country": "unknown", "tier": "B"},
+         "language": "en", "affiliation": "unknown", "country": "unknown", "tier": "B",
+         "name": "Garden Org"},
         None,  # invalid feed
     ]
+    mock_classify.side_effect = lambda llm, feeds: feeds  # passthrough
 
     llm = AsyncMock()
-    results = await discover_sources(
+    result = await discover_sources(
         llm, "horticulture", subtopics=["gardening"],
     )
 
-    assert len(results) == 1
-    assert results[0]["url"] == "https://garden.org/rss"
+    assert len(result.feeds) == 1
+    assert result.feeds[0]["url"] == "https://garden.org/rss"
+    assert result.sources_from_web == 1
 
 
 async def test_discover_sources_deduplicates():

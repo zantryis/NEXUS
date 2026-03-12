@@ -245,18 +245,55 @@ def run_sources():
             for s_entry in existing_reg.get("sources", []):
                 existing_urls.add(s_entry.get("url", ""))
 
-        discovered = asyncio.run(discover_sources(
+        result = asyncio.run(discover_sources(
             llm, topic.name, subtopics=topic.subtopics,
             existing_urls=existing_urls,
+            data_dir=data_dir,
         ))
 
-        if not discovered:
+        if not result.feeds:
             print(f"No new feeds discovered for '{slug}'.")
             sys.exit(0)
 
-        print(f"Discovered {len(discovered)} feeds for '{slug}':")
-        for d in discovered:
-            print(f"  [{d['language']}] {d['id']:30s} {d['url']}")
+        print(f"\nDiscovered {len(result.feeds)} feeds for '{slug}':")
+        print(f"  From registry: {result.sources_from_registry}")
+        print(f"  From Google News: {result.sources_from_google_news}")
+        print(f"  From web search: {result.sources_from_web}")
+        print()
+
+        for d in result.feeds:
+            affil = d.get('affiliation', '?')[:8]
+            country = d.get('country', '?')
+            print(f"  [{d['language']}] [{affil:8s}] [{country}] {d.get('name', d['id'])}")
+            print(f"      {d['url']}")
+
+        # Diversity metrics
+        dm = result.diversity
+        print(f"\nDiversity: geo={dm.geographic_score:.2f} affil={dm.affiliation_score:.2f} "
+              f"lang={dm.language_score:.2f} overall={dm.overall:.2f}")
+        for w in dm.warnings:
+            print(f"  ⚠ {w}")
+
+        # Semi-supervised: ask for approval
+        print()
+        choice = input("[A]ccept all / [R]eview individually / [C]ancel: ").strip().lower()
+        if choice == "c":
+            print("Cancelled.")
+            sys.exit(0)
+
+        approved = result.feeds
+        if choice == "r":
+            approved = []
+            for d in result.feeds:
+                name = d.get('name', d['id'])
+                resp = input(f"  Keep '{name}'? [y/n]: ").strip().lower()
+                if resp != "n":
+                    approved.append(d)
+            print(f"\nApproved {len(approved)} of {len(result.feeds)} feeds.")
+
+        if not approved:
+            print("No feeds approved.")
+            sys.exit(0)
 
         # Append to existing registry
         existing_path.parent.mkdir(parents=True, exist_ok=True)
@@ -264,9 +301,9 @@ def run_sources():
             reg = _yaml.safe_load(existing_path.read_text()) or {}
         else:
             reg = {"sources": []}
-        reg["sources"].extend(discovered)
+        reg["sources"].extend(approved)
         existing_path.write_text(_yaml.dump(reg, default_flow_style=False))
-        print(f"Updated {existing_path}")
+        print(f"Updated {existing_path} with {len(approved)} sources")
 
     elif subcommand == "list":
         for s in sources:
