@@ -1,7 +1,6 @@
 """Tests for audio file serving security."""
 
 import pytest
-from pathlib import Path
 from httpx import AsyncClient, ASGITransport
 
 from nexus.engine.knowledge.store import KnowledgeStore

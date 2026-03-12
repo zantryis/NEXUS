@@ -1,8 +1,6 @@
 """Tests for schema v3 migration (breaking_alerts + feedback)."""
 
-import pytest
 import aiosqlite
-from pathlib import Path
 
 from nexus.engine.knowledge.schema import initialize_schema, get_schema_version, CURRENT_VERSION
 

@@ -1,7 +1,7 @@
 """Tests for cost tracking module."""
 
 import pytest
-from nexus.llm.cost import estimate_cost, cost_summary, PRICING
+from nexus.llm.cost import estimate_cost, cost_summary
 from nexus.llm.client import UsageTracker
 
 

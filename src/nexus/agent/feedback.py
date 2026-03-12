@@ -1,7 +1,6 @@
 """Feedback handling — inline keyboard for briefing ratings."""
 
 import logging
-from datetime import date
 
 from nexus.engine.knowledge.store import KnowledgeStore
 

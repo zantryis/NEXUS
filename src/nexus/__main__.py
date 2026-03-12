@@ -348,14 +348,6 @@ def run_all_services():
     data_dir = Path("data")
     config_path = data_dir / "config.yaml"
 
-    if not config_path.exists():
-        print(f"Config not found at {config_path}.")
-        print(f"  Run: python -m nexus setup")
-        print(f"  Or:  cp data/config.example.yaml data/config.yaml")
-        sys.exit(1)
-
-    config = load_config(config_path)
-
     host = "0.0.0.0"
     port = 8080
     if "--port" in sys.argv:
@@ -367,6 +359,19 @@ def run_all_services():
         if idx + 1 < len(sys.argv):
             host = sys.argv[idx + 1]
 
+    if not config_path.exists():
+        # No config yet — start dashboard only so the web setup wizard can run
+        logging.getLogger(__name__).info(
+            "No config found — starting dashboard for web setup wizard at http://%s:%s",
+            host, port,
+        )
+        import uvicorn
+        from nexus.web.app import create_app
+        app = create_app(data_dir / "knowledge.db")
+        uvicorn.run(app, host=host, port=port)
+        return
+
+    config = load_config(config_path)
     asyncio.run(run_all(config, data_dir, host=host, port=port))
 
 

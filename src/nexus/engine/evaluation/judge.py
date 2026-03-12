@@ -2,9 +2,7 @@
 
 import json
 import logging
-from pathlib import Path
 
-import yaml
 
 from nexus.engine.synthesis.knowledge import TopicSynthesis
 from nexus.llm.client import LLMClient

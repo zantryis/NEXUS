@@ -1,16 +1,14 @@
 """Tests for audio dialogue script generation."""
 
 import json
-import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 from datetime import date
 
-from nexus.config.models import NexusConfig, UserConfig, AudioConfig, ModelsConfig
+from nexus.config.models import NexusConfig, UserConfig, AudioConfig
 from nexus.engine.audio.script import (
     DialogueTurn,
     DialogueScript,
     generate_dialogue_script,
-    DIALOGUE_SYSTEM_PROMPT,
 )
 from nexus.engine.synthesis.knowledge import TopicSynthesis, NarrativeThread
 from nexus.engine.knowledge.events import Event

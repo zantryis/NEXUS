@@ -12,9 +12,14 @@ router = APIRouter()
 async def graph_page(request: Request):
     """Full-page interactive knowledge graph."""
     templates = get_templates(request)
-    focus = request.query_params.get("focus", "")
+    raw_focus = request.query_params.get("focus", "")
+    # Validate: must be an integer or empty — prevents JS injection
+    try:
+        focus_entity_id = int(raw_focus) if raw_focus else None
+    except (ValueError, TypeError):
+        focus_entity_id = None
     return templates.TemplateResponse(request, "graph.html", {
-        "focus_entity_id": focus,
+        "focus_entity_id": focus_entity_id,
     })
 
 

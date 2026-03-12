@@ -1,7 +1,6 @@
 """Tests for the podcast RSS feed route."""
 
 import pytest
-from pathlib import Path
 from httpx import AsyncClient, ASGITransport
 
 from nexus.engine.knowledge.store import KnowledgeStore

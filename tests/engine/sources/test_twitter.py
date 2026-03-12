@@ -1,7 +1,6 @@
 """Tests for Twitter/Nitter source adapter."""
 
-import pytest
-from unittest.mock import patch, call
+from unittest.mock import patch
 
 from nexus.engine.sources.twitter import TwitterAdapter
 from nexus.engine.sources.polling import ContentItem

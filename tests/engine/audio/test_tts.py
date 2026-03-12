@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from nexus.config.models import AudioConfig
-from nexus.engine.audio.tts import TTSBackend, GeminiTTS, ElevenLabsTTS, OpenAITTS, get_tts_backend
+from nexus.engine.audio.tts import GeminiTTS, ElevenLabsTTS, OpenAITTS, get_tts_backend
 from nexus.engine.audio.script import DialogueTurn
 
 

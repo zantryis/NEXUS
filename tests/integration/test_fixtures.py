@@ -78,7 +78,7 @@ def test_replay_missing_files(tmp_path):
     """Replay with missing files returns empty lists."""
     fixture_dir = tmp_path / "fixtures"
     FixtureCapture(fixture_dir, "test-topic", "day-1")
-    replay = FixtureReplay(fixture_dir, "test-topic", "day-1")
+    FixtureReplay(fixture_dir, "test-topic", "day-1")
 
     # Dir exists but files haven't been written
     # save_polled was not called, so polled.json doesn't exist

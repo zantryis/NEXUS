@@ -6,8 +6,7 @@ podcast, dashboard) render from TopicSynthesis, not from raw events.
 
 import json
 import logging
-from datetime import date
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 from pydantic import BaseModel, Field
 

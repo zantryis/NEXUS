@@ -4,7 +4,7 @@ import os
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Request, Form
+from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from nexus.config.writer import write_config, write_env

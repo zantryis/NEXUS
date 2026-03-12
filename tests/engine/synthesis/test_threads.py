@@ -1,13 +1,11 @@
 """Tests for persistent thread matching and lifecycle."""
 
 import json
-import pytest
 from datetime import date
 from unittest.mock import AsyncMock
 
 from nexus.engine.knowledge.events import Event
 from nexus.engine.synthesis.threads import (
-    ThreadMatch,
     compute_entity_overlap,
     match_events_to_threads,
     create_thread_slug,

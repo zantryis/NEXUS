@@ -17,9 +17,10 @@ def load_config(path: Path) -> NexusConfig:
     raw = yaml.safe_load(path.read_text())
 
     preset_name = raw.get("preset")
-    if preset_name:
+    if preset_name and preset_name != "custom":
         model_overrides = raw.get("models")
         resolved = apply_preset(preset_name, overrides=model_overrides)
         raw["models"] = resolved.model_dump()
+    # "custom" preset: use models dict from config as-is (defaults fill gaps)
 
     return NexusConfig(**raw)

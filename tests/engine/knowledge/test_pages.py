@@ -1,6 +1,5 @@
 """Tests for cached narrative page generation and staleness."""
 
-import json
 import pytest
 from datetime import date
 from unittest.mock import AsyncMock

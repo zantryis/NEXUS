@@ -3,7 +3,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import date
-from pathlib import Path
 
 from nexus.config.models import NexusConfig, UserConfig, TelegramConfig, BriefingConfig
 from nexus.agent.bot import NexusBot, user_today

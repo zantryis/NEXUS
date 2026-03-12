@@ -2,7 +2,6 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from pathlib import Path
 
 import yaml
 from httpx import AsyncClient, ASGITransport

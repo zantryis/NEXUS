@@ -11,6 +11,7 @@ PRESET_INFO = [
     ("quality", "Quality (Gemini Pro)", "~$0.15/day — needs GEMINI_API_KEY", "GEMINI_API_KEY"),
     ("openai-cheap", "OpenAI Cheap", "~$0.03/day — needs OPENAI_API_KEY", "OPENAI_API_KEY"),
     ("openai-balanced", "OpenAI Balanced", "~$0.10/day — needs OPENAI_API_KEY", "OPENAI_API_KEY"),
+    ("openai-quality", "OpenAI Quality", "~$0.25/day — needs OPENAI_API_KEY", "OPENAI_API_KEY"),
     ("anthropic", "Anthropic (Claude)", "~$0.10/day — needs ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"),
 ]
 

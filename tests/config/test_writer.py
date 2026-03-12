@@ -1,7 +1,5 @@
 """Tests for config writer module."""
 
-import pytest
-from pathlib import Path
 
 from nexus.config.writer import write_config, write_env
 from nexus.config.loader import load_config

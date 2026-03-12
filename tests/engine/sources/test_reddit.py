@@ -1,6 +1,5 @@
 """Tests for Reddit source adapter."""
 
-import pytest
 from unittest.mock import patch
 
 from nexus.engine.sources.reddit import RedditAdapter

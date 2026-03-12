@@ -1,9 +1,7 @@
 """Tests for the setup wizard."""
 
-import pytest
 import yaml
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from nexus.cli.setup import run_setup, PRESET_INFO, TOPIC_CHOICES
 

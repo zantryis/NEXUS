@@ -7,7 +7,6 @@ thread deep-dives, weekly recaps) and caches them in the knowledge store.
 import hashlib
 import json
 import logging
-from typing import Any
 
 from nexus.engine.knowledge.compression import Summary
 from nexus.engine.knowledge.store import KnowledgeStore

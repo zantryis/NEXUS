@@ -1,6 +1,5 @@
 """Tests for OpenAI OAuth PKCE flow."""
 
-import json
 import time
 import pytest
 from pathlib import Path

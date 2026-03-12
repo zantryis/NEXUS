@@ -2,8 +2,7 @@
 
 import pytest
 from datetime import date
-from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 from nexus.config.models import NexusConfig, UserConfig, TopicConfig
 from nexus.engine.pipeline import run_pipeline, _event_cap_for_topic
 

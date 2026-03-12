@@ -1,6 +1,5 @@
 """Tests for RSS source polling."""
 
-import pytest
 from unittest.mock import patch, MagicMock
 from nexus.engine.sources.polling import poll_feed, poll_all_feeds, ContentItem
 

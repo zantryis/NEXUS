@@ -1,6 +1,6 @@
 """Topic detail view."""
 
-from datetime import date, timedelta
+from datetime import date
 
 from fastapi import APIRouter, Request
 

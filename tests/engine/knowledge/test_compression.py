@@ -2,7 +2,6 @@
 
 import pytest
 from datetime import date
-from pathlib import Path
 from unittest.mock import AsyncMock
 from nexus.engine.knowledge.events import Event
 from nexus.engine.knowledge.compression import (

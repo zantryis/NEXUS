@@ -42,7 +42,7 @@ We follow **TDD** (test-driven development):
 
 ## Pull Requests
 
-1. Create a feature branch from `master`
+1. Create a feature branch from `main`
 2. Write descriptive commit messages (focus on *why*, not *what*)
 3. Ensure all tests pass
 4. Keep PRs focused — one feature or fix per PR

@@ -1,6 +1,5 @@
 """Tests for config Pydantic models."""
 
-import pytest
 from nexus.config.models import (
     UserConfig,
     BriefingConfig,

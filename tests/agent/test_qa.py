@@ -1,8 +1,7 @@
 """Tests for Q&A agent."""
 
-import json
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from datetime import date
 
 from nexus.config.models import NexusConfig, UserConfig
@@ -144,7 +143,7 @@ async def test_answer_question_chinese_response(config, mock_store):
         "伊朗局势紧张。",
     ])
 
-    answer = await answer_question(llm, mock_store, config, "伊朗最近怎么了？")
+    await answer_question(llm, mock_store, config, "伊朗最近怎么了？")
     # System prompt should specify Chinese output
     second_call = llm.complete.call_args_list[1]
     assert "zh" in second_call.kwargs["system_prompt"]

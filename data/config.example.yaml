@@ -18,6 +18,8 @@ briefing:
   format: "two-host-dialogue"
   style: "analytical"             # Style directive passed to LLM
   depth: "detailed"               # "brief" | "detailed"
+  # duration_target_minutes: 30   # Target podcast length
+  # additional_languages: []      # Extra language versions of the briefing
 
 # Define your intelligence topics
 # Pre-built source registries exist for: iran-us-relations, ai-ml-research,
@@ -31,6 +33,7 @@ topics:
     perspective_diversity: medium  # low | medium | high (min source affiliation balance)
     filter_threshold: 6.0         # 1-10, lower = more articles pass
     scope: medium                 # narrow | medium | broad (affects event extraction cap)
+    # max_events: 20              # Override auto-calculated event extraction cap
 
 # LLM model assignments per pipeline stage (overrides preset if set)
 # Uncomment to override specific stages:

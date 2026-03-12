@@ -1,14 +1,12 @@
 """Tests for briefing delivery."""
 
-import pytest
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock
-from pathlib import Path
+from unittest.mock import AsyncMock
 
 from nexus.agent.delivery import (
     split_message, _md_to_telegram_html, _get_topic_emoji,
     deliver_briefing, deliver_breaking_alert, deliver_breaking_digest,
-    format_breaking_digest, md_to_telegram_html_light,
+    md_to_telegram_html_light,
     MAX_MESSAGE_LENGTH,
 )
 

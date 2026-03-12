@@ -1,8 +1,6 @@
 """Tests for the unified runner."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from pathlib import Path
 
 from nexus.config.models import NexusConfig, UserConfig, TelegramConfig
 from nexus.runner import run_all

@@ -1,6 +1,5 @@
 """Tests for feedback handling."""
 
-import pytest
 from unittest.mock import AsyncMock
 
 from nexus.agent.feedback import build_feedback_keyboard, handle_feedback_callback

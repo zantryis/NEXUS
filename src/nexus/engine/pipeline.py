@@ -26,7 +26,7 @@ from nexus.engine.audio.pipeline import run_audio_pipeline
 from nexus.engine.evaluation.metrics import compute_run_metrics, save_metrics
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.llm.client import LLMClient, _resolve_provider
-from nexus.testing.fixtures import FixtureCapture, FixtureReplay, partition_by_date
+from nexus.testing.fixtures import FixtureCapture, partition_by_date
 
 logger = logging.getLogger(__name__)
 

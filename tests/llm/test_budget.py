@@ -1,8 +1,6 @@
 """Tests for BudgetGuard logic."""
 
 import logging
-from unittest.mock import patch
-from datetime import date
 
 import pytest
 from nexus.config.models import BudgetConfig

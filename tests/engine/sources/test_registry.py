@@ -1,7 +1,6 @@
 """Tests for global source registry and topic registry builder."""
 
 import pytest
-from pathlib import Path
 from nexus.engine.sources.registry import (
     GlobalSource,
     load_global_registry,

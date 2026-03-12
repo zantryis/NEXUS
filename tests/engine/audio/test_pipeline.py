@@ -1,9 +1,7 @@
 """Tests for audio pipeline orchestrator."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from datetime import date
-from pathlib import Path
 
 from nexus.config.models import NexusConfig, UserConfig, AudioConfig
 from nexus.engine.audio.pipeline import run_audio_pipeline

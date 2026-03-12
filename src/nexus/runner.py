@@ -1,9 +1,7 @@
 """Unified runner — starts dashboard + scheduler + Telegram bot."""
 
-import asyncio
 import logging
 import os
-import signal
 from pathlib import Path
 
 import uvicorn

@@ -1,7 +1,6 @@
 """Tests for OpenAI OAuth web routes."""
 
 import pytest
-from pathlib import Path
 from unittest.mock import patch, MagicMock, AsyncMock
 
 import yaml

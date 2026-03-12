@@ -1,7 +1,6 @@
 """Tests for knowledge layer event logging."""
 
 import pytest
-from pathlib import Path
 from datetime import date
 from unittest.mock import AsyncMock
 from nexus.engine.knowledge.events import (

@@ -1,7 +1,6 @@
 """Tests for source routing."""
 
-import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch
 
 from nexus.engine.sources.polling import ContentItem
 from nexus.engine.sources.router import (

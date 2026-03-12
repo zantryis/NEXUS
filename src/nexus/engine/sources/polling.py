@@ -6,7 +6,7 @@ from time import mktime
 from typing import Optional
 
 import feedparser
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 

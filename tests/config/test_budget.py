@@ -1,6 +1,5 @@
 """Tests for BudgetConfig model."""
 
-import pytest
 from nexus.config.models import BudgetConfig, NexusConfig, UserConfig
 
 

@@ -5,9 +5,9 @@ import time
 from collections import defaultdict
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 
-from nexus.web.app import get_store, get_templates
+from nexus.web.app import get_store
 
 logger = logging.getLogger(__name__)
 

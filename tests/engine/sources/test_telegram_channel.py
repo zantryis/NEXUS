@@ -1,12 +1,10 @@
 """Tests for Telegram channel source adapter."""
 
-import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
 import httpx
 
 from nexus.engine.sources.telegram_channel import TelegramChannelAdapter
-from nexus.engine.sources.polling import ContentItem
 
 
 SAMPLE_TELEGRAM_HTML = """

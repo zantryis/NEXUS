@@ -9,7 +9,7 @@ Two-pass filtering:
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date
 from typing import Optional
 
 from nexus.config.models import TopicConfig

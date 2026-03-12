@@ -1,8 +1,7 @@
 """Tests for topic-scoped breaking news poller."""
 
 import json
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 from nexus.config.models import (
     NexusConfig, UserConfig, BreakingNewsConfig, TopicConfig,
@@ -129,7 +128,7 @@ async def test_breaking_news_multi_topic(mock_poll):
         TopicConfig(name="AI/ML Research", subtopics=["agents"]),
     ]
     config = _make_config(topics=topics, threshold=7)
-    result = await check_breaking_news(llm, config, store)
+    await check_breaking_news(llm, config, store)
 
     # Both topics should have scored the headline
     assert store.add_breaking_alert.call_count == 2

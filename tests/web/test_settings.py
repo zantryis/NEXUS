@@ -2,7 +2,6 @@
 
 import pytest
 import yaml
-from pathlib import Path
 from httpx import AsyncClient, ASGITransport
 
 from nexus.engine.knowledge.store import KnowledgeStore

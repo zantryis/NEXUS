@@ -1,7 +1,6 @@
 """Tests for v3 store methods: breaking_alerts + feedback."""
 
 import pytest
-from pathlib import Path
 
 from nexus.engine.knowledge.store import KnowledgeStore
 

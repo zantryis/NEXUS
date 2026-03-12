@@ -11,7 +11,7 @@ An agentic news intelligence compiler that polls 52+ RSS feeds across 8 language
 | Source feeds | 52 global + per-topic registries, 8 languages |
 | LLM providers | Gemini, OpenAI, Anthropic, DeepSeek, Ollama |
 | TTS backends | Gemini native, OpenAI, ElevenLabs |
-| Knowledge store | SQLite, 16 tables, WAL mode, schema v4 |
+| Knowledge store | SQLite, 16 tables, WAL mode, schema v7 |
 | Delivery | Telegram bot + Web dashboard + Podcast RSS |
 
 ---

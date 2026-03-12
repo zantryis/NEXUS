@@ -1,12 +1,9 @@
 """Tests for configurable breaking news wire feeds."""
 
-import json
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 from nexus.config.models import NexusConfig, UserConfig, BreakingNewsConfig, TopicConfig
 from nexus.agent.breaking import check_breaking_news, DEFAULT_WIRE_FEEDS
-from nexus.engine.sources.polling import ContentItem
 
 
 def _make_config(**bn_kw) -> NexusConfig:
