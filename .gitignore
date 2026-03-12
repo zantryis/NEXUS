@@ -35,6 +35,7 @@ data/.oauth-tokens.json
 
 # Internal dev docs
 docs/internal/
+plan.md
 
 # IDE
 .vscode/
