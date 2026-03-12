@@ -1,7 +1,7 @@
 {% extends "setup/base_setup.html" %}
 {% block wizard_content %}
 <h2>API Key</h2>
-<p class="setup-desc">Your <strong>{{ preset }}</strong> preset requires a <code>{{ required_key }}</code>.</p>
+<p class="setup-desc">Enter your <code>{{ required_key }}</code> to continue.</p>
 
 {% if error %}
 <div class="alert-error">{{ error }}</div>
@@ -9,11 +9,36 @@
 
 <form method="post" action="/setup/step/2">
     <div class="form-group">
-        <label for="api_key">{{ required_key }}</label>
+        <label for="api_key">
+            {{ required_key }}
+            {% if key_already_set %}
+            <span class="badge badge-active" style="margin-left:0.5rem;font-size:0.7rem;">Key set</span>
+            {% endif %}
+        </label>
         <input type="password" id="api_key" name="api_key" class="form-input"
-               placeholder="Paste your API key here" required autocomplete="off">
+               placeholder="{% if key_already_set %}Leave blank to keep current key{% else %}Paste your API key here{% endif %}"
+               {% if not key_already_set and not oauth_available %}required{% endif %} autocomplete="off">
         <span class="form-hint">Your key is stored locally in <code>.env</code> and never sent anywhere.</span>
     </div>
+
+    {% if oauth_available %}
+    <div style="display:flex;align-items:center;gap:1rem;margin:1.25rem 0;">
+        <hr style="flex:1;border:none;border-top:1px solid var(--nx-border);">
+        <span style="color:var(--nx-text-dim);font-size:0.82rem;">or</span>
+        <hr style="flex:1;border:none;border-top:1px solid var(--nx-border);">
+    </div>
+    <div style="text-align:center;">
+        {% if oauth_connected %}
+        <span class="badge badge-active" style="font-size:0.82rem;">OpenAI connected via OAuth</span>
+        {% else %}
+        <a href="/auth/openai?from=setup" class="btn-secondary" style="display:inline-block;text-decoration:none;">
+            Sign in with OpenAI
+        </a>
+        <span class="form-hint" style="display:block;margin-top:0.5rem;">Use your ChatGPT subscription for API access instead of an API key.</span>
+        {% endif %}
+    </div>
+    {% endif %}
+
     <div class="setup-actions">
         <a href="/setup" class="btn-secondary">Back</a>
         <button type="submit" class="btn-primary">Continue</button>

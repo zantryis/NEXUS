@@ -17,10 +17,13 @@
             {% if is_demo_mode() %}<span class="demo-badge">Demo</span>{% endif %}
             <div class="nav-primary">
                 <a href="/" class="nav-link {% block nav_briefing %}{% endblock %}">Briefing</a>
+                {% if has_data() %}
                 <a href="/threads/" class="nav-link {% block nav_threads %}{% endblock %}">Threads</a>
                 <a href="/explore/" class="nav-link {% block nav_explore %}{% endblock %}">Explore</a>
+                {% endif %}
             </div>
             <div class="nav-secondary">
+                {% if has_data() %}
                 <div class="nav-dropdown">
                     <button class="nav-link nav-more-btn" aria-expanded="false">More</button>
                     <div class="nav-dropdown-menu">
@@ -30,6 +33,9 @@
                         <a href="/settings">Settings</a>
                     </div>
                 </div>
+                {% else %}
+                <a href="/settings" class="nav-link">Settings</a>
+                {% endif %}
             </div>
         </nav>
     </header>
@@ -41,11 +47,15 @@
         <div class="footer-inner">
             <span class="footer-brand">&#9670; Nexus Intelligence</span>
             <span class="footer-links">
+                {% if has_data() %}
                 <a href="/entities/">Entities</a>
                 <a href="/sources/">Sources</a>
                 <a href="/cost">Cost</a>
+                {% endif %}
                 <a href="/settings">Settings</a>
+                {% if has_data() %}
                 <a href="/feed.xml">Podcast RSS</a>
+                {% endif %}
             </span>
         </div>
     </footer>

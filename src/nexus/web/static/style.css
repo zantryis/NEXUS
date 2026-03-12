@@ -2060,6 +2060,39 @@ a.entity-tag:hover {
     color: var(--nx-green);
 }
 
+/* Tier selector (provider setup) */
+
+.tier-options {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.tier-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    padding: 0.6rem 1rem;
+    background: var(--nx-bg-raised);
+    transition: all var(--nx-transition);
+    font-size: 0.85rem;
+}
+
+.tier-option:hover {
+    border-color: var(--nx-border-hover);
+    background: var(--nx-bg-hover);
+}
+
+.tier-option.selected {
+    border-color: var(--nx-accent);
+    background: var(--nx-accent-soft);
+}
+
+.tier-option input[type="radio"] { display: none; }
+
 /* Topic selection cards */
 
 .topic-grid {

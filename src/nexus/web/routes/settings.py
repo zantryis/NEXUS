@@ -1,11 +1,14 @@
 """Settings page — view and modify API keys, config, and feature toggles."""
 
+import json
 import os
+import sys
 import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
+from starlette.background import BackgroundTask
 
 from nexus.config.presets import preset_names
 from nexus.config.writer import write_config, write_env
@@ -14,6 +17,12 @@ from nexus.web.app import get_templates
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+TTS_VOICES = {
+    "gemini": ["Kore", "Puck", "Charon", "Fenrir", "Aoede", "Leda", "Orus", "Zephyr"],
+    "elevenlabs": ["Rachel", "Drew", "Clyde", "Domi", "Bella", "Josh", "Adam"],
+    "openai": ["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
+}
 
 PROVIDERS = [
     {"key": "GEMINI_API_KEY", "name": "Gemini (Google)", "prefix": "gemini"},
@@ -75,6 +84,10 @@ async def settings_page(request: Request):
     # Current models (from config or raw yaml)
     models_raw = raw.get("models", {})
 
+    # Pipeline running status
+    pipeline_status = getattr(request.app.state, "pipeline_status", None)
+    pipeline_running = pipeline_status is not None and not pipeline_status.get("done", True)
+
     return templates.TemplateResponse(request, "settings.html", {
         "providers": _provider_status(),
         "config": config,
@@ -87,8 +100,180 @@ async def settings_page(request: Request):
         "pipeline_stages": PIPELINE_STAGES,
         "preset_info": PRESET_INFO,
         "models_raw": models_raw,
+        "tts_voices": TTS_VOICES,
+        "tts_voices_json": json.dumps(TTS_VOICES),
+        "pipeline_running": pipeline_running,
     })
 
+
+# ── Unified save ──────────────────────────────────────────
+
+@router.post("/settings/save")
+async def settings_save_all(request: Request):
+    """Unified save: writes all config sections + API keys in one operation."""
+    form = await request.form()
+    data_dir = _data_dir(request)
+    raw = _get_config_dict(request)
+
+    # ─ API Keys ─
+    keys = {}
+    for p in PROVIDERS:
+        val = (form.get(p["key"]) or "").strip()
+        if val:
+            keys[p["key"]] = val
+    if keys:
+        write_env(data_dir.parent, keys)
+
+    # ─ User ─
+    raw.setdefault("user", {})
+    raw["user"]["name"] = (form.get("name") or "User").strip()
+    raw["user"]["timezone"] = (form.get("timezone") or "UTC").strip()
+    raw["user"]["output_language"] = (form.get("output_language") or "en").strip()
+
+    # ─ Briefing ─
+    raw.setdefault("briefing", {})
+    raw["briefing"]["schedule"] = (form.get("schedule") or "06:00").strip()
+    raw["briefing"]["style"] = (form.get("style") or "analytical").strip()
+    raw["briefing"]["depth"] = (form.get("depth") or "detailed").strip()
+
+    # ─ Audio ─
+    raw.setdefault("audio", {})
+    raw["audio"]["enabled"] = form.get("audio_enabled") == "on"
+    raw["audio"]["tts_backend"] = (form.get("tts_backend") or "gemini").strip()
+    raw["audio"]["voice_host_a"] = (form.get("voice_host_a") or "Kore").strip()
+    raw["audio"]["voice_host_b"] = (form.get("voice_host_b") or "Puck").strip()
+
+    # ─ Telegram ─
+    raw.setdefault("telegram", {})
+    raw["telegram"]["enabled"] = form.get("telegram_enabled") == "on"
+
+    # ─ Budget ─
+    raw.setdefault("budget", {})
+    try:
+        raw["budget"]["daily_limit_usd"] = float(form.get("daily_limit_usd", "1.00"))
+    except ValueError:
+        raw["budget"]["daily_limit_usd"] = 1.00
+    try:
+        raw["budget"]["warning_threshold_usd"] = float(form.get("warning_threshold_usd", "0.50"))
+    except ValueError:
+        raw["budget"]["warning_threshold_usd"] = 0.50
+    raw["budget"]["degradation_strategy"] = (form.get("degradation_strategy") or "skip_expensive").strip()
+
+    # ─ Preset / Models ─
+    preset = (form.get("preset") or raw.get("preset", "balanced")).strip()
+    if preset in preset_names() or preset == "custom":
+        raw["preset"] = preset
+        if preset == "custom":
+            from nexus.config.presets import PIPELINE_STAGES
+            raw.setdefault("models", {})
+            for stage_key, _, _ in PIPELINE_STAGES:
+                val = (form.get(f"model_{stage_key}") or "").strip()
+                if val:
+                    raw["models"][stage_key] = val
+        else:
+            raw.pop("models", None)
+
+    write_config(data_dir, raw)
+    return RedirectResponse(url="/settings?saved=all", status_code=303)
+
+
+# ── Restart ───────────────────────────────────────────────
+
+@router.post("/settings/restart")
+async def settings_restart(request: Request):
+    """Restart the Nexus process."""
+    def _restart():
+        os.execv(sys.executable, [sys.executable, "-m", "nexus"] + sys.argv[1:])
+
+    return RedirectResponse(
+        url="/settings?saved=restarting",
+        status_code=303,
+        background=BackgroundTask(_restart),
+    )
+
+
+# ── Topics (stay as independent interactions) ─────────────
+
+@router.post("/settings/topics")
+async def settings_update_topics(request: Request):
+    """Add a new topic."""
+    form = await request.form()
+    data_dir = _data_dir(request)
+    raw = _get_config_dict(request)
+
+    new_topic = (form.get("new_topic") or "").strip()
+    if new_topic:
+        raw.setdefault("topics", [])
+        raw["topics"].append({"name": new_topic, "priority": "medium"})
+        write_config(data_dir, raw)
+
+    return RedirectResponse(url="/settings?saved=topics", status_code=303)
+
+
+@router.post("/settings/topics/remove")
+async def settings_remove_topic(request: Request):
+    """Remove a topic by index."""
+    form = await request.form()
+    data_dir = _data_dir(request)
+    raw = _get_config_dict(request)
+
+    try:
+        idx = int(form.get("index", "-1"))
+        topics = raw.get("topics", [])
+        if 0 <= idx < len(topics) and len(topics) > 1:
+            topics.pop(idx)
+            write_config(data_dir, raw)
+    except (ValueError, IndexError):
+        pass
+
+    return RedirectResponse(url="/settings?saved=topics", status_code=303)
+
+
+@router.post("/settings/topics/subtopics")
+async def settings_update_subtopics(request: Request):
+    """Add a subtopic to a topic."""
+    form = await request.form()
+    data_dir = _data_dir(request)
+    raw = _get_config_dict(request)
+
+    try:
+        idx = int(form.get("topic_index", "-1"))
+        subtopic = (form.get("subtopic") or "").strip()
+        topics = raw.get("topics", [])
+        if 0 <= idx < len(topics) and subtopic:
+            topics[idx].setdefault("subtopics", [])
+            if subtopic not in topics[idx]["subtopics"]:
+                topics[idx]["subtopics"].append(subtopic)
+                write_config(data_dir, raw)
+    except (ValueError, IndexError):
+        pass
+
+    return RedirectResponse(url="/settings?saved=topics", status_code=303)
+
+
+@router.post("/settings/topics/subtopics/remove")
+async def settings_remove_subtopic(request: Request):
+    """Remove a subtopic from a topic."""
+    form = await request.form()
+    data_dir = _data_dir(request)
+    raw = _get_config_dict(request)
+
+    try:
+        topic_idx = int(form.get("topic_index", "-1"))
+        sub_idx = int(form.get("subtopic_index", "-1"))
+        topics = raw.get("topics", [])
+        if 0 <= topic_idx < len(topics):
+            subs = topics[topic_idx].get("subtopics", [])
+            if 0 <= sub_idx < len(subs):
+                subs.pop(sub_idx)
+                write_config(data_dir, raw)
+    except (ValueError, IndexError):
+        pass
+
+    return RedirectResponse(url="/settings?saved=topics", status_code=303)
+
+
+# ── Legacy per-section endpoints (kept for backward compat) ─
 
 @router.post("/settings/keys")
 async def settings_update_keys(request: Request):
@@ -99,7 +284,7 @@ async def settings_update_keys(request: Request):
     keys = {}
     for p in PROVIDERS:
         val = (form.get(p["key"]) or "").strip()
-        if val:  # Only update keys that have a new value entered
+        if val:
             keys[p["key"]] = val
 
     if keys:
@@ -193,41 +378,6 @@ async def settings_update_budget(request: Request):
     return RedirectResponse(url="/settings?saved=budget", status_code=303)
 
 
-@router.post("/settings/topics")
-async def settings_update_topics(request: Request):
-    """Add a new topic."""
-    form = await request.form()
-    data_dir = _data_dir(request)
-    raw = _get_config_dict(request)
-
-    new_topic = (form.get("new_topic") or "").strip()
-    if new_topic:
-        raw.setdefault("topics", [])
-        raw["topics"].append({"name": new_topic, "priority": "medium"})
-        write_config(data_dir, raw)
-
-    return RedirectResponse(url="/settings?saved=topics", status_code=303)
-
-
-@router.post("/settings/topics/remove")
-async def settings_remove_topic(request: Request):
-    """Remove a topic by index."""
-    form = await request.form()
-    data_dir = _data_dir(request)
-    raw = _get_config_dict(request)
-
-    try:
-        idx = int(form.get("index", "-1"))
-        topics = raw.get("topics", [])
-        if 0 <= idx < len(topics) and len(topics) > 1:
-            topics.pop(idx)
-            write_config(data_dir, raw)
-    except (ValueError, IndexError):
-        pass
-
-    return RedirectResponse(url="/settings?saved=topics", status_code=303)
-
-
 @router.post("/settings/preset")
 async def settings_update_preset(request: Request):
     """Switch model preset or save custom model selection."""
@@ -241,7 +391,6 @@ async def settings_update_preset(request: Request):
     raw["preset"] = preset
 
     if preset == "custom":
-        # Save per-stage model selections
         from nexus.config.presets import PIPELINE_STAGES
         raw.setdefault("models", {})
         for stage_key, _, _ in PIPELINE_STAGES:
@@ -249,7 +398,6 @@ async def settings_update_preset(request: Request):
             if val:
                 raw["models"][stage_key] = val
     else:
-        # When switching to a named preset, clear custom model overrides
         raw.pop("models", None)
 
     write_config(data_dir, raw)

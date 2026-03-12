@@ -6,17 +6,30 @@
     <h2>Settings</h2>
 </div>
 
-{% if saved %}
+{% if saved == "restarting" %}
 <div class="restart-banner">
-    Settings saved. Restart Nexus for changes to take effect.
+    Nexus is restarting&hellip; this page will reload shortly.
+    <script>setTimeout(() => location.replace('/settings'), 4000);</script>
+</div>
+{% elif saved %}
+<div class="restart-banner" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
+    <span>Settings saved. Restart Nexus for changes to take effect.</span>
+    <form method="post" action="/settings/restart" style="margin:0;">
+        {% if pipeline_running %}
+        <span style="font-size:0.78rem;color:var(--nx-text-dim);margin-right:0.5rem;">Pipeline is running — you can wait for it to finish first.</span>
+        {% endif %}
+        <button type="submit" class="btn-primary" style="font-size:0.78rem;padding:0.35rem 0.75rem;">Restart Now</button>
+    </form>
 </div>
 {% endif %}
 
 {% if error == "invalid-preset" %}
-<div class="form-error">
+<div class="alert-error">
     Choose a valid preset before saving.
 </div>
 {% endif %}
+
+<form method="post" action="/settings/save" id="settings-form">
 
 <!-- API Keys -->
 <div class="settings-section">
@@ -24,28 +37,23 @@
         API Keys <span class="toggle-icon">+</span>
     </div>
     <div class="settings-section-body">
-        <form method="post" action="/settings/keys">
-            {% for p in providers %}
-            <div class="form-group">
-                <label>{{ p.name }}</label>
-                <div style="display:flex;gap:0.5rem;align-items:center;">
-                    <code style="font-size:0.78rem;color:var(--nx-text-dim);min-width:80px;">
-                        {% if p.is_set %}
-                        <span class="badge badge-active">{{ p.masked }}</span>
-                        {% else %}
-                        <span class="badge badge-stale">not set</span>
-                        {% endif %}
-                    </code>
-                    <input type="password" name="{{ p.key }}" class="form-input"
-                           placeholder="Enter new key to update" autocomplete="off">
-                </div>
+        {% for p in providers %}
+        <div class="form-group">
+            <label>{{ p.name }}</label>
+            <div style="display:flex;gap:0.5rem;align-items:center;">
+                <code style="font-size:0.78rem;color:var(--nx-text-dim);min-width:80px;">
+                    {% if p.is_set %}
+                    <span class="badge badge-active">{{ p.masked }}</span>
+                    {% else %}
+                    <span class="badge badge-stale">not set</span>
+                    {% endif %}
+                </code>
+                <input type="password" name="{{ p.key }}" class="form-input"
+                       placeholder="Enter new key to update" autocomplete="off">
             </div>
-            {% endfor %}
-            <div style="margin-top:0.75rem;">
-                <button type="submit" class="btn-primary">Update Keys</button>
-            </div>
-            <span class="form-hint">Only fill in keys you want to change. Existing keys are preserved.</span>
-        </form>
+        </div>
+        {% endfor %}
+        <span class="form-hint">Only fill in keys you want to change. Existing keys are preserved.</span>
     </div>
 </div>
 
@@ -55,41 +63,37 @@
         Models <span class="toggle-icon">+</span>
     </div>
     <div class="settings-section-body">
-        <form method="post" action="/settings/preset" id="models-form">
-            <div class="form-group">
-                <label for="preset">Preset</label>
-                <select name="preset" id="preset" class="form-select" onchange="toggleCustomModels(this.value)">
-                    {% for pkey, pinfo in preset_info.items() %}
-                    <option value="{{ pkey }}" {% if preset == pkey %}selected{% endif %}>{{ pinfo.label }} ({{ pinfo.cost }})</option>
-                    {% endfor %}
-                    <option value="custom" {% if preset == 'custom' %}selected{% endif %}>Custom (pick your own models)</option>
-                </select>
-            </div>
-
-            <div id="custom-models" style="{% if preset != 'custom' %}display:none;{% endif %}">
-                <p style="color:var(--nx-text-dim);font-size:0.82rem;margin-bottom:0.75rem;">
-                    Select a model for each pipeline stage. You can mix providers.
-                </p>
-                {% for stage_key, stage_label, stage_desc in pipeline_stages %}
-                <div class="form-group">
-                    <label for="model_{{ stage_key }}">{{ stage_label }}</label>
-                    <select name="model_{{ stage_key }}" id="model_{{ stage_key }}" class="form-select">
-                        {% set current_model = models_raw.get(stage_key, '') %}
-                        {% for provider, models in model_choices.items() %}
-                        <optgroup label="{{ provider | capitalize }}">
-                            {% for model in models %}
-                            <option value="{{ model }}" {% if current_model == model %}selected{% endif %}>{{ model }}</option>
-                            {% endfor %}
-                        </optgroup>
-                        {% endfor %}
-                    </select>
-                    <span class="form-hint">{{ stage_desc }}</span>
-                </div>
+        <div class="form-group">
+            <label for="preset">Preset</label>
+            <select name="preset" id="preset" class="form-select" onchange="toggleCustomModels(this.value)">
+                {% for pkey, pinfo in preset_info.items() %}
+                <option value="{{ pkey }}" {% if preset == pkey %}selected{% endif %}>{{ pinfo.label }} ({{ pinfo.cost }})</option>
                 {% endfor %}
-            </div>
+                <option value="custom" {% if preset == 'custom' %}selected{% endif %}>Custom (pick your own models)</option>
+            </select>
+        </div>
 
-            <button type="submit" class="btn-primary">Save</button>
-        </form>
+        <div id="custom-models" style="{% if preset != 'custom' %}display:none;{% endif %}">
+            <p style="color:var(--nx-text-dim);font-size:0.82rem;margin-bottom:0.75rem;">
+                Select a model for each pipeline stage. You can mix providers.
+            </p>
+            {% for stage_key, stage_label, stage_desc in pipeline_stages %}
+            <div class="form-group">
+                <label for="model_{{ stage_key }}">{{ stage_label }}</label>
+                <select name="model_{{ stage_key }}" id="model_{{ stage_key }}" class="form-select">
+                    {% set current_model = models_raw.get(stage_key, '') %}
+                    {% for provider, models in model_choices.items() %}
+                    <optgroup label="{{ provider | capitalize }}">
+                        {% for model in models %}
+                        <option value="{{ model }}" {% if current_model == model %}selected{% endif %}>{{ model }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+                <span class="form-hint">{{ stage_desc }}</span>
+            </div>
+            {% endfor %}
+        </div>
     </div>
 </div>
 
@@ -99,133 +103,103 @@
         User <span class="toggle-icon">+</span>
     </div>
     <div class="settings-section-body">
-        <form method="post" action="/settings/user">
-            <div class="form-group">
-                <label for="name">Name</label>
-                <input type="text" name="name" id="name" class="form-input"
-                       value="{{ config.user.name if config else raw.get('user', {}).get('name', '') }}">
-            </div>
-            <div class="form-group">
-                <label for="timezone">Timezone</label>
-                <input type="text" name="timezone" id="timezone" class="form-input"
-                       value="{{ config.user.timezone if config else raw.get('user', {}).get('timezone', 'UTC') }}"
-                       placeholder="e.g. America/New_York">
-            </div>
-            <div class="form-group">
-                <label for="output_language">Output Language</label>
-                <input type="text" name="output_language" id="output_language" class="form-input"
-                       value="{{ config.user.output_language if config else raw.get('user', {}).get('output_language', 'en') }}"
-                       placeholder="e.g. en, zh, es">
-            </div>
-            <button type="submit" class="btn-primary">Save</button>
-        </form>
+        <div class="form-group">
+            <label for="name">Name</label>
+            <input type="text" name="name" id="name" class="form-input"
+                   value="{{ config.user.name if config else raw.get('user', {}).get('name', '') }}">
+        </div>
+        <div class="form-group">
+            <label for="timezone">Timezone</label>
+            <input type="text" name="timezone" id="timezone" class="form-input"
+                   value="{{ config.user.timezone if config else raw.get('user', {}).get('timezone', 'UTC') }}"
+                   placeholder="e.g. America/New_York">
+        </div>
+        <div class="form-group">
+            <label for="output_language">Output Language</label>
+            <input type="text" name="output_language" id="output_language" class="form-input"
+                   value="{{ config.user.output_language if config else raw.get('user', {}).get('output_language', 'en') }}"
+                   placeholder="e.g. en, zh, es">
+        </div>
     </div>
 </div>
 
-<!-- Briefing -->
+<!-- Daily Intelligence -->
 <div class="settings-section">
     <div class="settings-section-header" onclick="this.parentElement.classList.toggle('open')">
-        Briefing <span class="toggle-icon">+</span>
+        Daily Intelligence <span class="toggle-icon">+</span>
     </div>
     <div class="settings-section-body">
-        <form method="post" action="/settings/briefing">
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="schedule">Schedule (HH:MM)</label>
-                    <input type="time" name="schedule" id="schedule" class="form-input"
-                           value="{{ config.briefing.schedule if config else raw.get('briefing', {}).get('schedule', '06:00') }}">
-                </div>
-                <div class="form-group">
-                    <label for="style">Style</label>
-                    <select name="style" id="style" class="form-select">
-                        {% set current_style = config.briefing.style if config else raw.get('briefing', {}).get('style', 'analytical') %}
-                        <option value="analytical" {% if current_style == 'analytical' %}selected{% endif %}>Analytical</option>
-                        <option value="conversational" {% if current_style == 'conversational' %}selected{% endif %}>Conversational</option>
-                        <option value="brief" {% if current_style == 'brief' %}selected{% endif %}>Brief</option>
-                    </select>
-                </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="schedule">Schedule (HH:MM)</label>
+                <input type="time" name="schedule" id="schedule" class="form-input"
+                       value="{{ config.briefing.schedule if config else raw.get('briefing', {}).get('schedule', '06:00') }}">
+                <span class="form-hint">Your briefing will be ready at this time each day.</span>
             </div>
             <div class="form-group">
-                <label for="depth">Depth</label>
-                <select name="depth" id="depth" class="form-select">
-                    {% set current_depth = config.briefing.depth if config else raw.get('briefing', {}).get('depth', 'detailed') %}
-                    <option value="brief" {% if current_depth == 'brief' %}selected{% endif %}>Brief</option>
-                    <option value="standard" {% if current_depth == 'standard' %}selected{% endif %}>Standard</option>
-                    <option value="detailed" {% if current_depth == 'detailed' %}selected{% endif %}>Detailed</option>
+                <label for="style">Style</label>
+                <select name="style" id="style" class="form-select">
+                    {% set current_style = config.briefing.style if config else raw.get('briefing', {}).get('style', 'analytical') %}
+                    <option value="analytical" {% if current_style == 'analytical' %}selected{% endif %}>Analytical</option>
+                    <option value="conversational" {% if current_style == 'conversational' %}selected{% endif %}>Conversational</option>
+                    <option value="brief" {% if current_style == 'brief' %}selected{% endif %}>Brief</option>
                 </select>
             </div>
-            <button type="submit" class="btn-primary">Save</button>
-        </form>
-    </div>
-</div>
-
-<!-- Topics -->
-<div class="settings-section">
-    <div class="settings-section-header" onclick="this.parentElement.classList.toggle('open')">
-        Topics <span class="toggle-icon">+</span>
-    </div>
-    <div class="settings-section-body">
-        {% set topics = config.topics if config else [] %}
-        {% for topic in topics %}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--nx-border);">
-            <div>
-                <span style="font-weight:600;">{{ topic.name }}</span>
-                <span class="badge badge-{{ topic.priority }}">{{ topic.priority }}</span>
-            </div>
-            {% if topics | length > 1 %}
-            <form method="post" action="/settings/topics/remove" style="margin:0;">
-                <input type="hidden" name="index" value="{{ loop.index0 }}">
-                <button type="submit" class="btn-skip" style="color:var(--nx-red);font-size:0.78rem;">Remove</button>
-            </form>
-            {% endif %}
         </div>
-        {% endfor %}
-        <form method="post" action="/settings/topics" style="margin-top:1rem;">
-            <div style="display:flex;gap:0.5rem;">
-                <input type="text" name="new_topic" class="form-input" placeholder="New topic name">
-                <button type="submit" class="btn-secondary">Add</button>
-            </div>
-        </form>
+        <div class="form-group">
+            <label for="depth">Depth</label>
+            <select name="depth" id="depth" class="form-select">
+                {% set current_depth = config.briefing.depth if config else raw.get('briefing', {}).get('depth', 'detailed') %}
+                <option value="brief" {% if current_depth == 'brief' %}selected{% endif %}>Brief</option>
+                <option value="standard" {% if current_depth == 'standard' %}selected{% endif %}>Standard</option>
+                <option value="detailed" {% if current_depth == 'detailed' %}selected{% endif %}>Detailed</option>
+            </select>
+        </div>
     </div>
 </div>
 
-<!-- Audio -->
+<!-- Audio / Podcast -->
 <div class="settings-section">
     <div class="settings-section-header" onclick="this.parentElement.classList.toggle('open')">
         Audio / Podcast <span class="toggle-icon">+</span>
     </div>
     <div class="settings-section-body">
-        <form method="post" action="/settings/audio">
+        <div class="form-group">
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                <input type="checkbox" name="audio_enabled"
+                       {% if config and config.audio.enabled %}checked{% endif %}>
+                Enable podcast audio generation
+            </label>
+        </div>
+        <div class="form-group">
+            <label for="tts_backend">TTS Backend</label>
+            <select name="tts_backend" id="tts_backend" class="form-select" onchange="updateVoiceOptions()">
+                {% set current_backend = config.audio.tts_backend if config else raw.get('audio', {}).get('tts_backend', 'gemini') %}
+                <option value="gemini" {% if current_backend == 'gemini' %}selected{% endif %}>Gemini</option>
+                <option value="openai" {% if current_backend == 'openai' %}selected{% endif %}>OpenAI</option>
+                <option value="elevenlabs" {% if current_backend == 'elevenlabs' %}selected{% endif %}>ElevenLabs</option>
+            </select>
+        </div>
+        <div class="form-row">
             <div class="form-group">
-                <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
-                    <input type="checkbox" name="audio_enabled"
-                           {% if config and config.audio.enabled %}checked{% endif %}>
-                    Enable podcast audio generation
-                </label>
-            </div>
-            <div class="form-group">
-                <label for="tts_backend">TTS Backend</label>
-                <select name="tts_backend" id="tts_backend" class="form-select">
-                    {% set current_backend = config.audio.tts_backend if config else 'gemini' %}
-                    <option value="gemini" {% if current_backend == 'gemini' %}selected{% endif %}>Gemini</option>
-                    <option value="openai" {% if current_backend == 'openai' %}selected{% endif %}>OpenAI</option>
-                    <option value="elevenlabs" {% if current_backend == 'elevenlabs' %}selected{% endif %}>ElevenLabs</option>
+                <label for="voice_host_a">Host A Voice</label>
+                <select name="voice_host_a" id="voice_host_a" class="form-select">
+                    {% set current_voice_a = config.audio.voice_host_a if config else raw.get('audio', {}).get('voice_host_a', 'Kore') %}
+                    {% for voice in tts_voices.get(current_backend, []) %}
+                    <option value="{{ voice }}" {% if current_voice_a == voice %}selected{% endif %}>{{ voice }}</option>
+                    {% endfor %}
                 </select>
             </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="voice_host_a">Host A Voice</label>
-                    <input type="text" name="voice_host_a" id="voice_host_a" class="form-input"
-                           value="{{ config.audio.voice_host_a if config else 'Kore' }}">
-                </div>
-                <div class="form-group">
-                    <label for="voice_host_b">Host B Voice</label>
-                    <input type="text" name="voice_host_b" id="voice_host_b" class="form-input"
-                           value="{{ config.audio.voice_host_b if config else 'Puck' }}">
-                </div>
+            <div class="form-group">
+                <label for="voice_host_b">Host B Voice</label>
+                <select name="voice_host_b" id="voice_host_b" class="form-select">
+                    {% set current_voice_b = config.audio.voice_host_b if config else raw.get('audio', {}).get('voice_host_b', 'Puck') %}
+                    {% for voice in tts_voices.get(current_backend, []) %}
+                    <option value="{{ voice }}" {% if current_voice_b == voice %}selected{% endif %}>{{ voice }}</option>
+                    {% endfor %}
+                </select>
             </div>
-            <button type="submit" class="btn-primary">Save</button>
-        </form>
+        </div>
     </div>
 </div>
 
@@ -235,23 +209,114 @@
         Telegram <span class="toggle-icon">+</span>
     </div>
     <div class="settings-section-body">
-        <form method="post" action="/settings/telegram">
+        <div class="form-group">
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                <input type="checkbox" name="telegram_enabled"
+                       {% if config and config.telegram.enabled %}checked{% endif %}>
+                Enable Telegram delivery
+            </label>
+            <span class="form-hint">Requires TELEGRAM_BOT_TOKEN set in API Keys. Message your bot <code>/start</code> to activate delivery.</span>
+        </div>
+        {% if config and config.telegram.chat_id %}
+        <div class="form-group">
+            <label>Chat ID</label>
+            <code>{{ config.telegram.chat_id }}</code>
+            <span class="form-hint">Auto-set when you send /start to your bot.</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Budget -->
+<div class="settings-section">
+    <div class="settings-section-header" onclick="this.parentElement.classList.toggle('open')">
+        Budget <span class="toggle-icon">+</span>
+    </div>
+    <div class="settings-section-body">
+        <div class="form-row">
             <div class="form-group">
-                <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
-                    <input type="checkbox" name="telegram_enabled"
-                           {% if config and config.telegram.enabled %}checked{% endif %}>
-                    Enable Telegram delivery
-                </label>
-                <span class="form-hint">Requires TELEGRAM_BOT_TOKEN to be set in API Keys above.</span>
+                <label for="daily_limit_usd">Daily Limit (USD)</label>
+                <input type="number" step="0.01" name="daily_limit_usd" id="daily_limit_usd"
+                       class="form-input"
+                       value="{{ config.budget.daily_limit_usd if config else raw.get('budget', {}).get('daily_limit_usd', 1.00) }}">
             </div>
-            {% if config and config.telegram.chat_id %}
             <div class="form-group">
-                <label>Chat ID</label>
-                <code>{{ config.telegram.chat_id }}</code>
-                <span class="form-hint">Auto-set when you send /start to your bot.</span>
+                <label for="warning_threshold_usd">Warning Threshold (USD)</label>
+                <input type="number" step="0.01" name="warning_threshold_usd" id="warning_threshold_usd"
+                       class="form-input"
+                       value="{{ config.budget.warning_threshold_usd if config else raw.get('budget', {}).get('warning_threshold_usd', 0.50) }}">
             </div>
-            {% endif %}
-            <button type="submit" class="btn-primary">Save</button>
+        </div>
+        <div class="form-group">
+            <label for="degradation_strategy">Over-Budget Strategy</label>
+            <select name="degradation_strategy" id="degradation_strategy" class="form-select">
+                {% set current_strategy = config.budget.degradation_strategy if config else raw.get('budget', {}).get('degradation_strategy', 'skip_expensive') %}
+                <option value="skip_expensive" {% if current_strategy == 'skip_expensive' %}selected{% endif %}>Skip Expensive Operations</option>
+                <option value="stop_all" {% if current_strategy == 'stop_all' %}selected{% endif %}>Stop All Operations</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<!-- Save All -->
+<div style="margin-top:1rem;margin-bottom:1.5rem;">
+    <button type="submit" class="btn-primary btn-lg" style="width:100%;">Save All Settings</button>
+</div>
+
+</form>
+
+<!-- Topics (separate forms — add/remove are independent interactions) -->
+<div class="settings-section">
+    <div class="settings-section-header" onclick="this.parentElement.classList.toggle('open')">
+        Topics <span class="toggle-icon">+</span>
+    </div>
+    <div class="settings-section-body">
+        {% set topics = config.topics if config else [] %}
+        {% for topic in topics %}
+        <div class="topic-settings-item">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--nx-border);">
+                <div>
+                    <span style="font-weight:600;">{{ topic.name }}</span>
+                    <span class="badge badge-{{ topic.priority }}">{{ topic.priority }}</span>
+                </div>
+                {% if topics | length > 1 %}
+                <form method="post" action="/settings/topics/remove" style="margin:0;">
+                    <input type="hidden" name="index" value="{{ loop.index0 }}">
+                    <button type="submit" class="btn-skip" style="color:var(--nx-red);font-size:0.78rem;">Remove</button>
+                </form>
+                {% endif %}
+            </div>
+            <!-- Subtopics -->
+            {% set topic_idx = loop.index0 %}
+            <div style="padding:0.4rem 0 0.6rem 1rem;">
+                {% set subtopics = topic.subtopics if topic.subtopics is defined else [] %}
+                {% if subtopics %}
+                <div style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-bottom:0.4rem;">
+                    {% for sub in subtopics %}
+                    <span class="badge badge-active" style="font-size:0.72rem;display:inline-flex;align-items:center;gap:0.25rem;">
+                        {{ sub }}
+                        <form method="post" action="/settings/topics/subtopics/remove" style="margin:0;display:inline;">
+                            <input type="hidden" name="topic_index" value="{{ topic_idx }}">
+                            <input type="hidden" name="subtopic_index" value="{{ loop.index0 }}">
+                            <button type="submit" style="background:none;border:none;color:var(--nx-text-dim);cursor:pointer;padding:0;font-size:0.7rem;line-height:1;">&times;</button>
+                        </form>
+                    </span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                <form method="post" action="/settings/topics/subtopics" style="margin:0;display:flex;gap:0.35rem;">
+                    <input type="hidden" name="topic_index" value="{{ topic_idx }}">
+                    <input type="text" name="subtopic" class="form-input" placeholder="Add subtopic" style="font-size:0.78rem;padding:0.3rem 0.5rem;">
+                    <button type="submit" class="btn-secondary" style="font-size:0.72rem;padding:0.3rem 0.5rem;">Add</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+        <form method="post" action="/settings/topics" style="margin-top:1rem;">
+            <div style="display:flex;gap:0.5rem;">
+                <input type="text" name="new_topic" class="form-input" placeholder="New topic name">
+                <button type="submit" class="btn-secondary">Add</button>
+            </div>
         </form>
     </div>
 </div>
@@ -278,46 +343,43 @@
     </div>
 </div>
 
-<!-- Budget -->
-<div class="settings-section">
-    <div class="settings-section-header" onclick="this.parentElement.classList.toggle('open')">
-        Budget <span class="toggle-icon">+</span>
-    </div>
-    <div class="settings-section-body">
-        <form method="post" action="/settings/budget">
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="daily_limit_usd">Daily Limit (USD)</label>
-                    <input type="number" step="0.01" name="daily_limit_usd" id="daily_limit_usd"
-                           class="form-input"
-                           value="{{ config.budget.daily_limit_usd if config else 1.00 }}">
-                </div>
-                <div class="form-group">
-                    <label for="warning_threshold_usd">Warning Threshold (USD)</label>
-                    <input type="number" step="0.01" name="warning_threshold_usd" id="warning_threshold_usd"
-                           class="form-input"
-                           value="{{ config.budget.warning_threshold_usd if config else 0.50 }}">
-                </div>
-            </div>
-            <div class="form-group">
-                <label for="degradation_strategy">Over-Budget Strategy</label>
-                <select name="degradation_strategy" id="degradation_strategy" class="form-select">
-                    {% set current_strategy = config.budget.degradation_strategy if config else 'skip_expensive' %}
-                    <option value="skip_expensive" {% if current_strategy == 'skip_expensive' %}selected{% endif %}>Skip Expensive Operations</option>
-                    <option value="stop_all" {% if current_strategy == 'stop_all' %}selected{% endif %}>Stop All Operations</option>
-                </select>
-            </div>
-            <button type="submit" class="btn-primary">Save</button>
-        </form>
-    </div>
-</div>
-
 <script>
+// Voice options data
+const TTS_VOICES = {{ tts_voices_json | safe }};
+
+function updateVoiceOptions() {
+    const backend = document.getElementById('tts_backend').value;
+    const voices = TTS_VOICES[backend] || [];
+    const selectA = document.getElementById('voice_host_a');
+    const selectB = document.getElementById('voice_host_b');
+    const currentA = selectA.value;
+    const currentB = selectB.value;
+
+    [selectA, selectB].forEach(sel => {
+        sel.innerHTML = '';
+        voices.forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v;
+            opt.textContent = v;
+            sel.appendChild(opt);
+        });
+    });
+
+    // Restore selection if voice exists in new backend, otherwise pick defaults
+    if (voices.includes(currentA)) selectA.value = currentA;
+    else if (voices.length > 0) selectA.value = voices[0];
+
+    if (voices.includes(currentB)) selectB.value = currentB;
+    else if (voices.length > 1) selectB.value = voices[1];
+    else if (voices.length > 0) selectB.value = voices[0];
+}
+
 // Toggle custom model selectors
 function toggleCustomModels(value) {
     document.getElementById('custom-models').style.display = value === 'custom' ? 'block' : 'none';
 }
-// Auto-open sections and toggle accordion
+
+// Accordion toggle
 document.querySelectorAll('.settings-section').forEach(section => {
     const header = section.querySelector('.settings-section-header');
     const body = section.querySelector('.settings-section-body');
@@ -328,21 +390,29 @@ document.querySelectorAll('.settings-section').forEach(section => {
     header.addEventListener('click', () => {
         const isOpen = body.style.display !== 'none';
         body.style.display = isOpen ? 'none' : 'block';
-        icon.textContent = isOpen ? '+' : '−';
+        icon.textContent = isOpen ? '+' : '\u2212';
     });
 });
-// Auto-open saved section
+
+// Auto-open sections after save
 {% if saved %}
-const savedSection = document.querySelector('[action="/settings/{{ saved }}"]');
-if (savedSection) {
-    const section = savedSection.closest('.settings-section');
-    if (section) {
-        const body = section.querySelector('.settings-section-body');
-        const icon = section.querySelector('.toggle-icon');
-        body.style.display = 'block';
-        icon.textContent = '−';
+(function() {
+    // Open all sections briefly to show saved state
+    document.querySelectorAll('.settings-section').forEach(section => {
+        if (section.classList.contains('open')) return;
+    });
+    // If specific section was saved via legacy endpoint, open it
+    const savedForm = document.querySelector('[action="/settings/{{ saved }}"]');
+    if (savedForm) {
+        const section = savedForm.closest('.settings-section');
+        if (section) {
+            const body = section.querySelector('.settings-section-body');
+            const icon = section.querySelector('.toggle-icon');
+            body.style.display = 'block';
+            icon.textContent = '\u2212';
+        }
     }
-}
+})();
 {% endif %}
 </script>
 

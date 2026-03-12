@@ -1,17 +1,19 @@
 {% extends "setup/base_setup.html" %}
 {% block wizard_content %}
 <h2>Welcome to Nexus</h2>
-<p class="setup-desc">Choose a model preset to get started. This determines which AI provider powers your briefings.</p>
+<p class="setup-desc">Choose your AI provider. This determines which models power your briefings.</p>
 
 {% if error %}
-<div class="form-error">{{ error }}</div>
+<div class="alert-error">{{ error }}</div>
 {% endif %}
 
 <form method="post" action="/setup/step/1">
     <div class="preset-grid">
-        {% for name, label, desc, required_key in presets %}
-        <label class="preset-card {% if selected_preset == name %}selected{% endif %}">
-            <input type="radio" name="preset" value="{{ name }}" {% if selected_preset == name %}checked{% endif %} required>
+        {% for pid, label, desc, required_key in providers %}
+        <label class="preset-card {% if selected_provider == pid %}selected{% endif %}">
+            <input type="radio" name="provider" value="{{ pid }}"
+                   {% if selected_provider == pid %}checked{% endif %}
+                   onchange="onProviderChange(this.value)" required>
             <div class="preset-card-inner">
                 <span class="preset-name">{{ label }}</span>
                 <span class="preset-desc">{{ desc }}</span>
@@ -22,8 +24,68 @@
         </label>
         {% endfor %}
     </div>
+
+    <div id="tier-selector" style="display:none; margin-top: 1.5rem;">
+        <label style="font-weight:600; margin-bottom: 0.5rem; display:block;">Choose a tier</label>
+        <div id="tier-options" class="tier-options"></div>
+    </div>
+
+    <input type="hidden" name="preset" id="preset-hidden" value="{{ selected_preset or '' }}">
+
     <div class="setup-actions">
         <button type="submit" class="btn-primary">Continue</button>
     </div>
 </form>
+
+<script>
+const TIERS = {{ tiers_json | safe }};
+const currentPreset = '{{ selected_preset or '' }}';
+
+function onProviderChange(provider) {
+    const tiers = TIERS[provider] || [];
+    const container = document.getElementById('tier-selector');
+    const optionsDiv = document.getElementById('tier-options');
+    const hiddenInput = document.getElementById('preset-hidden');
+
+    if (tiers.length <= 1) {
+        container.style.display = 'none';
+        hiddenInput.value = tiers.length ? tiers[0][0] : '';
+        return;
+    }
+
+    container.style.display = 'block';
+    optionsDiv.innerHTML = '';
+
+    tiers.forEach(function(tier, i) {
+        const presetName = tier[0], label = tier[1], cost = tier[2];
+        const isChecked = presetName === currentPreset || (currentPreset === '' && i === 0);
+
+        const lbl = document.createElement('label');
+        lbl.className = 'tier-option' + (isChecked ? ' selected' : '');
+
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'tier_radio';
+        radio.value = presetName;
+        if (isChecked) { radio.checked = true; hiddenInput.value = presetName; }
+        radio.onchange = function() {
+            hiddenInput.value = presetName;
+            optionsDiv.querySelectorAll('.tier-option').forEach(function(el) { el.classList.remove('selected'); });
+            lbl.classList.add('selected');
+        };
+
+        const span = document.createElement('span');
+        span.innerHTML = '<strong>' + label + '</strong> <span style="color:var(--nx-text-dim)">' + cost + '</span>';
+
+        lbl.appendChild(radio);
+        lbl.appendChild(span);
+        optionsDiv.appendChild(lbl);
+    });
+}
+
+// Initialize on page load if provider already selected
+{% if selected_provider %}
+onProviderChange('{{ selected_provider }}');
+{% endif %}
+</script>
 {% endblock %}

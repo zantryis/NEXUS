@@ -8,6 +8,10 @@ from typing import Optional
 import feedparser
 from pydantic import BaseModel
 
+# Suppress noisy urllib3 warnings (connection pool, redirects) from feedparser/trafilatura
+logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
+logging.getLogger("urllib3.poolmanager").setLevel(logging.ERROR)
+
 logger = logging.getLogger(__name__)
 
 

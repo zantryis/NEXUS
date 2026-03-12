@@ -15,6 +15,29 @@ PRESET_INFO = [
     ("anthropic", "Anthropic (Claude)", "~$0.10/day — needs ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"),
 ]
 
+# Provider-centric info for the web setup wizard
+# Tuple: (provider_id, label, description, required_env_key)
+PROVIDER_INFO = [
+    ("ollama", "Ollama (Local)", "Free — runs models on your machine", None),
+    ("gemini", "Google Gemini", "Fast and capable", "GEMINI_API_KEY"),
+    ("openai", "OpenAI", "GPT models", "OPENAI_API_KEY"),
+    ("anthropic", "Anthropic", "Claude models", "ANTHROPIC_API_KEY"),
+    ("deepseek", "DeepSeek", "Budget-friendly", "DEEPSEEK_API_KEY"),
+]
+
+# Providers with multiple tier options → list of (preset_name, tier_label, cost)
+PROVIDER_TIERS = {
+    "ollama": [("free", "Free", "$0/day")],
+    "gemini": [("balanced", "Balanced", "~$0.05/day"), ("quality", "Quality", "~$0.15/day")],
+    "openai": [
+        ("openai-cheap", "Cheap", "~$0.03/day"),
+        ("openai-balanced", "Balanced", "~$0.10/day"),
+        ("openai-quality", "Quality", "~$0.25/day"),
+    ],
+    "anthropic": [("anthropic", "Standard", "~$0.10/day")],
+    "deepseek": [("cheap", "Standard", "~$0.01/day")],
+}
+
 TOPIC_CHOICES = [
     ("iran-us-relations", "Iran-US Relations"),
     ("ai-ml-research", "AI/ML Research"),

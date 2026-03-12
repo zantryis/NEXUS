@@ -17,6 +17,15 @@ async def _lifespan(app: FastAPI):
     store = KnowledgeStore(app.state.db_path)
     await store.initialize()
     app.state.store = store
+
+    # Check if knowledge store has any data (for nav visibility)
+    try:
+        count = await store.db.execute("SELECT COUNT(*) FROM events")
+        row = await count.fetchone()
+        app.state.has_data = (row[0] > 0) if row else False
+    except Exception:
+        app.state.has_data = False
+
     yield
     await store.close()
 
@@ -53,6 +62,7 @@ def create_app(db_path: Path | None = None, data_dir: Path | None = None) -> Fas
     templates.env.globals["is_demo_mode"] = lambda: os.getenv(
         "NEXUS_DEMO_MODE", ""
     ).lower() in ("1", "true", "yes")
+    templates.env.globals["has_data"] = lambda: getattr(app.state, "has_data", False)
 
     # Register routes
     from nexus.web.routes.dashboard import router as dashboard_router

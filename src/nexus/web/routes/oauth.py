@@ -47,10 +47,14 @@ async def oauth_initiate(request: Request):
     verifier, challenge = generate_pkce_pair()
     state = secrets.token_urlsafe(32)
 
-    # Store PKCE verifier in server-side session
+    # Store PKCE verifier + origin in server-side session
     if not hasattr(request.app.state, "oauth_sessions"):
         request.app.state.oauth_sessions = {}
-    request.app.state.oauth_sessions[state] = {"code_verifier": verifier}
+    origin = request.query_params.get("from", "")
+    request.app.state.oauth_sessions[state] = {
+        "code_verifier": verifier,
+        "from": origin,
+    }
 
     url = build_authorize_url(
         client_id=_client_id(request),
@@ -95,6 +99,15 @@ async def oauth_callback(request: Request):
     except RuntimeError as e:
         logger.error(f"OAuth token exchange failed: {e}")
         return JSONResponse({"error": str(e)}, status_code=400)
+
+    # If initiated from setup wizard, mark OAuth in the setup session and redirect back
+    if session.get("from") == "setup":
+        setup_sessions = getattr(request.app.state, "setup_sessions", {})
+        # Find the active setup session from cookies
+        setup_sid = request.cookies.get("nexus_setup")
+        if setup_sid and setup_sid in setup_sessions:
+            setup_sessions[setup_sid]["oauth_openai"] = True
+        return RedirectResponse(url="/setup/step/3", status_code=303)
 
     return RedirectResponse(url="/settings?saved=oauth", status_code=303)
 

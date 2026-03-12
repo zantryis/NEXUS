@@ -198,6 +198,7 @@ async def homepage(request: Request):
         "breaking_alerts": breaking_alerts,
         "audio": audio_info,
         "setup_complete": request.query_params.get("setup") == "complete",
+        "pipeline_status": getattr(request.app.state, "pipeline_status", None),
     })
 
 

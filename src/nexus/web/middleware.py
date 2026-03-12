@@ -47,16 +47,34 @@ def _is_local_hostname(hostname: str | None) -> bool:
         return False
 
 
+def _is_private_ip(addr: str) -> bool:
+    """Return True for loopback or private-range IPs (Docker bridge, LAN)."""
+    try:
+        ip = ipaddress.ip_address(addr)
+        return ip.is_loopback or ip.is_private
+    except ValueError:
+        return False
+
+
 def _is_local_request(request: Request) -> bool:
-    """Treat localhost hostnames and loopback client IPs as local-only access."""
+    """Treat localhost hostnames, loopback, and private IPs as local access.
+
+    Inside Docker, the client IP is the bridge network (e.g. 172.17.x.x),
+    so we also check the Host header and accept RFC1918 private ranges.
+    """
     if _is_local_hostname(request.url.hostname):
         return True
 
+    # Check Host header (user browses to localhost:8085 -> forwarded via Docker)
+    host_header = request.headers.get("host", "")
+    host_name = host_header.split(":")[0] if host_header else ""
+    if _is_local_hostname(host_name):
+        return True
+
     if request.client and request.client.host:
-        try:
-            return ipaddress.ip_address(request.client.host).is_loopback
-        except ValueError:
-            return False
+        if _is_private_ip(request.client.host):
+            return True
+
     return False
 
 
@@ -129,9 +147,14 @@ class AdminProtectionMiddleware:
         request = Request(scope, receive=receive)
         config_exists = (self.data_dir / "config.yaml").exists()
 
+        # After initial setup, block wizard pages but allow launch/status (used from dashboard)
         if config_exists and path.startswith("/setup") and not self._setup_reset_allowed():
-            if request.method == "GET":
+            if path in ("/setup/launch", "/setup/status"):
+                pass  # These post-setup endpoints are needed from the dashboard
+            elif request.method == "GET":
                 response = RedirectResponse(url="/settings", status_code=303)
+                await response(scope, receive, send)
+                return
             else:
                 response = JSONResponse(
                     {
@@ -142,8 +165,8 @@ class AdminProtectionMiddleware:
                     },
                     status_code=403,
                 )
-            await response(scope, receive, send)
-            return
+                await response(scope, receive, send)
+                return
 
         if _is_local_request(request):
             await self.app(scope, receive, send)
