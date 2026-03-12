@@ -1,6 +1,6 @@
 """Pydantic models for nexus configuration."""
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -22,12 +22,12 @@ class BriefingConfig(BaseModel):
 
 class TopicConfig(BaseModel):
     name: str
-    priority: str = "medium"
+    priority: Literal["low", "medium", "high"] = "medium"
     subtopics: list[str] = Field(default_factory=list)
     source_languages: list[str] = Field(default_factory=lambda: ["en"])
-    perspective_diversity: str = "low"
-    filter_threshold: float = 6.0
-    scope: str = "medium"  # "narrow" | "medium" | "broad"
+    perspective_diversity: Literal["low", "medium", "high"] = "low"
+    filter_threshold: float = Field(default=6.0, ge=0.0, le=10.0)
+    scope: Literal["narrow", "medium", "broad"] = "medium"
     max_events: Optional[int] = None  # override auto-calculated event cap
 
 
@@ -51,8 +51,8 @@ class AudioConfig(BaseModel):
 
 class BreakingNewsConfig(BaseModel):
     enabled: bool = True
-    poll_interval_hours: int = 3
-    threshold: int = 7
+    poll_interval_hours: int = Field(default=3, ge=1)
+    threshold: int = Field(default=7, ge=1, le=10)
     wire_feeds: list[dict] = Field(default_factory=list)
     default_feeds: bool = True
 
@@ -70,9 +70,9 @@ class SourcesConfig(BaseModel):
 
 
 class BudgetConfig(BaseModel):
-    daily_limit_usd: float = 1.00
-    warning_threshold_usd: float = 0.50
-    degradation_strategy: str = "skip_expensive"  # "skip_expensive" | "stop_all"
+    daily_limit_usd: float = Field(default=1.00, ge=0.0)
+    warning_threshold_usd: float = Field(default=0.50, ge=0.0)
+    degradation_strategy: Literal["skip_expensive", "stop_all"] = "skip_expensive"
 
 
 class NexusConfig(BaseModel):

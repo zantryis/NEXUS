@@ -100,7 +100,8 @@ class OpenAIOAuthManager:
 
         data = resp.json()
         if resp.status_code != 200:
-            raise RuntimeError(f"Token exchange failed: {data}")
+            error_msg = data.get("error_description") or data.get("error") or "unknown error"
+            raise RuntimeError(f"Token exchange failed: {error_msg}")
 
         tokens = {
             "access_token": data["access_token"],
@@ -125,7 +126,8 @@ class OpenAIOAuthManager:
 
         data = resp.json()
         if resp.status_code != 200:
-            raise RuntimeError(f"Token refresh failed: {data}")
+            error_msg = data.get("error_description") or data.get("error") or "unknown error"
+            raise RuntimeError(f"Token refresh failed: {error_msg}")
 
         tokens = {
             "access_token": data["access_token"],

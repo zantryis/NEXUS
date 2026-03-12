@@ -15,6 +15,7 @@ router = APIRouter()
 
 DAILY_LIMIT = 5  # max Q&A requests per IP per day
 DAY_SECONDS = 86400
+MAX_QUESTION_LENGTH = 2000
 
 
 def _check_rate_limit(request: Request) -> tuple[bool, int]:
@@ -57,6 +58,11 @@ async def chat_ask(request: Request):
     question = (body.get("question") or "").strip()
     if not question:
         return JSONResponse({"error": "Question cannot be empty."}, status_code=400)
+    if len(question) > MAX_QUESTION_LENGTH:
+        return JSONResponse(
+            {"error": f"Question too long (max {MAX_QUESTION_LENGTH} characters)."},
+            status_code=400,
+        )
 
     store = get_store(request)
     llm = getattr(request.app.state, "llm", None)

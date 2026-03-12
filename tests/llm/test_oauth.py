@@ -156,3 +156,68 @@ async def test_oauth_manager_refresh_token(tmp_path):
         token = await mgr.get_valid_token(client_id="cid")
 
     assert token == "fresh-at"
+
+
+@pytest.mark.asyncio
+async def test_exchange_code_error_sanitized(tmp_path):
+    """Error response should expose only error_description, not raw API data."""
+    mgr = OpenAIOAuthManager(token_path=tmp_path / "tokens.json")
+
+    mock_response = MagicMock()
+    mock_response.status_code = 400
+    mock_response.json.return_value = {
+        "error": "invalid_grant",
+        "error_description": "Code expired",
+        "internal_trace_id": "abc-123-secret",
+    }
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_response):
+        with pytest.raises(RuntimeError) as exc_info:
+            await mgr.exchange_code(
+                code="bad-code", code_verifier="v", client_id="c", redirect_uri="http://x",
+            )
+
+    msg = str(exc_info.value)
+    assert "Code expired" in msg
+    assert "abc-123-secret" not in msg
+    assert "internal_trace_id" not in msg
+
+
+@pytest.mark.asyncio
+async def test_refresh_error_sanitized(tmp_path):
+    """Refresh error should expose only error_description, not raw API data."""
+    mgr = OpenAIOAuthManager(token_path=tmp_path / "tokens.json")
+
+    mock_response = MagicMock()
+    mock_response.status_code = 401
+    mock_response.json.return_value = {
+        "error": "invalid_token",
+        "error_description": "Refresh token revoked",
+        "server_debug": "do-not-leak",
+    }
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_response):
+        with pytest.raises(RuntimeError) as exc_info:
+            await mgr._refresh(refresh_token="rt", client_id="c")
+
+    msg = str(exc_info.value)
+    assert "Refresh token revoked" in msg
+    assert "do-not-leak" not in msg
+
+
+@pytest.mark.asyncio
+async def test_exchange_code_error_fallback(tmp_path):
+    """Empty error response should use 'unknown error' fallback."""
+    mgr = OpenAIOAuthManager(token_path=tmp_path / "tokens.json")
+
+    mock_response = MagicMock()
+    mock_response.status_code = 500
+    mock_response.json.return_value = {}
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_response):
+        with pytest.raises(RuntimeError) as exc_info:
+            await mgr.exchange_code(
+                code="x", code_verifier="v", client_id="c", redirect_uri="http://x",
+            )
+
+    assert "unknown error" in str(exc_info.value)

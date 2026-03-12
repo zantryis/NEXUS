@@ -96,3 +96,24 @@ async def test_chat_qa_error_returns_500(mock_qa, chat_app):
         resp = await client.post("/api/chat", json={"question": "Boom?"})
         assert resp.status_code == 500
         assert "Failed" in resp.json()["error"]
+
+
+@pytest.mark.asyncio
+async def test_chat_question_too_long(chat_app):
+    """POST /api/chat with question exceeding 2000 chars returns 400."""
+    transport = ASGITransport(app=chat_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/chat", json={"question": "x" * 2001})
+        assert resp.status_code == 400
+        assert "too long" in resp.json()["error"].lower()
+
+
+@pytest.mark.asyncio
+@patch("nexus.agent.qa.answer_question", new_callable=AsyncMock)
+async def test_chat_question_at_limit(mock_qa, chat_app):
+    """POST /api/chat with exactly 2000-char question is accepted."""
+    mock_qa.return_value = "Answer."
+    transport = ASGITransport(app=chat_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/chat", json={"question": "x" * 2000})
+        assert resp.status_code == 200

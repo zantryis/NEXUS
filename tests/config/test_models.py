@@ -1,5 +1,8 @@
 """Tests for config Pydantic models."""
 
+import pytest
+from pydantic import ValidationError
+
 from nexus.config.models import (
     UserConfig,
     BriefingConfig,
@@ -7,6 +10,8 @@ from nexus.config.models import (
     ModelsConfig,
     SourcesConfig,
     NexusConfig,
+    BudgetConfig,
+    BreakingNewsConfig,
 )
 
 
@@ -145,3 +150,70 @@ def test_nexus_config_additional_languages():
         briefing=BriefingConfig(additional_languages=["zh"]),
     )
     assert config.briefing.additional_languages == ["zh"]
+
+
+# --- Validation constraint tests ---
+
+
+def test_topic_filter_threshold_too_high():
+    with pytest.raises(ValidationError):
+        TopicConfig(name="Test", filter_threshold=11.0)
+
+
+def test_topic_filter_threshold_negative():
+    with pytest.raises(ValidationError):
+        TopicConfig(name="Test", filter_threshold=-1.0)
+
+
+def test_topic_invalid_scope():
+    with pytest.raises(ValidationError):
+        TopicConfig(name="Test", scope="wide")
+
+
+def test_topic_invalid_priority():
+    with pytest.raises(ValidationError):
+        TopicConfig(name="Test", priority="critical")
+
+
+def test_topic_invalid_perspective_diversity():
+    with pytest.raises(ValidationError):
+        TopicConfig(name="Test", perspective_diversity="extreme")
+
+
+def test_budget_negative_limit():
+    with pytest.raises(ValidationError):
+        BudgetConfig(daily_limit_usd=-5.0)
+
+
+def test_budget_negative_warning():
+    with pytest.raises(ValidationError):
+        BudgetConfig(warning_threshold_usd=-1.0)
+
+
+def test_budget_invalid_strategy():
+    with pytest.raises(ValidationError):
+        BudgetConfig(degradation_strategy="panic")
+
+
+def test_breaking_news_poll_zero():
+    with pytest.raises(ValidationError):
+        BreakingNewsConfig(poll_interval_hours=0)
+
+
+def test_breaking_news_threshold_zero():
+    with pytest.raises(ValidationError):
+        BreakingNewsConfig(threshold=0)
+
+
+def test_breaking_news_threshold_too_high():
+    with pytest.raises(ValidationError):
+        BreakingNewsConfig(threshold=11)
+
+
+def test_valid_boundary_values():
+    """Valid boundary values should not raise."""
+    TopicConfig(name="Test", filter_threshold=0.0, scope="narrow", priority="high")
+    TopicConfig(name="Test", filter_threshold=10.0, scope="broad", priority="low")
+    BudgetConfig(daily_limit_usd=0.0)
+    BreakingNewsConfig(poll_interval_hours=1, threshold=1)
+    BreakingNewsConfig(threshold=10)

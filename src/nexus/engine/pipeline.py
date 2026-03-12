@@ -100,6 +100,7 @@ async def run_topic_pipeline(
     store: KnowledgeStore,
     capture: FixtureCapture | None = None,
     max_ingest: int | None = None,
+    bg_tasks: list | None = None,
 ) -> TopicSynthesis:
     """Run the pipeline for a single topic: poll → ingest → filter → events → synthesize."""
     slug = topic.name.lower().replace(" ", "-").replace("/", "-")
@@ -243,7 +244,9 @@ async def run_topic_pipeline(
                     logger.info(f"[{topic_name}] Enriched {len(ids)} new entities with media")
                 except Exception as e:
                     logger.warning(f"[{topic_name}] Entity enrichment failed (non-fatal): {e}")
-            asyncio.create_task(_enrich_bg())
+            task = asyncio.create_task(_enrich_bg())
+            if bg_tasks is not None:
+                bg_tasks.append(task)
 
     if new_events:
         event_ids = await store.add_events(new_events, slug)
@@ -321,6 +324,7 @@ async def run_pipeline(
     # Attach store for persistent cost tracking + budget sync
     await llm.set_store(store)
 
+    bg_tasks: list[asyncio.Task] = []
     try:
         for topic in config.topics:
             sources = load_source_registry(data_dir, topic)
@@ -331,7 +335,8 @@ async def run_pipeline(
             try:
                 syn = await run_topic_pipeline(llm, topic, data_dir, sources,
                                                store=store, capture=cap,
-                                               max_ingest=max_ingest)
+                                               max_ingest=max_ingest,
+                                               bg_tasks=bg_tasks)
                 syntheses.append(syn)
             except Exception:
                 logger.exception(f"[{topic.name}] Topic pipeline failed — skipping")
@@ -426,6 +431,10 @@ async def run_pipeline(
         logger.info(f"Briefing saved to {briefing_path} (total pipeline: {total_time:.1f}s)")
         return briefing_path
     finally:
+        if bg_tasks:
+            _, pending = await asyncio.wait(bg_tasks, timeout=30)
+            for t in pending:
+                t.cancel()
         await store.close()
 
 

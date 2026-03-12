@@ -1,5 +1,6 @@
 """ASGI middleware for setup redirect, admin protection, security headers, and demo mode."""
 
+import hmac
 import ipaddress
 import os
 from pathlib import Path
@@ -34,19 +35,6 @@ class SetupRedirectMiddleware:
         await self.app(scope, receive, send)
 
 
-def _is_local_hostname(hostname: str | None) -> bool:
-    """Return True when hostname clearly targets the local machine."""
-    if not hostname:
-        return False
-    normalized = hostname.strip("[]").lower()
-    if normalized == "localhost":
-        return True
-    try:
-        return ipaddress.ip_address(normalized).is_loopback
-    except ValueError:
-        return False
-
-
 def _is_private_ip(addr: str) -> bool:
     """Return True for loopback or private-range IPs (Docker bridge, LAN)."""
     try:
@@ -57,24 +45,13 @@ def _is_private_ip(addr: str) -> bool:
 
 
 def _is_local_request(request: Request) -> bool:
-    """Treat localhost hostnames, loopback, and private IPs as local access.
+    """Treat loopback and private-range client IPs as local access.
 
     Inside Docker, the client IP is the bridge network (e.g. 172.17.x.x),
-    so we also check the Host header and accept RFC1918 private ranges.
+    which falls within RFC1918 private ranges.
     """
-    if _is_local_hostname(request.url.hostname):
-        return True
-
-    # Check Host header (user browses to localhost:8085 -> forwarded via Docker)
-    host_header = request.headers.get("host", "")
-    host_name = host_header.split(":")[0] if host_header else ""
-    if _is_local_hostname(host_name):
-        return True
-
     if request.client and request.client.host:
-        if _is_private_ip(request.client.host):
-            return True
-
+        return _is_private_ip(request.client.host)
     return False
 
 
@@ -174,7 +151,7 @@ class AdminProtectionMiddleware:
 
         token = self._token()
         provided = self._provided_token(request)
-        if token and provided == token:
+        if token and hmac.compare_digest(provided, token):
             if request.query_params.get("admin_token") and request.method in {"GET", "HEAD"}:
                 response = RedirectResponse(
                     url=self._clean_redirect_target(request),
