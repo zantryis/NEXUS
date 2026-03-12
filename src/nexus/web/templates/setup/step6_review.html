@@ -12,9 +12,7 @@
     <div class="review-section">
         <span class="review-label">API Keys</span>
         <span class="review-value">
-            {% if session.get('oauth_openai') %}
-            OpenAI (OAuth)
-            {% elif session.get('keys', {}) | length %}
+            {% if session.get('keys', {}) | length %}
             {{ session.get('keys', {}) | length }} configured
             {% else %}
             None required

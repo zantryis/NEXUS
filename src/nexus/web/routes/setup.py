@@ -128,16 +128,10 @@ async def setup_step2_get(request: Request):
     required_key = session.get("required_key", "")
     key_already_set = required_key and required_key in session.get("keys", {})
 
-    # OAuth availability for OpenAI
-    oauth_available = required_key == "OPENAI_API_KEY"
-    oauth_connected = session.get("oauth_openai", False)
-
     response = templates.TemplateResponse(request, "setup/step2_keys.html", {
         "required_key": required_key,
         "provider": session.get("provider", ""),
         "key_already_set": key_already_set,
-        "oauth_available": oauth_available,
-        "oauth_connected": oauth_connected,
         "error": None,
         "step": 2,
         "total_steps": 6,
@@ -158,20 +152,12 @@ async def setup_step2_post(request: Request):
         response = RedirectResponse(url="/setup/step/3", status_code=303)
         return _set_cookie(response, session_id)
 
-    # If OAuth connected for OpenAI, allow proceeding without API key
-    if not api_key and session.get("oauth_openai"):
-        response = RedirectResponse(url="/setup/step/3", status_code=303)
-        return _set_cookie(response, session_id)
-
     if not api_key:
         templates = get_templates(request)
-        oauth_available = required_key == "OPENAI_API_KEY"
         response = templates.TemplateResponse(request, "setup/step2_keys.html", {
             "required_key": required_key,
             "provider": session.get("provider", ""),
             "key_already_set": False,
-            "oauth_available": oauth_available,
-            "oauth_connected": session.get("oauth_openai", False),
             "error": "API key cannot be empty.",
             "step": 2,
             "total_steps": 6,

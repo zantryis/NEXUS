@@ -17,27 +17,9 @@
         </label>
         <input type="password" id="api_key" name="api_key" class="form-input"
                placeholder="{% if key_already_set %}Leave blank to keep current key{% else %}Paste your API key here{% endif %}"
-               {% if not key_already_set and not oauth_available %}required{% endif %} autocomplete="off">
+               {% if not key_already_set %}required{% endif %} autocomplete="off">
         <span class="form-hint">Your key is stored locally in <code>.env</code> and never sent anywhere.</span>
     </div>
-
-    {% if oauth_available %}
-    <div style="display:flex;align-items:center;gap:1rem;margin:1.25rem 0;">
-        <hr style="flex:1;border:none;border-top:1px solid var(--nx-border);">
-        <span style="color:var(--nx-text-dim);font-size:0.82rem;">or</span>
-        <hr style="flex:1;border:none;border-top:1px solid var(--nx-border);">
-    </div>
-    <div style="text-align:center;">
-        {% if oauth_connected %}
-        <span class="badge badge-active" style="font-size:0.82rem;">OpenAI connected via OAuth</span>
-        {% else %}
-        <a href="/auth/openai?from=setup" class="btn-secondary" style="display:inline-block;text-decoration:none;">
-            Sign in with OpenAI
-        </a>
-        <span class="form-hint" style="display:block;margin-top:0.5rem;">Use your ChatGPT subscription for API access instead of an API key.</span>
-        {% endif %}
-    </div>
-    {% endif %}
 
     <div class="setup-actions">
         <a href="/setup" class="btn-secondary">Back</a>

@@ -72,7 +72,7 @@ async def settings_page(request: Request):
     saved = request.query_params.get("saved")
     error = request.query_params.get("error")
 
-    # Check OAuth status
+    # Experimental OpenAI OAuth status
     from nexus.llm.oauth import OpenAIOAuthManager
     data_dir = _data_dir(request)
     oauth_mgr = OpenAIOAuthManager(token_path=data_dir / ".oauth-tokens.json")
