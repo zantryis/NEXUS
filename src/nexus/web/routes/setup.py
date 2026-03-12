@@ -38,7 +38,7 @@ def _get_session(request: Request) -> tuple[str, dict]:
 
 def _set_cookie(response, session_id: str):
     """Set the session cookie on a response."""
-    response.set_cookie("nexus_setup", session_id, httponly=True, max_age=3600)
+    response.set_cookie("nexus_setup", session_id, httponly=True, max_age=3600, samesite="lax")
     return response
 
 

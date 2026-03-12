@@ -2,7 +2,7 @@
 # Or run: python -m nexus setup (easier!)
 
 # Model preset — determines which LLM provider + models to use
-# Available: free | cheap | balanced | quality | openai-cheap | openai-balanced | anthropic
+# Available: free | cheap | balanced | quality | openai-cheap | openai-balanced | openai-quality | anthropic
 # "free" uses Ollama (local, no API key), "cheap" uses DeepSeek (~$0.01/day),
 # "balanced" uses Gemini Flash+Pro (~$0.05/day), "quality" uses Gemini Pro (~$0.15/day)
 # "openai-cheap" uses GPT-4.1 Nano/Mini (~$0.03/day), "anthropic" uses Claude Haiku/Sonnet (~$0.10/day)
@@ -80,3 +80,8 @@ budget:
 
 sources:
   discover_new_sources: false     # Auto-discover new feeds for topics
+  # discovery_interval_days: 7    # Days between auto-discovery runs
+  # global_feeds: []              # Extra RSS feeds added to all topics
+  # blocked_sources: []           # Domain names to exclude from ingestion
+
+# demo_mode: false                # Read-only dashboard for showcasing (or set NEXUS_DEMO_MODE=1)

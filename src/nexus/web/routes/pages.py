@@ -1,10 +1,9 @@
 """Cached narrative page viewer."""
 
-import markdown
-
 from fastapi import APIRouter, Request
 
 from nexus.web.app import get_store, get_templates
+from nexus.web.sanitize import safe_markdown
 
 router = APIRouter(prefix="/pages")
 
@@ -20,7 +19,7 @@ async def page_view(request: Request, slug: str):
             "what": "Page", "id": slug,
         }, status_code=404)
 
-    rendered = markdown.markdown(page["content_md"], extensions=["tables", "fenced_code"])
+    rendered = safe_markdown(page["content_md"])
 
     return templates.TemplateResponse(request, "page.html", {
         "page": page,

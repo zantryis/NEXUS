@@ -1,6 +1,7 @@
 """SVG radial graph generator for entity relationship visualization."""
 
 import math
+from html import escape
 
 
 def render_entity_network_svg(
@@ -53,8 +54,8 @@ def render_entity_network_svg(
         co = node.get("co_occurrence_count", 1)
         node_r = 6 + (co / max_co) * 10
         name = node["canonical_name"]
-        # Truncate long names
-        display = name[:18] + "..." if len(name) > 18 else name
+        # Truncate long names and escape for SVG safety
+        display = escape(name[:18] + "..." if len(name) > 18 else name)
         eid = node.get("id", "")
 
         lines.append(f'<a href="/explore/entities/{eid}" class="graph-node">')
@@ -67,7 +68,7 @@ def render_entity_network_svg(
         lines.append('</a>')
 
     # Draw center node
-    center_display = center_name[:22] + "..." if len(center_name) > 22 else center_name
+    center_display = escape(center_name[:22] + "..." if len(center_name) > 22 else center_name)
     lines.append(f'<g class="graph-center">')
     lines.append(f'  <circle cx="{cx}" cy="{cy}" r="20" fill="var(--nx-accent)" stroke="var(--nx-bg)" stroke-width="3"/>')
     lines.append(f'  <text x="{cx}" y="{cy + 34}" text-anchor="middle" fill="var(--nx-text)">{center_display}</text>')

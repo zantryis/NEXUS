@@ -7,7 +7,7 @@ An agentic news intelligence compiler that polls 52+ RSS feeds across 8 language
 | Metric | Value |
 |--------|-------|
 | Source files | ~76 Python modules |
-| Tests passing | 454 |
+| Tests passing | 544 |
 | Source feeds | 52 global + per-topic registries, 8 languages |
 | LLM providers | Gemini, OpenAI, Anthropic, DeepSeek, Ollama |
 | TTS backends | Gemini native, OpenAI, ElevenLabs |

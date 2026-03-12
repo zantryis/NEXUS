@@ -194,7 +194,7 @@ async def homepage(request: Request):
 @router.get("/briefings/{briefing_date}")
 async def briefing_detail(request: Request, briefing_date: str):
     """Classic markdown briefing view (archive)."""
-    import markdown
+    from nexus.web.sanitize import safe_markdown
     store = get_store(request)
     templates = get_templates(request)
     data_dir = getattr(request.app.state, "data_dir", Path("data"))
@@ -213,7 +213,7 @@ async def briefing_detail(request: Request, briefing_date: str):
         }, status_code=404)
 
     actual_date, md_text = result
-    briefing_html = markdown.markdown(md_text, extensions=["tables", "fenced_code"])
+    briefing_html = safe_markdown(md_text)
 
     prev_date = actual_date - timedelta(days=1)
     next_date = actual_date + timedelta(days=1)
@@ -253,9 +253,15 @@ async def briefing_detail(request: Request, briefing_date: str):
 async def serve_audio(request: Request, filename: str):
     """Serve audio briefing files."""
     data_dir = getattr(request.app.state, "data_dir", Path("data"))
-    audio_path = data_dir / "artifacts" / "audio" / filename
+    audio_dir = (data_dir / "artifacts" / "audio").resolve()
+    audio_path = (audio_dir / filename).resolve()
 
-    if not audio_path.exists() or not filename.endswith(".mp3"):
+    # Prevent path traversal: resolved path must stay within audio directory
+    if (
+        not str(audio_path).startswith(str(audio_dir) + "/")
+        or not audio_path.exists()
+        or not filename.endswith(".mp3")
+    ):
         return JSONResponse({"error": "Not found"}, status_code=404)
 
     return FileResponse(

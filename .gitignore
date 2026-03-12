@@ -30,6 +30,12 @@ data/evaluation/
 # OAuth tokens
 data/.oauth-tokens.json
 
+# Claude Code
+.claude/
+
+# Internal dev docs
+docs/internal/
+
 # IDE
 .vscode/
 .idea/

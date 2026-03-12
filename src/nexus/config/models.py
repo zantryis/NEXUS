@@ -43,7 +43,7 @@ class ModelsConfig(BaseModel):
 
 class AudioConfig(BaseModel):
     enabled: bool = True
-    tts_backend: str = "gemini"  # "gemini" | "openai" | "kokoro"
+    tts_backend: str = "gemini"  # "gemini" | "openai" | "elevenlabs"
     tts_model: str = "gemini-2.5-flash-preview-tts"
     voice_host_a: str = "Kore"
     voice_host_b: str = "Puck"
