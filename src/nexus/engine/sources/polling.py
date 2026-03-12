@@ -1,7 +1,7 @@
 """RSS source polling — fetch latest items from registered feeds."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from time import mktime
 from typing import Optional
 
@@ -69,6 +69,23 @@ def poll_feed(
             source_tier=source_tier,
         ))
     return items
+
+
+def filter_recent(items: list[ContentItem], max_age_hours: int = 48) -> list[ContentItem]:
+    """Drop items older than max_age_hours based on their published date."""
+    from datetime import timezone
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    kept = []
+    for item in items:
+        if item.published is None:
+            kept.append(item)  # no date → keep (let filter stage decide)
+        elif item.published.tzinfo is None:
+            # Naive datetime — assume UTC
+            if item.published >= cutoff.replace(tzinfo=None):
+                kept.append(item)
+        elif item.published >= cutoff:
+            kept.append(item)
+    return kept
 
 
 def poll_all_feeds(sources: list[dict]) -> list[ContentItem]:

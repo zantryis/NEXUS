@@ -19,7 +19,7 @@ from nexus.engine.knowledge.events import (
     Event, extract_event, is_duplicate_event, merge_events,
 )
 from nexus.engine.knowledge.pages import refresh_stale_pages
-from nexus.engine.sources.polling import ContentItem, poll_all_feeds
+from nexus.engine.sources.polling import ContentItem, poll_all_feeds, filter_recent
 from nexus.engine.synthesis.knowledge import TopicSynthesis, synthesize_topic
 from nexus.engine.synthesis.renderers import render_text_briefing
 from nexus.engine.audio.pipeline import run_audio_pipeline
@@ -109,13 +109,38 @@ async def run_topic_pipeline(
     raw_items = poll_all_feeds(sources)
     timings["poll"] = time.monotonic() - t0
     logger.info(f"[{topic.name}] Polled {len(raw_items)} items")
+
+    # Drop stale articles (>48h) to keep volume manageable
+    recent_items = filter_recent(raw_items, max_age_hours=48)
+    if len(recent_items) < len(raw_items):
+        logger.info(
+            f"[{topic.name}] Recency filter: {len(raw_items)} → {len(recent_items)} "
+            f"({len(raw_items) - len(recent_items)} older than 48h dropped)"
+        )
     if capture:
-        capture.save_polled(raw_items)
+        capture.save_polled(recent_items)
 
     t0 = time.monotonic()
-    unique_items = dedup_items(raw_items)
+    unique_items = dedup_items(recent_items)
     timings["dedup"] = time.monotonic() - t0
     logger.info(f"[{topic.name}] {len(unique_items)} unique after dedup")
+
+    # Cap ingestion to avoid excessive LLM filtering costs
+    # Prioritize items with published dates (most recent first), then undated
+    MAX_INGEST = 250
+    if len(unique_items) > MAX_INGEST:
+        dated = sorted(
+            [i for i in unique_items if i.published],
+            key=lambda x: x.published, reverse=True,
+        )
+        undated = [i for i in unique_items if not i.published]
+        capped = (dated + undated)[:MAX_INGEST]
+        logger.info(
+            f"[{topic.name}] Capped ingestion: {len(unique_items)} → {MAX_INGEST} "
+            f"(keeping {len([i for i in capped if i.published])} dated, "
+            f"{len([i for i in capped if not i.published])} undated)"
+        )
+        unique_items = capped
 
     t0 = time.monotonic()
     ingested = await async_ingest_items(unique_items)
@@ -124,8 +149,8 @@ async def run_topic_pipeline(
     if capture:
         capture.save_ingested(ingested)
 
-    # Load existing events from store
-    existing_events = await store.get_events(slug)
+    # Load existing events from store (last 14 days only — older events live in summaries)
+    existing_events = await store.get_events(slug, since=date.today() - timedelta(days=14))
 
     # Recent events = last 7 days (up to 30) for novelty assessment
     cutoff = date.today() - timedelta(days=7)
@@ -245,10 +270,12 @@ async def run_topic_pipeline(
     monthly = await store.get_summaries(slug, "monthly")
 
     # Knowledge synthesis: build TopicSynthesis (X)
+    # Fallback to recent events only (last 3 days) — older context lives in summaries
+    recent_fallback = [e for e in all_events if e.date >= date.today() - timedelta(days=3)][-10:]
     t0 = time.monotonic()
     synthesis = await synthesize_topic(
         llm, topic,
-        events=new_events or all_events[-10:],
+        events=new_events or recent_fallback,
         articles=relevant,
         weekly_summaries=weekly,
         monthly_summaries=monthly,
@@ -296,9 +323,13 @@ async def run_pipeline(
             if capture:
                 slug = topic.name.lower().replace(" ", "-").replace("/", "-")
                 cap = FixtureCapture(fixture_dir, slug)
-            syn = await run_topic_pipeline(llm, topic, data_dir, sources,
-                                           store=store, capture=cap)
-            syntheses.append(syn)
+            try:
+                syn = await run_topic_pipeline(llm, topic, data_dir, sources,
+                                               store=store, capture=cap)
+                syntheses.append(syn)
+            except Exception:
+                logger.exception(f"[{topic.name}] Topic pipeline failed — skipping")
+                continue
 
         # Save each TopicSynthesis to disk and store
         today = date.today().isoformat()
