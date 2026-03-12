@@ -154,7 +154,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full module map and schema detail
 
 ```bash
 pip install -e ".[all,dev]"
-pytest                          # Run 500+ tests
+pytest                          # Run 547 tests
 ```
 
 ## Project Structure
@@ -171,7 +171,7 @@ src/nexus/
 data/
   sources/        Per-topic RSS source registries (pre-built for 4 topics)
   config.yaml     Your personal configuration (gitignored — created by setup wizard)
-tests/            500+ tests mirroring src structure
+tests/            547 tests mirroring src structure
 ```
 
 ## License

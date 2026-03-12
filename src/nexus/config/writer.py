@@ -1,5 +1,6 @@
 """Write config.yaml and .env files from structured data."""
 
+import os
 from pathlib import Path
 
 import yaml
@@ -32,5 +33,7 @@ def write_env(project_root: Path, keys: dict[str, str]) -> Path:
     if existing:
         env_text = "\n".join(f"{k}={v}" for k, v in existing.items()) + "\n"
         env_path.write_text(env_text)
+        # Restrict permissions — .env contains API keys
+        os.chmod(env_path, 0o600)
 
     return env_path

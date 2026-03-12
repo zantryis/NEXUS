@@ -376,9 +376,10 @@ async def setup_status(request: Request):
     error = status.get("error")
 
     if error:
+        from html import escape
         return HTMLResponse(
             f'<div class="pipeline-status pipeline-error" id="pipeline-bar">'
-            f'Pipeline error: {error}</div>'
+            f'Pipeline error: {escape(str(error))}</div>'
         )
     if done:
         return HTMLResponse(

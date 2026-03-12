@@ -40,18 +40,20 @@ def run_engine():
         print(f"  Or:  cp data/config.example.yaml data/config.yaml")
         sys.exit(1)
 
+    config = load_config(config_path)
+
     api_key = os.getenv("GEMINI_API_KEY")
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
     deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
     openai_api_key = os.getenv("OPENAI_API_KEY")
 
-    if not api_key and not anthropic_api_key and not deepseek_api_key and not openai_api_key:
+    # Free/Ollama preset doesn't need API keys
+    if (not api_key and not anthropic_api_key and not deepseek_api_key
+            and not openai_api_key and config.preset != "free"):
         print("No API key found. Set one in .env:")
         print("  GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, or DEEPSEEK_API_KEY")
-        print("  Or run: python -m nexus setup")
+        print("  Or use preset: free for local Ollama")
         sys.exit(1)
-
-    config = load_config(config_path)
 
     # Apply model overrides from CLI
     overrides = _parse_models_override(sys.argv)

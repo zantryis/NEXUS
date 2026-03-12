@@ -6,12 +6,12 @@ An agentic news intelligence compiler that polls 52+ RSS feeds across 8 language
 
 | Metric | Value |
 |--------|-------|
-| Source files | ~76 Python modules |
+| Source files | ~89 Python modules |
 | Tests passing | 547 |
 | Source feeds | 52 global + per-topic registries, 8 languages |
 | LLM providers | Gemini, OpenAI, Anthropic, DeepSeek, Ollama |
 | TTS backends | Gemini native, OpenAI, ElevenLabs |
-| Knowledge store | SQLite, 16 tables, WAL mode, schema v7 |
+| Knowledge store | SQLite, 17 tables, WAL mode, schema v7 |
 | Delivery | Telegram bot + Web dashboard + Podcast RSS |
 
 ---
@@ -270,9 +270,9 @@ NexusConfig
 
 ---
 
-## SQLite Schema (v4)
+## SQLite Schema (v7)
 
-16 tables with WAL mode and foreign keys enabled.
+17 tables with WAL mode and foreign keys enabled.
 
 ### Core Tables
 
@@ -451,7 +451,7 @@ Source auto-discovery: `python -m nexus sources discover <slug>` uses LLM to fin
 
 **App factory:** `src/nexus/web/app.py:23` — FastAPI + Jinja2 + HTMX, Pico CSS dark theme
 
-### Routes (11 routers)
+### Routes (16 routers)
 
 | Route | File | Purpose |
 |-------|------|---------|
@@ -471,6 +471,11 @@ Source auto-discovery: `python -m nexus sources discover <slug>` uses LLM to fin
 | `GET /api/cost` | cost.py | JSON cost endpoint |
 | `GET /api/cost-badge` | cost.py | HTMX badge fragment |
 | `GET /settings` | settings.py | Settings page (API key status, preset) |
+| `GET /setup` | setup.py | First-run setup wizard |
+| `GET /graph` | graph.py | Entity relationship graph (SVG) |
+| `GET /explore` | explore.py | Topic exploration page |
+| `POST /chat` | chat.py | Web chat Q&A widget (rate-limited) |
+| `GET /oauth/...` | oauth.py | OAuth callback handling |
 
 ---
 
@@ -528,16 +533,24 @@ src/nexus/
 ├── runner.py                Unified runner (dashboard + scheduler + bot)
 ├── config/
 │   ├── models.py            Pydantic config models (9 sub-models)
-│   └── presets.py           Model preset definitions (7 presets)
+│   ├── presets.py           Model preset definitions (8 presets)
+│   ├── loader.py            YAML config loader + preset resolution
+│   └── writer.py            Config/env file writer (setup wizard)
 ├── llm/
 │   ├── client.py            Multi-provider async LLM client
 │   └── cost.py              Per-model cost calculations
 ├── engine/
 │   ├── pipeline.py          Pipeline orchestrator
 │   ├── sources/
+│   │   ├── base.py          Abstract source backend
+│   │   ├── rss.py           RSS source backend
 │   │   ├── polling.py       RSS polling, ContentItem model
 │   │   ├── registry.py      Source registry, GlobalSource model
-│   │   └── discover.py      LLM-powered source auto-discovery
+│   │   ├── router.py        Source backend routing
+│   │   ├── discovery.py     LLM-powered source auto-discovery
+│   │   ├── reddit.py        Reddit source backend
+│   │   ├── telegram_channel.py  Telegram channel backend
+│   │   └── twitter.py       Twitter/X source backend
 │   ├── ingestion/
 │   │   ├── ingest.py        Full-text fetch via trafilatura
 │   │   └── dedup.py         URL normalization + dedup
@@ -545,7 +558,7 @@ src/nexus/
 │   │   └── filter.py        Two-pass LLM filter + perspective diversity
 │   ├── knowledge/
 │   │   ├── store.py         KnowledgeStore (all SQLite CRUD)
-│   │   ├── schema.py        DDL for 16 tables + migrations
+│   │   ├── schema.py        DDL for 17 tables + migrations
 │   │   ├── events.py        Event model, extraction, dedup/merge
 │   │   ├── entities.py      Entity resolution (LLM canonicalization)
 │   │   ├── pages.py         Cached narrative pages with TTL
@@ -560,6 +573,7 @@ src/nexus/
 │   │   ├── tts.py           TTS backends (Gemini, OpenAI, ElevenLabs)
 │   │   └── concat.py        Audio concatenation (pydub → MP3)
 │   └── evaluation/
+│       ├── judge.py         LLM-based synthesis evaluation
 │       └── metrics.py       Pipeline run metrics
 ├── agent/
 │   ├── bot.py               Telegram bot (commands + Q&A)
@@ -567,12 +581,18 @@ src/nexus/
 │   ├── breaking.py          Breaking news detection
 │   ├── delivery.py          Message formatting + delivery
 │   ├── feedback.py          Inline keyboard feedback
-│   └── web_search.py        Web search fallback for Q&A
+│   └── websearch.py         Web search fallback for Q&A
 ├── scheduler/
 │   └── jobs.py              APScheduler job definitions
 ├── web/
 │   ├── app.py               FastAPI app factory
-│   ├── routes/              11 route modules
+│   ├── graph.py             Entity relationship SVG generator
+│   ├── sanitize.py          HTML sanitization (bleach)
+│   ├── middleware.py         Demo mode + rate limiting middleware
+│   ├── clustering.py        Event clustering for explore view
+│   ├── filters.py           Jinja2 template filters
+│   ├── thumbnails.py        Favicon/thumbnail helpers
+│   ├── routes/              16 route modules
 │   ├── templates/           Jinja2 templates (Pico CSS + HTMX)
 │   └── static/              CSS + JS assets
 ├── testing/
