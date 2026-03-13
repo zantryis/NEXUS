@@ -33,7 +33,7 @@ src/nexus/
 data/               # Runtime data (gitignored except source registries)
   sources/          # Per-topic source registries (committed)
   config.yaml       # User config (gitignored, see data/config.example.yaml)
-tests/              # Mirrors src structure, 626 tests (unit + e2e)
+tests/              # Mirrors src structure, 640 tests (unit + e2e)
 ```
 
 ## Key Concepts

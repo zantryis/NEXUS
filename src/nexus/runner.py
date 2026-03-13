@@ -11,7 +11,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from nexus.config.models import NexusConfig
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.llm.client import LLMClient
-from nexus.scheduler.jobs import schedule_jobs
+from nexus.scheduler.jobs import daily_pipeline_job, schedule_jobs
 from nexus.web.app import create_app
 
 logger = logging.getLogger(__name__)
@@ -80,6 +80,27 @@ async def run_all(
         )
         scheduler.start()
         logger.info("Scheduler started")
+
+        # Auto-run: trigger immediate pipeline (for smoke testing / Docker)
+        if os.getenv("NEXUS_AUTO_RUN") == "1":
+            from datetime import datetime, timedelta
+            smoke_cap = int(os.getenv("NEXUS_SMOKE_MODE", "0")) or None
+            scheduler.add_job(
+                daily_pipeline_job,
+                "date",
+                run_date=datetime.now() + timedelta(seconds=10),
+                args=[config, llm, data_dir, store],
+                kwargs={
+                    "bot": bot,
+                    "gemini_api_key": api_key,
+                    "openai_api_key": openai_api_key,
+                    "elevenlabs_api_key": elevenlabs_api_key,
+                    "max_ingest": smoke_cap,
+                },
+                id="auto_run",
+            )
+            cap_msg = f" (max_ingest={smoke_cap})" if smoke_cap else ""
+            logger.info(f"Auto-run: pipeline will start in 10s{cap_msg}")
 
         # 3. Start web dashboard (non-blocking via uvicorn Server)
         app = create_app(data_dir / "knowledge.db", data_dir=data_dir)

@@ -8,6 +8,12 @@ from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.web.app import create_app
 
 
+@pytest.fixture(autouse=True)
+def _clear_demo_mode(monkeypatch):
+    """Ensure NEXUS_DEMO_MODE is not set (may leak from .env via load_dotenv)."""
+    monkeypatch.delenv("NEXUS_DEMO_MODE", raising=False)
+
+
 @pytest.fixture
 def app_no_config(tmp_path):
     """App with no config.yaml — should redirect to /setup."""

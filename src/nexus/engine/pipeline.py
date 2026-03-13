@@ -328,6 +328,32 @@ async def run_pipeline(
     try:
         for topic in config.topics:
             sources = load_source_registry(data_dir, topic)
+
+            # Auto-discover sources if registry is empty and discovery is enabled
+            if not sources and config.sources.discover_new_sources:
+                logger.info(f"[{topic.name}] No sources found — running auto-discovery")
+                try:
+                    from nexus.engine.sources.discovery import discover_sources
+                    slug = topic.name.lower().replace(" ", "-").replace("/", "-")
+                    disc = await discover_sources(
+                        llm, topic.name, subtopics=topic.subtopics,
+                        max_feeds=8, data_dir=data_dir,
+                    )
+                    if disc.feeds:
+                        reg_path = data_dir / "sources" / slug / "registry.yaml"
+                        reg_path.parent.mkdir(parents=True, exist_ok=True)
+                        reg_path.write_text(
+                            yaml.dump({"sources": disc.feeds}, default_flow_style=False)
+                        )
+                        sources = disc.feeds
+                        logger.info(f"[{topic.name}] Discovered {len(sources)} sources")
+                except Exception:
+                    logger.exception(f"[{topic.name}] Auto-discovery failed")
+
+            if not sources:
+                logger.warning(f"[{topic.name}] No sources available — skipping")
+                continue
+
             cap = None
             if capture:
                 slug = topic.name.lower().replace(" ", "-").replace("/", "-")

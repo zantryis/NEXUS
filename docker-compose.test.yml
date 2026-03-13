@@ -1,0 +1,68 @@
+# Multi-config smoke test — 4 variants with different topics, presets, and TTS backends.
+# Usage: python scripts/multi_smoke.py (generates configs and starts containers)
+# Manual: docker compose -f docker-compose.test.yml up --build -d
+
+services:
+  smoke-a:
+    build: .
+    container_name: nexus-smoke-a
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./data-test-a:/app/data
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - NEXUS_SMOKE_MODE=20
+      - NEXUS_AUTO_RUN=1
+      - TELEGRAM_BOT_TOKEN=
+    restart: "no"
+
+  smoke-b:
+    build: .
+    container_name: nexus-smoke-b
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./data-test-b:/app/data
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - NEXUS_SMOKE_MODE=20
+      - NEXUS_AUTO_RUN=1
+      - TELEGRAM_BOT_TOKEN=
+    restart: "no"
+
+  smoke-c:
+    build: .
+    container_name: nexus-smoke-c
+    ports:
+      - "8083:8080"
+    volumes:
+      - ./data-test-c:/app/data
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - NEXUS_SMOKE_MODE=20
+      - NEXUS_AUTO_RUN=1
+      - TELEGRAM_BOT_TOKEN=
+    restart: "no"
+
+  smoke-d:
+    build: .
+    container_name: nexus-smoke-d
+    ports:
+      - "8084:8080"
+    volumes:
+      - ./data-test-d:/app/data
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - NEXUS_SMOKE_MODE=20
+      - NEXUS_AUTO_RUN=1
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN_TEST:-}
+    restart: "no"

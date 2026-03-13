@@ -29,6 +29,7 @@ async def daily_pipeline_job(
     gemini_api_key: str | None = None,
     openai_api_key: str | None = None,
     elevenlabs_api_key: str | None = None,
+    max_ingest: int | None = None,
 ) -> None:
     """Run the daily pipeline + deliver briefing via Telegram."""
     from nexus.engine.pipeline import run_pipeline
@@ -40,6 +41,7 @@ async def daily_pipeline_job(
             gemini_api_key=gemini_api_key,
             openai_api_key=openai_api_key,
             elevenlabs_api_key=elevenlabs_api_key,
+            max_ingest=max_ingest,
         )
         logger.info(f"Daily pipeline complete: {briefing_path}")
 

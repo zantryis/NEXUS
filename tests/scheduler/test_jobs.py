@@ -132,3 +132,19 @@ async def test_daily_pipeline_job_passes_api_keys(config, tmp_path):
         assert call_kwargs["gemini_api_key"] == "gem-key"
         assert call_kwargs["openai_api_key"] == "oai-key"
         assert call_kwargs["elevenlabs_api_key"] == "el-key"
+
+
+async def test_daily_pipeline_job_forwards_max_ingest(config, tmp_path):
+    """daily_pipeline_job should forward max_ingest to run_pipeline."""
+    briefing_path = tmp_path / "artifacts" / "briefings" / "2026-03-10.md"
+    briefing_path.parent.mkdir(parents=True)
+    briefing_path.write_text("Test briefing")
+
+    with patch("nexus.engine.pipeline.run_pipeline", new_callable=AsyncMock) as mock_pipeline:
+        mock_pipeline.return_value = briefing_path
+        await daily_pipeline_job(
+            config, AsyncMock(), tmp_path, AsyncMock(),
+            max_ingest=20,
+        )
+        call_kwargs = mock_pipeline.call_args.kwargs
+        assert call_kwargs["max_ingest"] == 20

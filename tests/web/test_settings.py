@@ -1,5 +1,7 @@
 """Tests for the settings page."""
 
+import os
+
 import pytest
 from unittest.mock import patch
 import yaml
@@ -8,6 +10,12 @@ from httpx import AsyncClient, ASGITransport
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.config.loader import load_config
 from nexus.web.app import create_app
+
+
+@pytest.fixture(autouse=True)
+def _clear_demo_mode(monkeypatch):
+    """Ensure NEXUS_DEMO_MODE is not set (may leak from .env via load_dotenv)."""
+    monkeypatch.delenv("NEXUS_DEMO_MODE", raising=False)
 
 
 @pytest.fixture

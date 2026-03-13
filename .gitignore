@@ -15,6 +15,7 @@ build/
 .coverage
 htmlcov/
 tests/fixtures/*/
+data-test-*/
 
 # Runtime data (user-specific)
 data/config.yaml
