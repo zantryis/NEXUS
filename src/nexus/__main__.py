@@ -1,9 +1,11 @@
 """CLI entry point: python -m nexus <command>."""
 
 import asyncio
+import json
 import logging
 import os
 import sys
+from datetime import date
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -436,6 +438,87 @@ def run_all_services():
     asyncio.run(run_all(config, data_dir, host=host, port=port))
 
 
+def run_benchmark():
+    """Run multi-axis benchmark to evaluate pipeline quality."""
+    load_dotenv()
+    from nexus.config.loader import load_config
+    from nexus.engine.evaluation.benchmark import run_benchmark as _run_benchmark
+    from nexus.llm.client import LLMClient
+
+    data_dir = Path("data")
+    config_path = data_dir / "config.yaml"
+
+    if not config_path.exists():
+        print(f"Config not found at {config_path}. Run: python -m nexus setup")
+        sys.exit(1)
+
+    config = load_config(config_path)
+
+    api_key = os.getenv("GEMINI_API_KEY")
+    anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+    deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+
+    llm = LLMClient(
+        config.models,
+        api_key=api_key,
+        anthropic_api_key=anthropic_api_key,
+        deepseek_api_key=deepseek_api_key,
+        openai_api_key=openai_api_key,
+        budget_config=config.budget,
+    )
+
+    # Parse CLI args
+    topics = None
+    styles = None
+    judge_model = None
+
+    args = sys.argv[2:]
+    i = 0
+    while i < len(args):
+        if args[i] == "--topics" and i + 1 < len(args):
+            topics = [t.strip() for t in args[i + 1].split(",")]
+            i += 2
+        elif args[i] == "--styles" and i + 1 < len(args):
+            styles = [s.strip() for s in args[i + 1].split(",")]
+            i += 2
+        elif args[i] == "--judge-model" and i + 1 < len(args):
+            judge_model = args[i + 1]
+            i += 2
+        else:
+            i += 1
+
+    # Apply judge model override if specified
+    if judge_model:
+        config.models.agent = judge_model
+        print(f"  Judge model override: {judge_model}")
+
+    print(f"Running benchmark...")
+    if topics:
+        print(f"  Topics: {', '.join(topics)}")
+    if styles:
+        print(f"  Styles: {', '.join(styles)}")
+    print()
+
+    report = asyncio.run(_run_benchmark(
+        config, llm, data_dir,
+        topics=topics,
+        styles=styles,
+        judge_model=judge_model,
+    ))
+
+    # Output markdown report
+    md = report.to_markdown()
+    print(md)
+
+    # Save JSON
+    benchmarks_dir = data_dir / "benchmarks"
+    benchmarks_dir.mkdir(parents=True, exist_ok=True)
+    json_path = benchmarks_dir / f"{date.today().isoformat()}.json"
+    json_path.write_text(json.dumps(report.to_json(), indent=2, default=str))
+    print(f"\nJSON saved: {json_path}")
+
+
 def run_test():
     """Run E2E smoke test with real APIs."""
     load_dotenv()
@@ -502,13 +585,14 @@ def main():
     if len(sys.argv) < 2:
         print("Usage: python -m nexus <command>\n\n"
               "Commands:\n"
-              "  setup     Interactive setup wizard (start here)\n"
-              "  run       Start all services (dashboard + scheduler + Telegram)\n"
-              "  engine    Run the pipeline once\n"
-              "  serve     Start dashboard only\n"
-              "  sources   Manage feeds (check | list | build | discover)\n"
-              "  evaluate  Judge synthesis quality\n"
-              "  test      Run E2E smoke test with real APIs\n")
+              "  setup      Interactive setup wizard (start here)\n"
+              "  run        Start all services (dashboard + scheduler + Telegram)\n"
+              "  engine     Run the pipeline once\n"
+              "  serve      Start dashboard only\n"
+              "  sources    Manage feeds (check | list | build | discover)\n"
+              "  evaluate   Judge synthesis quality\n"
+              "  benchmark  Multi-axis pipeline quality benchmark\n"
+              "  test       Run E2E smoke test with real APIs\n")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -526,6 +610,8 @@ def main():
     elif command == "setup":
         from nexus.cli.setup import run_setup
         run_setup(Path("data"))
+    elif command == "benchmark":
+        run_benchmark()
     elif command == "test":
         run_test()
     else:

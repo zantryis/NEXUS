@@ -30,9 +30,15 @@ async def daily_pipeline_job(
     openai_api_key: str | None = None,
     elevenlabs_api_key: str | None = None,
     max_ingest: int | None = None,
+    trigger: str = "scheduled",
 ) -> None:
     """Run the daily pipeline + deliver briefing via Telegram."""
     from nexus.engine.pipeline import run_pipeline
+
+    # Guard: skip if pipeline is already running (e.g., manual trigger)
+    if await store.is_pipeline_running():
+        logger.info("Scheduled pipeline skipped — another run is in progress")
+        return
 
     logger.info("=== Scheduled daily pipeline starting ===")
     try:
@@ -42,6 +48,7 @@ async def daily_pipeline_job(
             openai_api_key=openai_api_key,
             elevenlabs_api_key=elevenlabs_api_key,
             max_ingest=max_ingest,
+            trigger="scheduled",
         )
         logger.info(f"Daily pipeline complete: {briefing_path}")
 

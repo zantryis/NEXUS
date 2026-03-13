@@ -1291,6 +1291,86 @@ class KnowledgeStore:
         return len(summaries)
 
 
+    # ── Pipeline Runs ──────────────────────────────────────────────
+
+    async def start_pipeline_run(
+        self, topics: list[str], trigger: str = "manual",
+    ) -> int:
+        """Record pipeline start. Returns run ID."""
+        # Clean up stale runs (running > 2 hours = presumed crashed)
+        await self.db.execute(
+            "UPDATE pipeline_runs SET status = 'failed', "
+            "error = 'Stale: exceeded 2h timeout', "
+            "completed_at = datetime('now') "
+            "WHERE status = 'running' "
+            "AND started_at < datetime('now', '-2 hours')"
+        )
+        cursor = await self.db.execute(
+            "INSERT INTO pipeline_runs (topics, trigger) VALUES (?, ?)",
+            (json.dumps(topics), trigger),
+        )
+        await self.db.commit()
+        return cursor.lastrowid
+
+    async def complete_pipeline_run(
+        self, run_id: int, article_count: int = 0,
+        event_count: int = 0, cost_usd: float = 0.0,
+    ) -> None:
+        """Mark pipeline run as completed."""
+        await self.db.execute(
+            "UPDATE pipeline_runs SET status = 'completed', "
+            "completed_at = datetime('now'), "
+            "article_count = ?, event_count = ?, cost_usd = ? "
+            "WHERE id = ?",
+            (article_count, event_count, cost_usd, run_id),
+        )
+        await self.db.commit()
+
+    async def fail_pipeline_run(self, run_id: int, error: str) -> None:
+        """Mark pipeline run as failed."""
+        await self.db.execute(
+            "UPDATE pipeline_runs SET status = 'failed', "
+            "completed_at = datetime('now'), error = ? "
+            "WHERE id = ?",
+            (error, run_id),
+        )
+        await self.db.commit()
+
+    async def get_last_pipeline_run(self) -> dict | None:
+        """Get most recent pipeline run."""
+        cursor = await self.db.execute(
+            "SELECT id, started_at, completed_at, status, topics, "
+            "article_count, event_count, cost_usd, error, trigger "
+            "FROM pipeline_runs ORDER BY id DESC LIMIT 1"
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0], "started_at": row[1], "completed_at": row[2],
+            "status": row[3], "topics": json.loads(row[4]),
+            "article_count": row[5], "event_count": row[6],
+            "cost_usd": row[7], "error": row[8], "trigger": row[9],
+        }
+
+    async def is_pipeline_running(self) -> bool:
+        """Check if any pipeline run is in 'running' status."""
+        # First clean up stale runs
+        await self.db.execute(
+            "UPDATE pipeline_runs SET status = 'failed', "
+            "error = 'Stale: exceeded 2h timeout', "
+            "completed_at = datetime('now') "
+            "WHERE status = 'running' "
+            "AND started_at < datetime('now', '-2 hours')"
+        )
+        await self.db.commit()
+        cursor = await self.db.execute(
+            "SELECT COUNT(*) FROM pipeline_runs WHERE status = 'running'"
+        )
+        row = await cursor.fetchone()
+        return row[0] > 0
+
+
 def _entity_row_to_dict(row) -> dict:
     """Convert an entity row to a dict."""
     d = {

@@ -6,7 +6,7 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 7
+CURRENT_VERSION = 8
 
 DDL = """
 -- Schema version tracking
@@ -258,6 +258,27 @@ CREATE INDEX IF NOT EXISTS idx_breaking_alerts_hash_topic ON breaking_alerts(hea
 """
 
 
+MIGRATION_V8 = """
+-- Pipeline run tracking (v8)
+CREATE TABLE IF NOT EXISTS pipeline_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT,
+    status TEXT NOT NULL DEFAULT 'running'
+        CHECK(status IN ('running','completed','failed')),
+    topics TEXT NOT NULL DEFAULT '[]',
+    article_count INTEGER NOT NULL DEFAULT 0,
+    event_count INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL NOT NULL DEFAULT 0.0,
+    error TEXT,
+    trigger TEXT NOT NULL DEFAULT 'manual'
+        CHECK(trigger IN ('manual','scheduled','auto_run','smoke'))
+);
+CREATE INDEX IF NOT EXISTS idx_pipeline_runs_status ON pipeline_runs(status);
+CREATE INDEX IF NOT EXISTS idx_pipeline_runs_started ON pipeline_runs(started_at);
+"""
+
+
 async def initialize_schema(db: aiosqlite.Connection) -> None:
     """Create all tables and indexes. Idempotent."""
     await db.executescript(DDL)
@@ -293,6 +314,10 @@ async def initialize_schema(db: aiosqlite.Connection) -> None:
     if current < 7:
         await db.executescript(MIGRATION_V7)
         logger.info("Applied migration v7: topic-scoped breaking_alerts")
+
+    if current < 8:
+        await db.executescript(MIGRATION_V8)
+        logger.info("Applied migration v8: pipeline_runs table")
 
     if current < CURRENT_VERSION:
         await db.execute(

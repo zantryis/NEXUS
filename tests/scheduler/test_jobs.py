@@ -23,6 +23,9 @@ async def test_daily_pipeline_job_success(config, tmp_path):
     briefing_path.parent.mkdir(parents=True)
     briefing_path.write_text("Test briefing")
 
+    mock_store = AsyncMock()
+    mock_store.is_pipeline_running.return_value = False
+
     with patch("nexus.engine.pipeline.run_pipeline", new_callable=AsyncMock) as mock_pipeline:
         mock_pipeline.return_value = briefing_path
         # Need to patch where it's looked up inside the function
@@ -31,17 +34,20 @@ async def test_daily_pipeline_job_success(config, tmp_path):
             # The function does `from nexus.engine.pipeline import run_pipeline`
             # so we mock at the source
             await daily_pipeline_job(
-                config, AsyncMock(), tmp_path, AsyncMock(),
+                config, AsyncMock(), tmp_path, mock_store,
             )
         mock_pipeline.assert_called_once()
 
 
 async def test_daily_pipeline_job_error(config, tmp_path):
     """Pipeline failure should be caught and logged, not raised."""
+    mock_store = AsyncMock()
+    mock_store.is_pipeline_running.return_value = False
+
     with patch("nexus.engine.pipeline.run_pipeline", new_callable=AsyncMock) as mock_pipeline:
         mock_pipeline.side_effect = Exception("LLM timeout")
         # Should not raise
-        await daily_pipeline_job(config, AsyncMock(), tmp_path, AsyncMock())
+        await daily_pipeline_job(config, AsyncMock(), tmp_path, mock_store)
 
 
 async def test_breaking_news_job_success(config):
@@ -120,10 +126,13 @@ async def test_daily_pipeline_job_passes_api_keys(config, tmp_path):
     briefing_path.parent.mkdir(parents=True)
     briefing_path.write_text("Test briefing")
 
+    mock_store = AsyncMock()
+    mock_store.is_pipeline_running.return_value = False
+
     with patch("nexus.engine.pipeline.run_pipeline", new_callable=AsyncMock) as mock_pipeline:
         mock_pipeline.return_value = briefing_path
         await daily_pipeline_job(
-            config, AsyncMock(), tmp_path, AsyncMock(),
+            config, AsyncMock(), tmp_path, mock_store,
             gemini_api_key="gem-key",
             openai_api_key="oai-key",
             elevenlabs_api_key="el-key",
@@ -140,10 +149,13 @@ async def test_daily_pipeline_job_forwards_max_ingest(config, tmp_path):
     briefing_path.parent.mkdir(parents=True)
     briefing_path.write_text("Test briefing")
 
+    mock_store = AsyncMock()
+    mock_store.is_pipeline_running.return_value = False
+
     with patch("nexus.engine.pipeline.run_pipeline", new_callable=AsyncMock) as mock_pipeline:
         mock_pipeline.return_value = briefing_path
         await daily_pipeline_job(
-            config, AsyncMock(), tmp_path, AsyncMock(),
+            config, AsyncMock(), tmp_path, mock_store,
             max_ingest=20,
         )
         call_kwargs = mock_pipeline.call_args.kwargs

@@ -85,18 +85,22 @@ async def run_all(
         if os.getenv("NEXUS_AUTO_RUN") == "1":
             from datetime import datetime, timedelta
             smoke_cap = int(os.getenv("NEXUS_SMOKE_MODE", "0")) or None
+
+            async def _auto_run_pipeline():
+                await daily_pipeline_job(
+                    config, llm, data_dir, store,
+                    bot=bot,
+                    gemini_api_key=api_key,
+                    openai_api_key=openai_api_key,
+                    elevenlabs_api_key=elevenlabs_api_key,
+                    max_ingest=smoke_cap,
+                    trigger="auto_run",
+                )
+
             scheduler.add_job(
-                daily_pipeline_job,
+                _auto_run_pipeline,
                 "date",
                 run_date=datetime.now() + timedelta(seconds=10),
-                args=[config, llm, data_dir, store],
-                kwargs={
-                    "bot": bot,
-                    "gemini_api_key": api_key,
-                    "openai_api_key": openai_api_key,
-                    "elevenlabs_api_key": elevenlabs_api_key,
-                    "max_ingest": smoke_cap,
-                },
                 id="auto_run",
             )
             cap_msg = f" (max_ingest={smoke_cap})" if smoke_cap else ""

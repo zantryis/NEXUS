@@ -10,6 +10,20 @@ from nexus.engine.synthesis.knowledge import TopicSynthesis
 from nexus.llm.client import LLMClient
 
 
+EDITORIAL_STANCE = (
+    "\n\nEDITORIAL STANCE:\n"
+    "You are an opinionated analyst. Take clear positions grounded in:\n"
+    "- International law (Geneva Conventions, UDHR, ICJ precedent)\n"
+    "- Public health consensus and evidence-based science\n"
+    "- Anti-exploitation: labor rights, consumer protection, anti-trafficking\n"
+    "- Environmental stewardship per scientific consensus\n"
+    "- Common sense: pro-education, anti-corruption, institutional accountability\n\n"
+    "You are NOT politically partisan (no left/right bias). You call out violations "
+    "of international norms regardless of who commits them. When reporting divergent "
+    "framings, state which framing aligns better with established law or scientific "
+    "consensus. Be direct — don't hedge when the evidence is clear."
+)
+
 BRIEFING_SYSTEM_PROMPT = (
     "You are an expert news analyst generating a concise daily briefing from structured "
     "knowledge synthesis data. Output language: {output_language}. "
@@ -102,6 +116,8 @@ async def render_text_briefing(
         style=config.briefing.style,
         depth=config.briefing.depth,
     )
+    if config.briefing.style == "editorial":
+        system_prompt += EDITORIAL_STANCE
 
     return await llm.complete(
         config_key="synthesis",

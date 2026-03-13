@@ -15,7 +15,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 class SetupRedirectMiddleware:
     """Redirect all routes to /setup when config.yaml is missing."""
 
-    PASSTHROUGH_PREFIXES = ("/setup", "/static", "/auth")
+    PASSTHROUGH_PREFIXES = ("/setup", "/static", "/auth", "/api")
 
     def __init__(self, app: ASGIApp, data_dir: Path) -> None:
         self.app = app

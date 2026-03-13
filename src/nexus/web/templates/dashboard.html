@@ -25,6 +25,32 @@
                 {% endif %}
             </div>
         </div>
+        <div class="pipeline-controls">
+            <span class="last-run-label">
+                {% if last_run %}
+                    Last run: {{ last_run.started_at | timeago }}
+                    {% if last_run.status == 'failed' %}<span class="status-badge status-failed">failed</span>{% endif %}
+                {% else %}
+                    No pipeline runs yet
+                {% endif %}
+            </span>
+            {% if pipeline_running %}
+            <div id="pipeline-status" class="pipeline-controls-status status-running"
+                 hx-get="/api/pipeline/status" hx-trigger="every 3s" hx-swap="outerHTML">
+                <div class="pipeline-spinner"></div> Running...
+            </div>
+            {% else %}
+            <button class="btn-sm btn-accent" id="run-pipeline-btn"
+                    hx-post="/api/pipeline/run"
+                    hx-target="#pipeline-status"
+                    hx-swap="outerHTML"
+                    hx-disabled-elt="this"
+                    {% if cooldown_active %}disabled title="Wait {{ cooldown_remaining }}"{% endif %}>
+                {% if cooldown_active %}Run Pipeline ({{ cooldown_remaining }}){% else %}Run Pipeline{% endif %}
+            </button>
+            <span id="pipeline-status"></span>
+            {% endif %}
+        </div>
         {% if audio.available %}
         <div class="audio-player-card">
             <div class="audio-player-header">

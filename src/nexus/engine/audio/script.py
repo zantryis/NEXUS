@@ -23,6 +23,15 @@ class DialogueScript(BaseModel):
     turns: list[DialogueTurn] = Field(default_factory=list)
 
 
+EDITORIAL_DIALOGUE_ADDENDUM = (
+    "\n\nEDITORIAL VOICE:\n"
+    "Nova and Atlas have strong editorial opinions grounded in international law "
+    "and scientific consensus. When covering stories where international norms are "
+    "violated or public health is at stake, they don't 'both-sides' it — they state "
+    "which position has legal/scientific backing. Atlas in particular should push back "
+    "on weak framings. Keep it sharp but never preachy."
+)
+
 DIALOGUE_SYSTEM_PROMPT = (
     "You are the script writer for The Nexus Report, a daily intelligence briefing podcast. "
     "Output language: {output_language}.\n"
@@ -75,6 +84,8 @@ async def generate_dialogue_script(
         output_language=config.user.output_language,
         report_date=date_display,
     )
+    if config.briefing.style == "editorial":
+        system_prompt += EDITORIAL_DIALOGUE_ADDENDUM
 
     try:
         response = await llm.complete(

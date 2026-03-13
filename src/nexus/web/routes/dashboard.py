@@ -1,12 +1,17 @@
 """Dashboard — structured intelligence briefing homepage."""
 
-from datetime import date, timedelta
+import asyncio
+import logging
+import os
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 
 from nexus.web.app import get_store, get_templates
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -182,6 +187,21 @@ async def homepage(request: Request):
     # Audio data
     audio_info = _find_audio(data_dir, briefing_date)
 
+    # Pipeline run info
+    last_run = await store.get_last_pipeline_run()
+    pipeline_running = await store.is_pipeline_running()
+    cooldown_active = False
+    cooldown_remaining = ""
+    if last_run and last_run["status"] == "completed" and last_run["completed_at"]:
+        completed = datetime.fromisoformat(last_run["completed_at"])
+        if completed.tzinfo is None:
+            completed = completed.replace(tzinfo=timezone.utc)
+        since = datetime.now(timezone.utc) - completed
+        if since < timedelta(minutes=30):
+            cooldown_active = True
+            remaining = timedelta(minutes=30) - since
+            cooldown_remaining = f"{int(remaining.total_seconds() // 60)}m"
+
     return templates.TemplateResponse(request, "dashboard.html", {
         "today": today,
         "briefing_date": briefing_date,
@@ -199,6 +219,10 @@ async def homepage(request: Request):
         "audio": audio_info,
         "setup_complete": request.query_params.get("setup") == "complete",
         "pipeline_status": getattr(request.app.state, "pipeline_status", None),
+        "last_run": last_run,
+        "pipeline_running": pipeline_running,
+        "cooldown_active": cooldown_active,
+        "cooldown_remaining": cooldown_remaining,
     })
 
 
@@ -258,6 +282,126 @@ async def briefing_detail(request: Request, briefing_date: str):
         "total_sources": len(source_stats),
         "audio": audio_info,
     })
+
+
+@router.post("/api/pipeline/run")
+async def trigger_pipeline(request: Request):
+    """Trigger pipeline manually from dashboard."""
+    store = get_store(request)
+    data_dir = getattr(request.app.state, "data_dir", Path("data"))
+
+    # Guard 1: already running?
+    if await store.is_pipeline_running():
+        return HTMLResponse(
+            '<div id="pipeline-status" class="pipeline-controls-status status-running"'
+            ' hx-get="/api/pipeline/status" hx-trigger="every 3s" hx-swap="outerHTML">'
+            '<div class="pipeline-spinner"></div> Pipeline is already running...</div>'
+        )
+
+    # Guard 2: cooldown — last completed run < 30 min ago?
+    last_run = await store.get_last_pipeline_run()
+    if last_run and last_run["status"] == "completed" and last_run["completed_at"]:
+        completed = datetime.fromisoformat(last_run["completed_at"])
+        if completed.tzinfo is None:
+            completed = completed.replace(tzinfo=timezone.utc)
+        since = datetime.now(timezone.utc) - completed
+        if since < timedelta(minutes=30):
+            remaining = int((timedelta(minutes=30) - since).total_seconds() // 60)
+            return HTMLResponse(
+                f'<div id="pipeline-status" class="pipeline-controls-status status-cooldown">'
+                f'Cooldown: available in {remaining}m</div>'
+            )
+
+    # Guard 3: config exists?
+    config_path = data_dir / "config.yaml"
+    if not config_path.exists():
+        return HTMLResponse(
+            '<div id="pipeline-status" class="pipeline-controls-status status-error">'
+            'No config found. Complete setup first.</div>'
+        )
+
+    # Launch pipeline in background
+    async def _run():
+        try:
+            from dotenv import load_dotenv
+            from nexus.config.loader import load_config
+            from nexus.llm.client import LLMClient
+            from nexus.engine.pipeline import run_pipeline
+
+            load_dotenv(data_dir.parent / ".env")
+            config = load_config(config_path)
+
+            api_key = os.getenv("GEMINI_API_KEY")
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+
+            llm = LLMClient(
+                config.models,
+                api_key=api_key,
+                anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+                deepseek_api_key=os.getenv("DEEPSEEK_API_KEY"),
+                openai_api_key=openai_api_key,
+                budget_config=config.budget,
+            )
+
+            smoke_cap = int(os.getenv("NEXUS_SMOKE_MODE", "0"))
+            await run_pipeline(
+                config, llm, data_dir,
+                gemini_api_key=api_key,
+                openai_api_key=openai_api_key,
+                elevenlabs_api_key=elevenlabs_api_key,
+                max_ingest=smoke_cap or None,
+                trigger="manual",
+            )
+        except Exception as e:
+            logger.error(f"Manual pipeline run failed: {e}", exc_info=True)
+
+    asyncio.create_task(_run())
+
+    return HTMLResponse(
+        '<div id="pipeline-status" class="pipeline-controls-status status-running"'
+        ' hx-get="/api/pipeline/status" hx-trigger="every 3s" hx-swap="outerHTML">'
+        '<div class="pipeline-spinner"></div> Pipeline started...</div>'
+    )
+
+
+@router.get("/api/pipeline/status")
+async def pipeline_status(request: Request):
+    """HTMX poll endpoint — returns current pipeline status fragment."""
+    store = get_store(request)
+
+    running = await store.is_pipeline_running()
+    if running:
+        return HTMLResponse(
+            '<div id="pipeline-status" class="pipeline-controls-status status-running"'
+            ' hx-get="/api/pipeline/status" hx-trigger="every 3s" hx-swap="outerHTML">'
+            '<div class="pipeline-spinner"></div> Pipeline running...</div>'
+        )
+
+    # Not running — show last run summary
+    last_run = await store.get_last_pipeline_run()
+    if not last_run:
+        return HTMLResponse(
+            '<div id="pipeline-status" class="pipeline-controls-status">'
+            'No pipeline runs yet</div>'
+        )
+
+    if last_run["status"] == "failed":
+        from html import escape
+        error = escape(last_run.get("error") or "Unknown error")
+        return HTMLResponse(
+            f'<div id="pipeline-status" class="pipeline-controls-status status-error">'
+            f'Last run failed: {error}</div>'
+        )
+
+    # Completed
+    events = last_run.get("event_count", 0)
+    cost = last_run.get("cost_usd", 0.0)
+    return HTMLResponse(
+        f'<div id="pipeline-status" class="pipeline-controls-status status-done">'
+        f'Complete &mdash; {events} events, ${cost:.2f}'
+        f' <a href="/" onclick="location.reload()">Refresh</a></div>'
+    )
 
 
 @router.get("/audio/{filename}")

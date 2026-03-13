@@ -572,6 +572,7 @@ async def setup_launch(request: Request):
                 openai_api_key=openai_api_key,
                 elevenlabs_api_key=elevenlabs_api_key,
                 max_ingest=smoke_cap or None,
+                trigger="manual",
             )
             status["stage"] = "complete"
             status["done"] = True

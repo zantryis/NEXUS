@@ -305,6 +305,7 @@ async def run_pipeline(
     openai_api_key: str | None = None,
     elevenlabs_api_key: str | None = None,
     max_ingest: int | None = None,
+    trigger: str = "manual",
 ) -> Path:
     """Run the full daily engine pipeline. Returns path to generated briefing."""
     pipeline_start = time.monotonic()
@@ -320,6 +321,10 @@ async def run_pipeline(
     # Initialize knowledge store
     store = KnowledgeStore(data_dir / "knowledge.db")
     await store.initialize()
+
+    # Record pipeline run
+    topic_slugs = [_topic_slug(t.name) for t in config.topics]
+    run_id = await store.start_pipeline_run(topic_slugs, trigger=trigger)
 
     # Attach store for persistent cost tracking + budget sync
     await llm.set_store(store)
@@ -453,9 +458,22 @@ async def run_pipeline(
             except Exception as e:
                 logger.warning(f"[{lang}] Briefing render failed (non-blocking): {e}")
 
+        # Record successful pipeline run
+        total_articles = sum(s.metadata.get("article_count", 0) for s in syntheses)
+        total_events = sum(s.metadata.get("event_count", 0) for s in syntheses)
+        total_cost = llm.usage.total_cost if hasattr(llm.usage, "total_cost") else 0.0
+        await store.complete_pipeline_run(
+            run_id, article_count=total_articles,
+            event_count=total_events, cost_usd=total_cost,
+        )
+
         total_time = time.monotonic() - pipeline_start
         logger.info(f"Briefing saved to {briefing_path} (total pipeline: {total_time:.1f}s)")
         return briefing_path
+    except Exception as e:
+        if run_id:
+            await store.fail_pipeline_run(run_id, str(e))
+        raise
     finally:
         if bg_tasks:
             _, pending = await asyncio.wait(bg_tasks, timeout=30)

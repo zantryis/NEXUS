@@ -17,7 +17,7 @@ user:
 briefing:
   schedule: "06:00"               # Daily pipeline time (HH:MM in your timezone)
   format: "two-host-dialogue"
-  style: "analytical"             # Style directive passed to LLM
+  style: "analytical"             # "analytical" | "conversational" | "editorial" (opinionated, intl law stance)
   depth: "detailed"               # "brief" | "detailed"
   # duration_target_minutes: 30   # Target podcast length
   # additional_languages: []      # Extra language versions of the briefing
