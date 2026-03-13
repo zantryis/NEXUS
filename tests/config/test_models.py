@@ -21,7 +21,7 @@ def test_minimal_topic():
     assert topic.priority == "low"
     assert topic.subtopics == []
     assert topic.source_languages == ["en"]
-    assert topic.perspective_diversity == "low"
+    assert topic.perspective_diversity == "high"
 
 
 def test_full_topic():

@@ -173,6 +173,28 @@ SQLite Knowledge      Telegram Bot         Dashboard
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full module map and schema details.
 
+## Benchmark
+
+Controlled experiment across 3 topics, 7 test suites, evaluated by two independent LLM judges (Gemini Pro + DeepSeek Reasoner, cross-judge Pearson r=0.86). Scores use anchored 2-10 rubrics with explicit level definitions. Full methodology and per-suite breakdowns in [docs/benchmark-results.md](docs/benchmark-results.md).
+
+### Pipeline Quality (N=3 topics, mean +/- std)
+
+| Metric | Nexus Pipeline | Naive Baseline | Improvement |
+|--------|---------------|----------------|-------------|
+| Overall | **6.0 +/- 1.2** | 2.3 +/- 0.4 | **+164%** |
+| Completeness | 7.7 +/- 1.2 | 2.0 +/- 0.0 | +284% |
+| Source Balance | 6.7 +/- 1.9 | 3.3 +/- 1.9 | +100% |
+| Convergence Accuracy | 5.3 +/- 2.5 | 2.0 +/- 0.0 | +166% |
+| Entity Coverage | 8.3 +/- 0.5 | 2.0 +/- 0.0 | +316% |
+
+### Key Findings
+
+- **Optimal filter threshold: 5.0** — scores 6.5 overall vs 4.9 at threshold 6.0 (threshold sweep, 5 values x 3 topics)
+- **High source diversity: +43% source balance** — default updated from "low" to "high" (diversity sweep, 3 levels x 3 topics)
+- **Best model config: Flash filter + DeepSeek Reasoner synthesis** — scores 5.5 vs 4.7 for all-Flash (model matrix, 7 combos x 3 topics)
+- **Text quality: 8.2-8.5/10** across all briefing styles (style comparison, 3 styles x 3 topics)
+- **Divergence detection: 2.0/10** across all variants — known structural limitation
+
 ## Development
 
 ```bash

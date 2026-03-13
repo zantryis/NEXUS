@@ -519,6 +519,96 @@ def run_benchmark():
     print(f"\nJSON saved: {json_path}")
 
 
+def run_experiment():
+    """Run controlled experiment suites for README quality claims."""
+    load_dotenv()
+    from nexus.config.loader import load_config
+    from nexus.engine.evaluation.experiment import run_experiments
+    from nexus.llm.client import LLMClient
+
+    data_dir = Path("data")
+    config_path = data_dir / "config.yaml"
+
+    if not config_path.exists():
+        print(f"Config not found at {config_path}. Run: python -m nexus setup")
+        sys.exit(1)
+
+    config = load_config(config_path)
+
+    api_key = os.getenv("GEMINI_API_KEY")
+    anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+    deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+
+    llm = LLMClient(
+        config.models,
+        api_key=api_key,
+        anthropic_api_key=anthropic_api_key,
+        deepseek_api_key=deepseek_api_key,
+        openai_api_key=openai_api_key,
+        budget_config=config.budget,
+    )
+
+    # Parse CLI args
+    suites = None
+    topics = None
+    budget_usd = 15.0
+
+    args = sys.argv[2:]
+    i = 0
+    while i < len(args):
+        if args[i] == "--suite" and i + 1 < len(args):
+            suites = [s.strip().upper() for s in args[i + 1].split(",")]
+            i += 2
+        elif args[i] == "--topics" and i + 1 < len(args):
+            topics = [t.strip() for t in args[i + 1].split(",")]
+            i += 2
+        elif args[i] == "--budget" and i + 1 < len(args):
+            budget_usd = float(args[i + 1])
+            i += 2
+        else:
+            i += 1
+
+    print("Running experiment suites...")
+    if suites:
+        print(f"  Suites: {', '.join(suites)}")
+    else:
+        print("  Suites: A, B, C, D, E, F, G (all)")
+    if topics:
+        print(f"  Topics: {', '.join(topics)}")
+    print(f"  Budget cap: ${budget_usd:.2f}")
+    print()
+
+    report = asyncio.run(run_experiments(
+        config, llm, data_dir,
+        suites=suites,
+        topics=topics,
+        budget_usd=budget_usd,
+    ))
+
+    # Output full markdown report
+    md = report.to_markdown()
+    print(md)
+
+    # Save JSON
+    exp_dir = data_dir / "experiments"
+    exp_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = report.timestamp.replace(":", "-").split(".")[0]
+    json_path = exp_dir / f"{timestamp}.json"
+    json_path.write_text(json.dumps(report.to_json(), indent=2, default=str))
+    print(f"\nJSON saved: {json_path}")
+
+    # Save full markdown report
+    md_path = Path("docs") / "benchmark-results.md"
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    md_path.write_text(md)
+    print(f"Full report: {md_path}")
+
+    # Print README snippet
+    print("\n--- README SNIPPET ---\n")
+    print(report.to_readme_snippet())
+
+
 def run_test():
     """Run E2E smoke test with real APIs."""
     load_dotenv()
@@ -592,6 +682,7 @@ def main():
               "  sources    Manage feeds (check | list | build | discover)\n"
               "  evaluate   Judge synthesis quality\n"
               "  benchmark  Multi-axis pipeline quality benchmark\n"
+              "  experiment Controlled experiment suites for README claims\n"
               "  test       Run E2E smoke test with real APIs\n")
         sys.exit(1)
 
@@ -612,6 +703,8 @@ def main():
         run_setup(Path("data"))
     elif command == "benchmark":
         run_benchmark()
+    elif command == "experiment":
+        run_experiment()
     elif command == "test":
         run_test()
     else:

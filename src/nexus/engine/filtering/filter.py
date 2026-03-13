@@ -273,6 +273,10 @@ async def filter_items(
     topic: TopicConfig,
     threshold: float | None = None,
     recent_events: Optional[list] = None,
+    # Experiment overrides — when set, override module constants
+    relevance_weight: float | None = None,
+    significance_weight: float | None = None,
+    diversity_max_items: int | None = None,
 ) -> FilterResult:
     """Two-pass filter: relevance batch → significance+novelty with context.
 
@@ -367,7 +371,9 @@ async def filter_items(
             # Novel articles get a boost
             relevance = item.relevance_score or 0
             novelty_bonus = NOVEL_BONUS if is_novel else NON_NOVEL_BONUS
-            composite = (relevance * RELEVANCE_WEIGHT + sig * SIGNIFICANCE_WEIGHT) * novelty_bonus
+            eff_rel_w = relevance_weight if relevance_weight is not None else RELEVANCE_WEIGHT
+            eff_sig_w = significance_weight if significance_weight is not None else SIGNIFICANCE_WEIGHT
+            composite = (relevance * eff_rel_w + sig * eff_sig_w) * novelty_bonus
             item.relevance_score = round(composite, 1)
 
             # Keep if significance >= 4 or novel
@@ -383,7 +389,8 @@ async def filter_items(
     logger.info(f"Pass 2: {len(pass2_results)}/{len(pass1_results)} passed significance+novelty filter")
 
     # --- Perspective diversity selection ---
-    selected = apply_perspective_diversity(pass2_results, topic)
+    eff_div_max = diversity_max_items if diversity_max_items is not None else DIVERSITY_MAX_ITEMS
+    selected = apply_perspective_diversity(pass2_results, topic, max_items=eff_div_max)
 
     # Mark diversity-rejected items
     selected_urls = {item.url for item in selected}

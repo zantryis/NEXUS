@@ -25,8 +25,8 @@ class TopicConfig(BaseModel):
     priority: Literal["low", "medium", "high"] = "medium"
     subtopics: list[str] = Field(default_factory=list)
     source_languages: list[str] = Field(default_factory=lambda: ["en"])
-    perspective_diversity: Literal["low", "medium", "high"] = "low"
-    filter_threshold: float = Field(default=6.0, ge=0.0, le=10.0)
+    perspective_diversity: Literal["low", "medium", "high"] = "high"
+    filter_threshold: float = Field(default=5.0, ge=0.0, le=10.0)
     scope: Literal["narrow", "medium", "broad"] = "medium"
     max_events: Optional[int] = None  # override auto-calculated event cap
 

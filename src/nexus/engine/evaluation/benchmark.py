@@ -30,23 +30,44 @@ logger = logging.getLogger(__name__)
 # ── Text quality rubric (separate from synthesis quality) ────────────────────
 
 BRIEFING_JUDGE_PROMPT = (
-    "You are an expert editor evaluating a news briefing. "
-    "Score the briefing TEXT on these dimensions:\n\n"
-    "1. **Clarity** (1-10): Is it easy to scan and understand?\n"
-    "2. **Insight density** (1-10): New, non-obvious information per paragraph?\n"
-    "3. **Source attribution** (1-10): Are key claims attributed to sources?\n"
-    "4. **Narrative coherence** (1-10): Does it tell a story, not just list facts?\n"
-    "5. **Actionability** (1-10): Could a decision-maker act on this?\n\n"
+    "You are an expert editor evaluating a news briefing.\n"
+    "Score the TEXT using the anchor definitions below.\n\n"
+    "## 1. Clarity (2-10)\n"
+    "- **2**: Dense, jargon-heavy, requires re-reading to parse\n"
+    "- **4**: Understandable but poorly organized, hard to scan\n"
+    "- **6**: Clear writing, reasonable structure, some dense sections\n"
+    "- **8**: Easy to scan, good headers, key info immediately visible\n"
+    "- **10**: Exemplary — scannable in 30s, every sentence earns its place\n\n"
+    "## 2. Insight Density (2-10)\n"
+    "- **2**: Mostly background/filler, <1 new fact per paragraph\n"
+    "- **4**: Some new info but padded with obvious context\n"
+    "- **6**: Solid info density, 1-2 insights per paragraph\n"
+    "- **8**: High density — nearly every sentence adds new info\n"
+    "- **10**: Exceptional — every paragraph delivers non-obvious insights\n\n"
+    "## 3. Source Attribution (2-10)\n"
+    "- **2**: No sources cited, claims float without attribution\n"
+    "- **4**: Occasional attribution but most claims unattributed\n"
+    "- **6**: Key claims attributed, but attribution inconsistent\n"
+    "- **8**: Claims consistently attributed without cluttering the text\n"
+    "- **10**: Clean attribution — sources named where needed, not over-attributed\n\n"
+    "## 4. Narrative Coherence (2-10)\n"
+    "- **2**: Disjointed fact list, no narrative arc\n"
+    "- **4**: Loosely connected paragraphs, weak transitions\n"
+    "- **6**: Clear topic grouping, stories have basic structure\n"
+    "- **8**: Strong narrative — stories flow logically, connections drawn\n"
+    "- **10**: Compelling — reads like expert analysis, not a dump\n\n"
+    "## 5. Actionability (2-10)\n"
+    "- **2**: Pure background, a decision-maker learns nothing new\n"
+    "- **4**: Some news but implications not drawn\n"
+    "- **6**: Developments reported with basic context for action\n"
+    "- **8**: Clear implications — reader knows what to watch/do next\n"
+    "- **10**: Fully actionable — risks, opportunities, and timeline clear\n\n"
     "Respond with JSON:\n"
-    "{\n"
-    '  "clarity": <int>,\n'
-    '  "insight_density": <int>,\n'
-    '  "source_attribution": <int>,\n'
-    '  "narrative_coherence": <int>,\n'
-    '  "actionability": <int>,\n'
-    '  "overall": <float>,\n'
-    '  "notes": "..."\n'
-    "}"
+    '{"clarity": <int>, "insight_density": <int>, "source_attribution": <int>,\n'
+    ' "narrative_coherence": <int>, "actionability": <int>, "overall": <float>,\n'
+    ' "notes": "..."}\n\n'
+    "IMPORTANT: Use the FULL range. A raw article list should score 2-4. "
+    "A good newsletter scores 6-8. Only an exceptional briefing deserves 9-10."
 )
 
 
@@ -231,8 +252,17 @@ def build_naive_synthesis(
 
 # ── Text quality judge ───────────────────────────────────────────────────────
 
-async def judge_briefing_text(llm: LLMClient, briefing_text: str) -> dict:
-    """Judge a rendered briefing on text quality."""
+async def judge_briefing_text(
+    llm: LLMClient, briefing_text: str, model_override: str | None = None,
+) -> dict:
+    """Judge a rendered briefing on text quality.
+
+    If model_override is set, temporarily swaps the agent model for this call.
+    """
+    original_model = None
+    if model_override and hasattr(llm, "_config"):
+        original_model = llm._config.agent
+        llm._config.agent = model_override
     try:
         response = await llm.complete(
             config_key="agent",
@@ -250,6 +280,9 @@ async def judge_briefing_text(llm: LLMClient, briefing_text: str) -> dict:
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         logger.warning(f"Briefing judge failed: {e}")
         return {"error": str(e)}
+    finally:
+        if original_model is not None:
+            llm._config.agent = original_model
 
 
 # ── Funnel stats ─────────────────────────────────────────────────────────────

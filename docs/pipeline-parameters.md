@@ -28,7 +28,7 @@ All others are code constants — modify in source or wait for future config sup
 | Parameter | Value | Location | Notes |
 |-----------|-------|----------|-------|
 | `BATCH_SIZE` | 10 | `filter.py:38` | Articles per LLM call |
-| `filter_threshold` | 6.0 (default) | `models.py:29` | **Configurable** per-topic. Scale: 1–10, lower = more pass |
+| `filter_threshold` | 5.0 (default) | `models.py:29` | **Configurable** per-topic. Scale: 1–10, lower = more pass. Benchmark: 5.0 optimal (6.5/10), 6.0 drops source balance |
 | Snippet cap | 1000 chars | `filter.py:90` | Max article text per batch item |
 
 **Rubric** (system prompt at `filter.py:23-29`):
@@ -60,7 +60,7 @@ Constants: `RELEVANCE_WEIGHT=0.4`, `SIGNIFICANCE_WEIGHT=0.6`, `NOVEL_BONUS=1.0`,
 | Parameter | Value | Location | Notes |
 |-----------|-------|----------|-------|
 | `max_items` | 30 | `filter.py:198` | Max articles after diversity selection |
-| `perspective_diversity` | `"medium"` (default) | `models.py` | **Configurable** per-topic: `low`, `medium`, `high` |
+| `perspective_diversity` | `"high"` (default) | `models.py` | **Configurable** per-topic: `low`, `medium`, `high`. Benchmark: high diversity improves source balance by 43% |
 | High diversity | ≥ 20% per affiliation | `filter.py:209` | Min representation from each source type |
 | Medium diversity | ≥ 10% per affiliation | `filter.py:209` | |
 | Low diversity | Pure score ranking | `filter.py:206-207` | No diversity constraint |

@@ -31,8 +31,8 @@ topics:
     priority: high                # high | medium | low
     subtopics: ["LLM", "computer vision", "AI safety"]
     source_languages: ["en"]      # ISO 639-1 codes
-    perspective_diversity: medium  # low | medium | high (min source affiliation balance)
-    filter_threshold: 6.0         # 1-10, lower = more articles pass
+    perspective_diversity: high    # low | medium | high (min source affiliation balance)
+    filter_threshold: 5.0         # 1-10, lower = more articles pass (benchmark: 5.0 optimal)
     scope: medium                 # narrow | medium | broad (affects event extraction cap)
     # max_events: 20              # Override auto-calculated event extraction cap
 
