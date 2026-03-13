@@ -1,0 +1,109 @@
+# Curated sources for Semiconductor Supply Chain
+# Covers: chip manufacturing, EUV lithography, fab investment, CHIPS Act,
+# export controls, TSMC/Samsung/Intel, supply chain disruptions.
+#
+# Tier A: dedicated semiconductor/electronics industry outlets, official sources
+# Tier B: broader tech outlets with regular semiconductor coverage
+
+sources:
+  # ── A-tier: dedicated semiconductor industry coverage ──
+
+  - id: semiengineering
+    type: rss
+    url: "https://semiengineering.com/feed/"
+    language: en
+    tier: A
+    affiliation: private
+    country: US
+
+  - id: semiconductor-digest
+    type: rss
+    url: "https://www.semiconductor-digest.com/feed/"
+    language: en
+    tier: A
+    affiliation: private
+    country: US
+
+  - id: fierceelectronics
+    type: rss
+    url: "https://www.fierceelectronics.com/rss/xml"
+    language: en
+    tier: A
+    affiliation: private
+    country: US
+
+  - id: eenews-europe
+    type: rss
+    url: "https://www.eenewseurope.com/en/feed/"
+    language: en
+    tier: A
+    affiliation: private
+    country: NL
+
+  # ── A-tier: financial / business angle on chips ──
+
+  - id: ft-tech
+    type: rss
+    url: "https://www.ft.com/technology?format=rss"
+    language: en
+    tier: A
+    affiliation: private
+    country: GB
+
+  - id: nikkei-asia
+    type: rss
+    url: "https://asia.nikkei.com/rss/feed/nar"
+    language: en
+    tier: A
+    affiliation: private
+    country: JP
+
+  - id: cnbc-tech
+    type: rss
+    url: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910"
+    language: en
+    tier: A
+    affiliation: private
+    country: US
+
+  # ── B-tier: broader tech with regular chip coverage ──
+
+  - id: theregister
+    type: rss
+    url: "https://www.theregister.com/headlines.atom"
+    language: en
+    tier: B
+    affiliation: private
+    country: GB
+
+  - id: tomshardware
+    type: rss
+    url: "https://www.tomshardware.com/feeds/all"
+    language: en
+    tier: B
+    affiliation: private
+    country: US
+
+  - id: ars-technica
+    type: rss
+    url: "https://feeds.arstechnica.com/arstechnica/technology-lab"
+    language: en
+    tier: B
+    affiliation: private
+    country: US
+
+  - id: nyt-tech
+    type: rss
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml"
+    language: en
+    tier: B
+    affiliation: private
+    country: US
+
+  - id: bbc-tech
+    type: rss
+    url: "https://feeds.bbci.co.uk/news/technology/rss.xml"
+    language: en
+    tier: B
+    affiliation: public
+    country: GB

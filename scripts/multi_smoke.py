@@ -23,10 +23,6 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from dotenv import load_dotenv
-
-load_dotenv(PROJECT_ROOT / ".env")
-
 from nexus.config.writer import write_config
 
 # ── Test matrix ──────────────────────────────────────────────────────────────
@@ -302,6 +298,9 @@ def print_summary() -> None:
 
 
 def main():
+    from dotenv import load_dotenv
+    load_dotenv(PROJECT_ROOT / ".env")
+
     parser = argparse.ArgumentParser(description="Multi-config smoke test orchestrator")
     parser.add_argument("--skip-discovery", action="store_true",
                         help="Skip source auto-discovery (assume registries exist)")

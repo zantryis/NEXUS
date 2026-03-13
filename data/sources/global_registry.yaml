@@ -500,3 +500,256 @@ sources:
     tags: [energy, markets, policy]
     affiliation: private
     country: GB
+
+  # ══════════════════════════════════════════════════════
+  # SPACE / AEROSPACE
+  # ══════════════════════════════════════════════════════
+
+  - id: nasa-breaking
+    name: "NASA Breaking News"
+    url: "https://www.nasa.gov/rss/dyn/breaking_news.rss"
+    language: en
+    tier: A
+    tags: [space, science]
+    affiliation: public
+    country: US
+
+  - id: spacenews
+    name: "SpaceNews"
+    url: "https://spacenews.com/feed/"
+    language: en
+    tier: A
+    tags: [space, defense]
+    affiliation: private
+    country: US
+
+  - id: space-com
+    name: "Space.com"
+    url: "https://www.space.com/feeds/all"
+    language: en
+    tier: B
+    tags: [space, science]
+    affiliation: private
+    country: US
+
+  - id: esa-news
+    name: "European Space Agency"
+    url: "https://www.esa.int/rssfeed/Our_Activities/Space_News"
+    language: en
+    tier: A
+    tags: [space, science]
+    affiliation: public
+    country: NL
+
+  - id: ars-space
+    name: "Ars Technica Science"
+    url: "https://feeds.arstechnica.com/arstechnica/science"
+    language: en
+    tier: B
+    tags: [space, science, tech]
+    affiliation: private
+    country: US
+
+  # ══════════════════════════════════════════════════════
+  # CYBERSECURITY
+  # ══════════════════════════════════════════════════════
+
+  - id: bleepingcomputer
+    name: "BleepingComputer"
+    url: "https://www.bleepingcomputer.com/feed/"
+    language: en
+    tier: A
+    tags: [cyber, tech]
+    affiliation: private
+    country: US
+
+  - id: thehackernews
+    name: "The Hacker News"
+    url: "https://feeds.feedburner.com/TheHackersNews"
+    language: en
+    tier: A
+    tags: [cyber, tech]
+    affiliation: private
+    country: US
+
+  - id: dark-reading
+    name: "Dark Reading"
+    url: "https://www.darkreading.com/rss.xml"
+    language: en
+    tier: A
+    tags: [cyber, tech]
+    affiliation: private
+    country: US
+
+  - id: krebsonsecurity
+    name: "Krebs on Security"
+    url: "https://krebsonsecurity.com/feed/"
+    language: en
+    tier: A
+    tags: [cyber]
+    affiliation: private
+    country: US
+
+  - id: cisa-alerts
+    name: "CISA Cybersecurity Advisories"
+    url: "https://www.cisa.gov/cybersecurity-advisories/all.xml"
+    language: en
+    tier: A
+    tags: [cyber, defense]
+    affiliation: public
+    country: US
+
+  # ══════════════════════════════════════════════════════
+  # HEALTH / MEDICINE
+  # ══════════════════════════════════════════════════════
+
+  - id: bbc-health
+    name: "BBC Health"
+    url: "https://feeds.bbci.co.uk/news/health/rss.xml"
+    language: en
+    tier: A
+    tags: [health, science]
+    affiliation: public
+    country: GB
+
+  - id: nyt-health
+    name: "New York Times Health"
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/Health.xml"
+    language: en
+    tier: A
+    tags: [health]
+    affiliation: private
+    country: US
+
+  - id: statnews
+    name: "STAT News"
+    url: "https://www.statnews.com/feed/"
+    language: en
+    tier: A
+    tags: [health, science]
+    affiliation: private
+    country: US
+
+  - id: who-news
+    name: "WHO News"
+    url: "https://www.who.int/rss-feeds/news-english.xml"
+    language: en
+    tier: A
+    tags: [health, world]
+    affiliation: public
+    country: CH
+
+  # ══════════════════════════════════════════════════════
+  # DEFENSE / SECURITY
+  # ══════════════════════════════════════════════════════
+
+  - id: defense-one
+    name: "Defense One"
+    url: "https://www.defenseone.com/rss/all/"
+    language: en
+    tier: A
+    tags: [defense, politics]
+    affiliation: private
+    country: US
+
+  - id: breaking-defense
+    name: "Breaking Defense"
+    url: "https://breakingdefense.com/feed/"
+    language: en
+    tier: B
+    tags: [defense, tech]
+    affiliation: private
+    country: US
+
+  # ══════════════════════════════════════════════════════
+  # FINANCE / ECONOMICS
+  # ══════════════════════════════════════════════════════
+
+  - id: nyt-business
+    name: "New York Times Business"
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml"
+    language: en
+    tier: A
+    tags: [finance, world]
+    affiliation: private
+    country: US
+
+  - id: ft-tech
+    name: "Financial Times Technology"
+    url: "https://www.ft.com/technology?format=rss"
+    language: en
+    tier: A
+    tags: [finance, tech, semiconductors]
+    affiliation: private
+    country: GB
+
+  # ══════════════════════════════════════════════════════
+  # SCIENCE (general)
+  # ══════════════════════════════════════════════════════
+
+  - id: nature-news
+    name: "Nature News"
+    url: "https://www.nature.com/nature.rss"
+    language: en
+    tier: A
+    tags: [science, research]
+    affiliation: academic
+    country: GB
+
+  - id: sciencedaily
+    name: "Science Daily"
+    url: "https://www.sciencedaily.com/rss/all.xml"
+    language: en
+    tier: B
+    tags: [science]
+    affiliation: private
+    country: US
+
+  - id: physorg
+    name: "Phys.org"
+    url: "https://phys.org/rss-feed/"
+    language: en
+    tier: B
+    tags: [science, tech]
+    affiliation: private
+    country: US
+
+  - id: new-scientist
+    name: "New Scientist"
+    url: "https://www.newscientist.com/feed/home/"
+    language: en
+    tier: B
+    tags: [science]
+    affiliation: private
+    country: GB
+
+  # ══════════════════════════════════════════════════════
+  # SEMICONDUCTORS / ELECTRONICS
+  # ══════════════════════════════════════════════════════
+
+  - id: semiengineering
+    name: "Semiconductor Engineering"
+    url: "https://semiengineering.com/feed/"
+    language: en
+    tier: A
+    tags: [semiconductors, tech]
+    affiliation: private
+    country: US
+
+  - id: semiconductor-digest
+    name: "Semiconductor Digest"
+    url: "https://www.semiconductor-digest.com/feed/"
+    language: en
+    tier: A
+    tags: [semiconductors, tech]
+    affiliation: private
+    country: US
+
+  - id: tomshardware
+    name: "Tom's Hardware"
+    url: "https://www.tomshardware.com/feeds/all"
+    language: en
+    tier: B
+    tags: [semiconductors, tech]
+    affiliation: private
+    country: US

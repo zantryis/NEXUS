@@ -153,28 +153,60 @@ cost = (input_tokens / 1M) × input_price + (output_tokens / 1M) × output_price
 
 ## 11. Source Discovery
 
-### Discovery Flow
+### Source Tier Taxonomy
+
+Sources are classified into tiers that indicate editorial quality and coverage authority:
+
+| Tier | Description | Examples |
+|------|-------------|----------|
+| **A** | Major outlets with original reporting, primary news agencies, official government/institutional sources | BBC, NYT, Reuters, Semiconductor Engineering, NASA, CISA |
+| **B** | Established secondary outlets, regional publications, trade press with regular coverage | Tom's Hardware, The Register, Nikkei Asia, EE News Europe |
+| **C** | Social media aggregators, personal blogs, unverified sources | Reddit, Twitter/X, individual blogs |
+
+Tiers are informational metadata — they do not currently affect filtering, scoring, or synthesis weighting. Discovery prioritizes finding A-tier and B-tier sources; C-tier sources are not actively discovered.
+
+### Discovery Flow (Agentic)
+
+Discovery uses a budget-aware agentic loop that evaluates feed quality and refines search queries when initial results are too generic:
 
 | Step | Description | Location |
 |------|-------------|----------|
-| 1. Global registry matching | LLM scores curated feeds against topic relevance | `discovery.py:87-154` |
-| 2. Google News RSS | Free, always-valid RSS feeds via Google News search | `discovery.py:160-194` |
-| 3. Web search discovery | DuckDuckGo search for RSS feed URLs | `discovery.py:200-245` |
-| 4. Metadata classification | LLM classifies affiliation, country, tier for unknowns | `discovery.py:287-330` |
+| 1. Global registry matching | LLM scores curated feeds against topic relevance | `discovery.py` |
+| 2. Google News RSS | Free, always-valid RSS feeds via Google News search | `discovery.py` |
+| 3. Web search discovery | DuckDuckGo search for RSS feed URLs | `discovery.py` |
+| 3b. Feed evaluation | Score sample article titles from each feed against topic (1-10) | `discovery.py` |
+| 3c. Query refinement | If < 3 good feeds found, generate specialized queries and repeat 3→3b | `discovery.py` |
+| 4. Metadata classification | LLM classifies affiliation, country, tier for unknowns | `discovery.py` |
 | 5. Diversity scoring | Shannon entropy across geographic, affiliation, language axes | `diversity.py` |
+
+**Agentic refinement**: After initial web search, each discovered feed's sample article titles are scored against the topic. Feeds scoring below 5/10 are dropped as too generic. If fewer than 3 good feeds remain and the LLM budget allows, the system generates more targeted queries (focusing on trade journals, industry associations, government agencies) and runs another discovery+evaluation round.
 
 ### Discovery Parameters
 
 | Parameter | Value | Location | Notes |
 |-----------|-------|----------|-------|
-| Max registry matches | 20 | `discovery.py:93` | Top curated feeds scored ≥ 5/10 |
-| Registry relevance threshold | 5 | `discovery.py:127` | Score 1–10, below 5 excluded |
-| Google News subtopic limit | 3 | `discovery.py:164` | Max subtopic queries for Google News RSS |
-| Web search results per query | 8 | `websearch.py` via `_find_rss_feeds` | DuckDuckGo results per query |
-| Feed validation concurrency | 5 | `discovery.py:404` | Semaphore for parallel URL validation |
-| Max web URLs to validate | 30 | `discovery.py:410` | Cap on web-discovered URLs to check |
-| Default max feeds | 25 | `discovery.py:355` | Total feeds returned per topic |
-| Smoke test max feeds | 8 | `smoke.py:27` | Reduced for speed |
+| Max registry matches | 20 | `discovery.py` | Top curated feeds scored ≥ 5/10 |
+| Registry relevance threshold | 5 | `discovery.py` | Score 1–10, below 5 excluded |
+| Google News subtopic limit | 3 | `discovery.py` | Max subtopic queries for Google News RSS |
+| Web search results per query | 8 | `websearch.py` | DuckDuckGo results per query |
+| Feed validation concurrency | 5 | `discovery.py` | Semaphore for parallel URL validation |
+| Max web URLs to validate | 30 | `discovery.py` | Cap on web-discovered URLs to check |
+| Default max feeds | 25 | `discovery.py` | Total feeds returned per topic |
+| Feed evaluation threshold | 5 | `discovery.py` | Feeds scoring < 5 are dropped as irrelevant |
+| Sample titles per feed | 5 | `discovery.py` | Article titles sampled for evaluation |
+| `max_rounds` | 2 | `discovery.py` | Discovery rounds (1=initial, 2+=with refinement) |
+| `max_llm_calls` | 8 | `discovery.py` | Budget cap for total LLM calls during discovery |
+| Refinement trigger | < 3 good web feeds | `discovery.py` | Triggers another round with refined queries |
+| Smoke test max feeds | 8 | `smoke.py` | Reduced for speed |
+
+### Curated Source Registries
+
+For best results with niche topics, curate a dedicated source registry:
+
+- **Global registry**: `data/sources/global_registry.yaml` — ~80 sources across 10+ verticals (world, politics, tech-AI, energy-climate, space, cyber, health, defense, finance, semiconductors, science)
+- **Per-topic registries**: `data/sources/<topic-slug>/registry.yaml` — hand-curated sources for specific topics (e.g., `semiconductor-supply-chain/registry.yaml`)
+
+Discovery checks the global registry first (LLM-scored relevance), then falls back to web search. Per-topic registries are loaded directly by the pipeline ingestion step — they bypass discovery entirely.
 
 ### Diversity Scoring
 
@@ -194,9 +226,11 @@ Warnings triggered by:
 
 | Prompt | Location | Purpose |
 |--------|----------|---------|
-| `QUERY_SYSTEM_PROMPT` | `discovery.py:28-38` | Generate search queries for finding RSS feeds |
-| `REGISTRY_MATCH_PROMPT` | `discovery.py:40-49` | Score curated sources against topic relevance |
-| `CLASSIFY_PROMPT` | `discovery.py:51-59` | Classify feed metadata (affiliation, country, tier) |
+| `QUERY_SYSTEM_PROMPT` | `discovery.py` | Generate search queries for finding RSS feeds (prioritizes trade journals) |
+| `REGISTRY_MATCH_PROMPT` | `discovery.py` | Score curated sources against topic (conservative for niche topics) |
+| `CLASSIFY_PROMPT` | `discovery.py` | Classify feed metadata (defaults to tier B) |
+| `EVALUATE_PROMPT` | `discovery.py` | Score sample article titles against topic relevance (1-10) |
+| `REFINE_QUERIES_PROMPT` | `discovery.py` | Generate specialized queries after generic results |
 
 ## 12. Quality Evaluation (Judge)
 

@@ -6,6 +6,8 @@ from nexus.engine.sources.discovery import (
     _generate_search_queries,
     _find_rss_feeds,
     _validate_feed,
+    _evaluate_feed_relevance,
+    _generate_refined_queries,
     discover_sources,
 )
 
@@ -63,12 +65,13 @@ async def test_validate_feed_invalid(mock_fp):
 
 
 @patch("nexus.engine.sources.discovery.classify_feed_metadata", new_callable=AsyncMock)
+@patch("nexus.engine.sources.discovery._evaluate_feed_relevance", new_callable=AsyncMock)
 @patch("nexus.engine.sources.discovery._validate_feed")
 @patch("nexus.engine.sources.discovery._find_rss_feeds")
 @patch("nexus.engine.sources.discovery._generate_search_queries")
 @patch("nexus.engine.sources.discovery._discover_from_google_news")
-async def test_discover_sources_pipeline(mock_gnews, mock_queries, mock_find, mock_validate, mock_classify):
-    """Full discovery pipeline: queries -> search -> validate."""
+async def test_discover_sources_pipeline(mock_gnews, mock_queries, mock_find, mock_validate, mock_evaluate, mock_classify):
+    """Full discovery pipeline: queries -> search -> validate -> evaluate."""
     mock_gnews.return_value = []
     mock_queries.return_value = ["horticulture RSS"]
     mock_find.return_value = ["https://garden.org/rss", "https://plants.com/feed"]
@@ -78,16 +81,67 @@ async def test_discover_sources_pipeline(mock_gnews, mock_queries, mock_find, mo
          "name": "Garden Org"},
         None,  # invalid feed
     ]
+    mock_evaluate.side_effect = lambda llm, feeds, topic: feeds  # passthrough
     mock_classify.side_effect = lambda llm, feeds: feeds  # passthrough
 
     llm = AsyncMock()
     result = await discover_sources(
         llm, "horticulture", subtopics=["gardening"],
+        max_rounds=1,
     )
 
     assert len(result.feeds) == 1
     assert result.feeds[0]["url"] == "https://garden.org/rss"
     assert result.sources_from_web == 1
+
+
+@patch("nexus.engine.sources.discovery._sample_feed_titles", new_callable=AsyncMock)
+async def test_evaluate_feed_relevance_filters_low_scores(mock_titles):
+    """Feeds scoring below 5 are dropped."""
+    mock_titles.side_effect = [
+        ["TSMC announces new 2nm fab", "Intel gets CHIPS Act funding"],
+        ["Celebrity gossip today", "Sports scores roundup"],
+    ]
+    llm = AsyncMock()
+    llm.complete = AsyncMock(return_value='[{"score": 9, "reason": "dedicated semiconductor coverage"}, {"score": 2, "reason": "unrelated tabloid"}]')
+
+    feeds = [
+        {"id": "semi-feed", "url": "https://semi.com/rss", "name": "Semi News"},
+        {"id": "tabloid", "url": "https://gossip.com/rss", "name": "Gossip Daily"},
+    ]
+    result = await _evaluate_feed_relevance(llm, feeds, "Semiconductor Supply Chain")
+    assert len(result) == 1
+    assert result[0]["id"] == "semi-feed"
+
+
+@patch("nexus.engine.sources.discovery._sample_feed_titles", new_callable=AsyncMock)
+async def test_evaluate_feed_relevance_keeps_all_on_failure(mock_titles):
+    """All feeds kept when LLM evaluation fails."""
+    mock_titles.return_value = ["Some title"]
+    llm = AsyncMock()
+    llm.complete = AsyncMock(side_effect=Exception("LLM error"))
+
+    feeds = [
+        {"id": "a", "url": "https://a.com/rss", "name": "Feed A"},
+    ]
+    result = await _evaluate_feed_relevance(llm, feeds, "Any Topic")
+    assert len(result) == 1
+
+
+async def test_generate_refined_queries():
+    """Refined queries are generated from previous context."""
+    llm = AsyncMock()
+    llm.complete = AsyncMock(
+        return_value='["semiconductor trade journal RSS", "chip industry association news feed"]'
+    )
+
+    queries = await _generate_refined_queries(
+        llm, "Semiconductor Supply Chain",
+        subtopics=["EUV lithography"],
+        previous_queries=["semiconductor news RSS feed"],
+    )
+    assert len(queries) >= 1
+    assert all(isinstance(q, str) for q in queries)
 
 
 async def test_discover_sources_deduplicates():

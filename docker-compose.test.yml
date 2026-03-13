@@ -16,6 +16,7 @@ services:
     environment:
       - NEXUS_SMOKE_MODE=20
       - NEXUS_AUTO_RUN=1
+      - NEXUS_DEMO_MODE=
       - TELEGRAM_BOT_TOKEN=
     restart: "no"
 
@@ -32,6 +33,7 @@ services:
     environment:
       - NEXUS_SMOKE_MODE=20
       - NEXUS_AUTO_RUN=1
+      - NEXUS_DEMO_MODE=
       - TELEGRAM_BOT_TOKEN=
     restart: "no"
 
@@ -48,6 +50,7 @@ services:
     environment:
       - NEXUS_SMOKE_MODE=20
       - NEXUS_AUTO_RUN=1
+      - NEXUS_DEMO_MODE=
       - TELEGRAM_BOT_TOKEN=
     restart: "no"
 
@@ -64,5 +67,6 @@ services:
     environment:
       - NEXUS_SMOKE_MODE=20
       - NEXUS_AUTO_RUN=1
+      - NEXUS_DEMO_MODE=
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN_TEST:-}
     restart: "no"
