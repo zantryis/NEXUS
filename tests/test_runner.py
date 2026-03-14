@@ -25,6 +25,7 @@ async def test_runner_initializes_store(tmp_path):
 
         mock_llm = MagicMock()
         mock_llm.set_store = AsyncMock()
+        mock_llm.flush_usage = AsyncMock()
         MockLLM.return_value = mock_llm
 
         mock_sched = MagicMock()

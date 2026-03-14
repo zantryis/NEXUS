@@ -479,6 +479,7 @@ async def run_pipeline(
             _, pending = await asyncio.wait(bg_tasks, timeout=30)
             for t in pending:
                 t.cancel()
+        await llm.flush_usage()
         await store.close()
 
 
@@ -714,4 +715,5 @@ async def run_backtest(
     usage_path = bt_data / "usage_summary.yaml"
     usage_path.write_text(yaml.dump(usage, default_flow_style=False))
 
+    await llm.flush_usage()
     await bt_store.close()

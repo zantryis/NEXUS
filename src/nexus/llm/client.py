@@ -109,6 +109,7 @@ class LLMClient:
             BudgetGuard(budget_config) if budget_config else None
         )
         self._store = None  # KnowledgeStore, set via set_store()
+        self._pending_usage_tasks: set[asyncio.Task] = set()
 
         # Lazy-init Gemini
         if api_key:
@@ -139,9 +140,16 @@ class LLMClient:
         Also seeds the BudgetGuard with today's existing spend from the store
         so that budget enforcement survives process restarts.
         """
+        await self.flush_usage()  # Drain tasks targeting previous store
         self._store = store
         if self._budget_guard:
             await self._budget_guard.sync_from_store(store)
+
+    async def flush_usage(self) -> None:
+        """Wait for pending usage record writes. Call before store.close()."""
+        if self._pending_usage_tasks:
+            await asyncio.gather(*self._pending_usage_tasks, return_exceptions=True)
+            self._pending_usage_tasks.clear()
 
     def set_openai_oauth_token(self, token: str) -> None:
         """Hot-swap OpenAI client to use an OAuth access token."""
@@ -229,10 +237,12 @@ class LLMClient:
         # Persist to SQLite (fire-and-forget — don't block LLM calls on DB writes)
         if self._store:
             try:
-                asyncio.ensure_future(self._store.add_usage_record(
+                task = asyncio.ensure_future(self._store.add_usage_record(
                     date.today().isoformat(), provider, model, config_key,
                     in_tok, out_tok, cost,
                 ))
+                self._pending_usage_tasks.add(task)
+                task.add_done_callback(self._pending_usage_tasks.discard)
             except Exception:
                 logger.debug("Failed to persist usage record", exc_info=True)
 

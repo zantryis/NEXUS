@@ -49,8 +49,7 @@ async def test_complete_persists_to_store(client, store):
             user_prompt="test",
         )
 
-    # Let the fire-and-forget task complete
-    await asyncio.sleep(0.1)
+    await client.flush_usage()
 
     cursor = await store.db.execute("SELECT COUNT(*) FROM usage_log")
     row = await cursor.fetchone()
@@ -111,3 +110,39 @@ async def test_set_store_without_budget_guard(store):
     assert client._budget_guard is None
     await client.set_store(store)
     assert client._store is store
+
+
+@pytest.mark.asyncio
+async def test_flush_usage_drains_pending(client, store):
+    """flush_usage() waits for all pending usage writes before returning."""
+    await client.set_store(store)
+
+    mock_response = MagicMock()
+    mock_response.text = "Test"
+    mock_response.usage_metadata = MagicMock(
+        prompt_token_count=100, candidates_token_count=50,
+    )
+
+    with patch.object(
+        client._gemini_client.aio.models, "generate_content", new_callable=AsyncMock
+    ) as mock_gen:
+        mock_gen.return_value = mock_response
+        for _ in range(5):
+            await client.complete(
+                config_key="filtering",
+                system_prompt="test",
+                user_prompt="test",
+            )
+
+    # Drain all pending writes — no sleep needed
+    await client.flush_usage()
+
+    cursor = await store.db.execute("SELECT COUNT(*) FROM usage_log")
+    row = await cursor.fetchone()
+    assert row[0] == 5
+
+
+@pytest.mark.asyncio
+async def test_flush_usage_noop_when_empty(client):
+    """flush_usage() with no pending tasks does not error."""
+    await client.flush_usage()  # Should not raise

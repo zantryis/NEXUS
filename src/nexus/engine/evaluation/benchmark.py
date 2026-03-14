@@ -470,6 +470,7 @@ async def run_benchmark(
             }
 
     finally:
+        await llm.flush_usage()
         await store.close()
 
     return report

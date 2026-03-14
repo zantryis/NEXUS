@@ -140,6 +140,7 @@ async def run_all(
             except BaseException:
                 pass
         try:
+            await llm.flush_usage()
             await store.close()
         except BaseException:
             pass

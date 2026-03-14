@@ -215,6 +215,7 @@ async def run_smoke_test(config: SmokeTestConfig) -> SmokeTestResult:
                 str(metrics_path) if metrics_path.exists() else "missing",
             ))
         finally:
+            await llm.flush_usage()
             await store.close()
 
     except Exception as e:

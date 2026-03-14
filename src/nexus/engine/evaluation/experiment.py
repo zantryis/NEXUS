@@ -887,17 +887,26 @@ async def run_suite_g(
                     params=combo, duration_s=duration,
                 )
                 if synth:
-                    result.scores["gemini_pro"] = await judge_synthesis(
-                        llm, synth, model_override=judge_model,
-                    )
+                    for judge_name, judge_m in [
+                        ("gemini_pro", "gemini-3.1-pro-preview"),
+                        ("deepseek_chat", "deepseek-chat"),
+                    ]:
+                        try:
+                            result.scores[judge_name] = await judge_synthesis(
+                                llm, synth, model_override=judge_m,
+                            )
+                        except Exception as je:
+                            logger.warning(f"Judge {judge_name} failed for {label}/{cached.slug}: {je}")
                 report.results.append(result)
             except Exception as e:
                 logger.error(f"    Suite G variant {label}/{cached.slug} failed: {e}")
 
     for combo in combos:
-        report.stats[combo["label"]] = _aggregate_variant_stats(
-            report.results, combo["label"],
-        )
+        for judge_name in ("gemini_pro", "deepseek_chat"):
+            key = f"{combo['label']}_{judge_name}"
+            report.stats[key] = _aggregate_variant_stats(
+                report.results, combo["label"], judge_label=judge_name,
+            )
 
     return report
 
@@ -1125,6 +1134,7 @@ async def run_experiments(
         report.duration_s = time.monotonic() - start_time
 
     finally:
+        await llm.flush_usage()
         await store.close()
         # Restore original daily budget limit
         if original_daily_limit is not None and hasattr(llm, "_budget_guard") and llm._budget_guard:
