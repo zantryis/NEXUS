@@ -205,3 +205,275 @@ def test_build_synthesis_prompt_medium():
     assert "FOCUSED" not in prompt
     # But should still have the base content
     assert "knowledge synthesis engine" in prompt
+
+
+# ── Divergence Prompt Variants ───────────────────────────────────────────────
+
+def test_build_synthesis_prompt_default_divergence():
+    """Default prompt contains the structured divergence wording."""
+    from nexus.engine.synthesis.knowledge import _build_synthesis_prompt
+    topic = TopicConfig(name="Test", subtopics=["a"])
+    prompt = _build_synthesis_prompt(topic)
+    assert "TONE CONTRAST" in prompt
+    assert "ACTOR FRAMING" in prompt
+    assert "'killed' vs 'dead'" in prompt
+
+
+def test_build_synthesis_prompt_custom_divergence():
+    """Custom divergence instructions substitute correctly."""
+    from nexus.engine.synthesis.knowledge import _build_synthesis_prompt
+    topic = TopicConfig(name="Test", subtopics=["a"])
+    custom = "3. Look for framing differences between outlets.\n"
+    prompt = _build_synthesis_prompt(
+        topic,
+        divergence_instructions=custom,
+        divergence_output_qualifier="Actively look for divergence. ",
+    )
+    assert "Look for framing differences" in prompt
+    assert "Actively look for divergence" in prompt
+    assert "Only flag when outlets disagree" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_synthesize_topic_passes_divergence_instructions(topic, events, articles):
+    """Verify divergence_instructions reaches the LLM system prompt."""
+    mock_llm = AsyncMock()
+    mock_llm.complete.return_value = json.dumps({
+        "threads": [{
+            "headline": "Test thread",
+            "event_indices": [0],
+            "convergence": [],
+            "divergence": [],
+            "key_entities": ["US"],
+            "significance": 5,
+        }]
+    })
+
+    custom_text = "CUSTOM_DIVERGENCE_MARKER_FOR_TEST"
+    await synthesize_topic(
+        mock_llm, topic, events, articles, [], [],
+        divergence_instructions=custom_text,
+    )
+
+    # Verify the system_prompt kwarg contains our custom text
+    call_kwargs = mock_llm.complete.call_args
+    system_prompt = call_kwargs.kwargs.get("system_prompt", call_kwargs.args[1] if len(call_kwargs.args) > 1 else "")
+    assert custom_text in system_prompt
+
+
+# ── Framing in Event Formatting ──────────────────────────────────────────
+
+
+def test_event_formatting_includes_framing():
+    """Events with framing in source dicts produce per-source framing lines in synthesis prompt."""
+    from nexus.engine.synthesis.knowledge import _build_synthesis_prompt
+    topic = TopicConfig(name="Test", subtopics=["a"])
+
+    events = [Event(
+        date=date(2026, 3, 9),
+        summary="Sanctions announced",
+        entities=["US", "Iran"],
+        sources=[
+            {"url": "https://nyt.com/1", "outlet": "nyt", "affiliation": "private",
+             "country": "US", "framing": "[neutral] Reports policy details; US as enforcer"},
+            {"url": "https://tass.com/1", "outlet": "tass", "affiliation": "state",
+             "country": "RU", "framing": "[critical] Emphasizes economic damage; US as aggressor"},
+        ],
+        significance=8,
+    )]
+
+    # We need to call synthesize_topic's event formatting, but that's inline.
+    # Instead, test via the formatted user_prompt by calling the function.
+    # The event formatting is in synthesize_topic, so test the output format directly.
+    from nexus.engine.synthesis.knowledge import _format_events
+    formatted = _format_events(events)
+    assert "nyt (private/US): [neutral]" in formatted
+    assert "tass (state/RU): [critical]" in formatted
+    assert "US as aggressor" in formatted
+
+
+def test_event_formatting_no_framing_fallback():
+    """Events without framing still format correctly (no framing line)."""
+    from nexus.engine.synthesis.knowledge import _format_events
+    events = [Event(
+        date=date(2026, 3, 9),
+        summary="Routine event",
+        entities=["US"],
+        sources=[
+            {"url": "https://nyt.com/1", "outlet": "nyt", "affiliation": "private", "country": "US"},
+        ],
+        significance=5,
+    )]
+    formatted = _format_events(events)
+    assert "nyt (private/US)" in formatted
+    # No ": [" framing marker since no framing was provided
+    assert ": [" not in formatted
+
+
+def test_build_article_snippets_multi_source():
+    """Multi-source events get article text snippets."""
+    from nexus.engine.synthesis.knowledge import _build_article_snippets
+    events = [Event(
+        date=date(2026, 3, 9),
+        summary="Sanctions event",
+        entities=["US"],
+        sources=[
+            {"url": "https://nyt.com/1", "outlet": "nyt"},
+            {"url": "https://tass.com/1", "outlet": "tass"},
+        ],
+        significance=8,
+    )]
+    articles = [
+        ContentItem(
+            title="NYT Article", url="https://nyt.com/1", source_id="nyt",
+            full_text="The United States announced new sanctions targeting Iran's oil sector...",
+        ),
+        ContentItem(
+            title="TASS Article", url="https://tass.com/1", source_id="tass",
+            full_text="Russia condemned the latest round of American sanctions as economic warfare...",
+        ),
+    ]
+    snippets = _build_article_snippets(events, articles)
+    assert "nyt" in snippets
+    assert "tass" in snippets
+    assert "NYT Article" in snippets
+    assert "TASS Article" in snippets
+
+
+def test_build_article_snippets_single_source_skipped():
+    """Single-source events produce no snippets."""
+    from nexus.engine.synthesis.knowledge import _build_article_snippets
+    events = [Event(
+        date=date(2026, 3, 9),
+        summary="Solo event",
+        entities=["US"],
+        sources=[{"url": "https://nyt.com/1", "outlet": "nyt"}],
+        significance=5,
+    )]
+    articles = [
+        ContentItem(
+            title="NYT Article", url="https://nyt.com/1", source_id="nyt",
+            full_text="Some text here...",
+        ),
+    ]
+    snippets = _build_article_snippets(events, articles)
+    assert snippets == ""
+
+
+def test_divergence_variants_dict_structure():
+    """DIVERGENCE_VARIANTS has expected keys with instructions + output_qualifier."""
+    from nexus.engine.synthesis.knowledge import DIVERGENCE_VARIANTS
+    expected_keys = {"baseline", "broadened", "structured", "encouraged"}
+    assert set(DIVERGENCE_VARIANTS.keys()) == expected_keys
+    for name, variant in DIVERGENCE_VARIANTS.items():
+        assert "instructions" in variant, f"{name} missing 'instructions'"
+        assert "output_qualifier" in variant, f"{name} missing 'output_qualifier'"
+        assert isinstance(variant["instructions"], str)
+        assert isinstance(variant["output_qualifier"], str)
+
+
+# ── Convergence Validation ────────────────────────────────────
+
+
+def test_validate_convergence_strips_non_independent():
+    """Convergence confirmed by 2 same-affiliation/country outlets → stripped."""
+    from nexus.engine.synthesis.knowledge import _validate_convergence
+
+    thread = NarrativeThread(
+        headline="Test thread",
+        events=[Event(
+            date=date(2026, 3, 9), summary="Test", significance=5,
+            sources=[
+                {"outlet": "cgtn", "affiliation": "state", "country": "CN"},
+                {"outlet": "xinhua", "affiliation": "state", "country": "CN"},
+            ],
+        )],
+        convergence=[{"fact": "Agreed fact", "confirmed_by": ["cgtn", "xinhua"]}],
+    )
+    _validate_convergence([thread])
+    assert len(thread.convergence) == 0
+
+
+def test_validate_convergence_keeps_independent():
+    """Convergence confirmed by independent outlets → preserved."""
+    from nexus.engine.synthesis.knowledge import _validate_convergence
+
+    thread = NarrativeThread(
+        headline="Test thread",
+        events=[Event(
+            date=date(2026, 3, 9), summary="Test", significance=5,
+            sources=[
+                {"outlet": "nyt", "affiliation": "private", "country": "US"},
+                {"outlet": "tass", "affiliation": "state", "country": "RU"},
+            ],
+        )],
+        convergence=[{"fact": "Agreed fact", "confirmed_by": ["nyt", "tass"]}],
+    )
+    _validate_convergence([thread])
+    assert len(thread.convergence) == 1
+
+
+def test_validate_convergence_empty_noop():
+    """Thread with no convergence → no error."""
+    from nexus.engine.synthesis.knowledge import _validate_convergence
+
+    thread = NarrativeThread(
+        headline="Empty thread",
+        convergence=[],
+    )
+    _validate_convergence([thread])
+    assert thread.convergence == []
+
+
+# ── Thread Overlap Detection ─────────────────────────────────
+
+
+def test_check_thread_overlaps_detects_high_overlap():
+    """Two threads with 4/5 shared entities → detected as overlap."""
+    from nexus.engine.synthesis.knowledge import _check_thread_overlaps
+
+    threads = [
+        NarrativeThread(
+            headline="Thread A",
+            key_entities=["Iran", "US", "IAEA", "Sanctions", "EU"],
+        ),
+        NarrativeThread(
+            headline="Thread B",
+            key_entities=["Iran", "US", "IAEA", "Sanctions", "Russia"],
+        ),
+    ]
+    overlaps = _check_thread_overlaps(threads)
+    assert len(overlaps) == 1
+    assert overlaps[0][0] == 0
+    assert overlaps[0][1] == 1
+    assert overlaps[0][2] > 0.5
+
+
+def test_check_thread_overlaps_ignores_low_overlap():
+    """Two threads with 1/6 shared entities → no overlap flagged."""
+    from nexus.engine.synthesis.knowledge import _check_thread_overlaps
+
+    threads = [
+        NarrativeThread(
+            headline="Thread A",
+            key_entities=["Iran", "US", "IAEA"],
+        ),
+        NarrativeThread(
+            headline="Thread B",
+            key_entities=["China", "Taiwan", "TSMC", "US"],
+        ),
+    ]
+    overlaps = _check_thread_overlaps(threads)
+    assert len(overlaps) == 0
+
+
+def test_check_thread_overlaps_empty_entities():
+    """Threads with no entities → no crash, no overlaps."""
+    from nexus.engine.synthesis.knowledge import _check_thread_overlaps
+
+    threads = [
+        NarrativeThread(headline="Thread A", key_entities=[]),
+        NarrativeThread(headline="Thread B", key_entities=["Iran"]),
+    ]
+    overlaps = _check_thread_overlaps(threads)
+    assert len(overlaps) == 0

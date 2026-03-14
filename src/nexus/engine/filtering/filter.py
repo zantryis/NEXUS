@@ -195,8 +195,8 @@ async def score_significance_batch(
 
     except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
         logger.warning(f"Pass 2 batch scoring failed: {e}")
-        # Default: assume novel and moderately significant
-        return [{"significance": 5, "is_novel": True, "reason": "Parse error fallback"}] * len(items)
+        # Conservative: reject on parse error rather than promoting everything
+        return [{"significance": 3, "is_novel": False, "reason": "Parse error fallback"}] * len(items)
 
 
 def apply_perspective_diversity(

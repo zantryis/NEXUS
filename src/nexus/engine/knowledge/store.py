@@ -69,8 +69,8 @@ class KnowledgeStore:
             # Insert sources
             for src in event.sources:
                 await self.db.execute(
-                    "INSERT INTO event_sources (event_id, url, outlet, affiliation, country, language) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO event_sources (event_id, url, outlet, affiliation, country, language, framing) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
                         event_id,
                         src.get("url", ""),
@@ -78,6 +78,7 @@ class KnowledgeStore:
                         src.get("affiliation", ""),
                         src.get("country", ""),
                         src.get("language", "en"),
+                        src.get("framing", ""),
                     ),
                 )
 
@@ -138,7 +139,7 @@ class KnowledgeStore:
 
             # Fetch sources
             src_cursor = await self.db.execute(
-                "SELECT url, outlet, affiliation, country, language "
+                "SELECT url, outlet, affiliation, country, language, framing "
                 "FROM event_sources WHERE event_id = ?",
                 (event_id,),
             )
@@ -149,6 +150,7 @@ class KnowledgeStore:
                     "affiliation": s[2],
                     "country": s[3],
                     "language": s[4],
+                    "framing": s[5],
                 }
                 for s in await src_cursor.fetchall()
             ]
@@ -297,12 +299,12 @@ class KnowledgeStore:
         for row in rows:
             event_id = row[0]
             src_cursor = await self.db.execute(
-                "SELECT url, outlet, affiliation, country, language "
+                "SELECT url, outlet, affiliation, country, language, framing "
                 "FROM event_sources WHERE event_id = ?",
                 (event_id,),
             )
             sources = [
-                {"url": s[0], "outlet": s[1], "affiliation": s[2], "country": s[3], "language": s[4]}
+                {"url": s[0], "outlet": s[1], "affiliation": s[2], "country": s[3], "language": s[4], "framing": s[5]}
                 for s in await src_cursor.fetchall()
             ]
             ent_cursor = await self.db.execute(
@@ -604,6 +606,23 @@ class KnowledgeStore:
             (thread_id, topic_slug),
         )
         await self.db.commit()
+
+    async def mark_stale_threads(self, stale_after_days: int = 14, reference_date: date | None = None) -> int:
+        """Mark active/emerging threads as stale if latest linked event > stale_after_days old."""
+        ref = reference_date or date.today()
+        cutoff = (ref - timedelta(days=stale_after_days)).isoformat()
+        cursor = await self.db.execute(
+            "UPDATE threads SET status = 'stale', updated_at = ? "
+            "WHERE status IN ('emerging', 'active') "
+            "AND id NOT IN ("
+            "  SELECT te.thread_id FROM thread_events te "
+            "  JOIN events ev ON te.event_id = ev.id "
+            "  WHERE ev.date >= ?"
+            ")",
+            (datetime.now().isoformat(), cutoff),
+        )
+        await self.db.commit()
+        return cursor.rowcount
 
     async def add_convergence(
         self, thread_id: int, fact_text: str, confirmed_by: list[str],
@@ -1203,12 +1222,12 @@ class KnowledgeStore:
         """Build an Event object from a DB row, loading sources and entities."""
         event_id = row[0]
         src_cursor = await self.db.execute(
-            "SELECT url, outlet, affiliation, country, language "
+            "SELECT url, outlet, affiliation, country, language, framing "
             "FROM event_sources WHERE event_id = ?",
             (event_id,),
         )
         sources = [
-            {"url": s[0], "outlet": s[1], "affiliation": s[2], "country": s[3], "language": s[4]}
+            {"url": s[0], "outlet": s[1], "affiliation": s[2], "country": s[3], "language": s[4], "framing": s[5]}
             for s in await src_cursor.fetchall()
         ]
         ent_cursor = await self.db.execute(

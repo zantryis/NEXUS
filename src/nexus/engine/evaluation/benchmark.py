@@ -198,55 +198,47 @@ class BenchmarkReport:
 
 def build_naive_synthesis(
     topic_name: str,
-    articles: list[ContentItem],
-    max_articles: int = 30,
+    events: list[Event],
+    max_events: int = 30,
 ) -> TopicSynthesis:
-    """Build a naive TopicSynthesis from random articles — no filtering, no threads."""
-    sample = random.sample(articles, min(max_articles, len(articles)))
+    """Build a no-synthesis baseline: real events, no thread grouping or analysis.
 
-    # One "thread" per article — flat structure, no convergence/divergence
-    events = []
-    for a in sample:
-        events.append(Event(
-            date=date.today(),
-            summary=a.title or "Untitled",
-            significance=5,
-            entities=[],
-            sources=[{
-                "url": a.url,
-                "outlet": a.source_id or "unknown",
-                "affiliation": a.source_affiliation or "unknown",
-                "country": a.source_country or "",
-                "language": a.source_language or "en",
-            }],
-        ))
+    Uses real extracted events (with dates, entities, summaries) but skips
+    synthesis: no thread grouping, no convergence, no divergence.
+    This isolates the value added by the synthesis LLM call.
+    """
+    sorted_events = sorted(events, key=lambda e: e.date, reverse=True)[:max_events]
 
-    # Single flat thread with all events
-    thread = NarrativeThread(
-        headline=f"Raw articles for {topic_name}",
-        events=events,
-        convergence=[],
-        divergence=[],
-        key_entities=[],
-        significance=5,
-    )
+    # One thread per event — no grouping
+    threads = [
+        NarrativeThread(
+            headline=e.summary[:80],
+            events=[e],
+            convergence=[],
+            divergence=[],
+            key_entities=e.entities,
+            significance=e.significance,
+        )
+        for e in sorted_events
+    ]
 
     source_balance: dict[str, int] = {}
     languages: set[str] = set()
-    for a in sample:
-        affil = a.source_affiliation or "unknown"
-        source_balance[affil] = source_balance.get(affil, 0) + 1
-        lang = a.detected_language or a.source_language
-        if lang:
-            languages.add(lang)
+    for e in sorted_events:
+        for s in e.sources:
+            affil = s.get("affiliation", "unknown")
+            source_balance[affil] = source_balance.get(affil, 0) + 1
+            lang = s.get("language")
+            if lang:
+                languages.add(lang)
 
     return TopicSynthesis(
         topic_name=topic_name,
-        threads=[thread],
+        threads=threads,
         background=[],
         source_balance=source_balance,
         languages_represented=sorted(languages),
-        metadata={"naive": True, "article_count": len(sample)},
+        metadata={"naive": True, "event_count": len(sorted_events)},
     )
 
 
@@ -417,8 +409,8 @@ async def run_benchmark(
                 store=store, topic_slug=slug,
             )
 
-            # Step 3: Naive baseline
-            naive_synthesis = build_naive_synthesis(topic_cfg.name, deduped)
+            # Step 3: Naive baseline (no-synthesis: real events, no thread grouping)
+            naive_synthesis = build_naive_synthesis(topic_cfg.name, events)
 
             # Step 4: Judge both syntheses
             logger.info(f"  Judging Nexus synthesis for {topic_cfg.name}")

@@ -360,6 +360,8 @@ async def run_full_pipeline_variant(
     relevance_weight: float | None = None,
     significance_weight: float | None = None,
     diversity_max_items: int | None = None,
+    divergence_instructions: str | None = None,
+    divergence_output_qualifier: str | None = None,
 ) -> tuple[TopicSynthesis | None, dict]:
     """Run full pipeline (filter -> extract -> synthesize) on cached articles."""
     from nexus.engine.filtering.filter import filter_items
@@ -409,6 +411,8 @@ async def run_full_pipeline_variant(
         llm, cached.topic_cfg, events, articles,
         weekly_summaries=[], monthly_summaries=[],
         store=store, topic_slug=cached.slug,
+        divergence_instructions=divergence_instructions,
+        divergence_output_qualifier=divergence_output_qualifier,
     )
 
     return synthesis, stats
@@ -537,9 +541,11 @@ async def run_suite_a(
                         config.briefing.style = original_style
             report.results.append(fp_result)
 
-            # Variant 2: Naive baseline
+            # Variant 2: Naive baseline (no-synthesis: real events, no thread grouping)
             logger.info(f"    Building naive baseline for {slug}")
-            naive_synth = build_naive_synthesis(cached.topic_cfg.name, cached.ingested_articles)
+            # Collect extracted events from the full pipeline synthesis
+            fp_events = [e for t in fp_synth.threads for e in t.events] if fp_synth else []
+            naive_synth = build_naive_synthesis(cached.topic_cfg.name, fp_events)
             naive_result = VariantResult(
                 variant_name="naive_baseline", topic_slug=slug,
                 synthesis=naive_synth, params={"variant": "naive_baseline"},
@@ -896,6 +902,66 @@ async def run_suite_g(
     return report
 
 
+async def run_suite_h(
+    llm: LLMClient,
+    cached_topics: list[CachedTopicData],
+    store,
+    judge_model: str = "gemini-3.1-pro-preview",
+) -> SuiteReport:
+    """Suite H: Divergence Prompt Variants — test broadened divergence detection."""
+    from nexus.engine.synthesis.knowledge import DIVERGENCE_VARIANTS
+
+    report = SuiteReport(
+        suite_id="H",
+        description="Divergence Prompt Variants",
+        claim="Broadened divergence instructions improve divergence_detection by X%",
+    )
+
+    variant_names = list(DIVERGENCE_VARIANTS.keys())
+
+    for cached in cached_topics:
+        if not cached.ingested_articles:
+            continue
+        for variant_name in variant_names:
+            label = f"div_{variant_name}"
+            logger.info(f"    Suite H: {cached.slug} variant={variant_name}")
+            try:
+                t0 = time.monotonic()
+                variant = DIVERGENCE_VARIANTS[variant_name]
+                synth, stats = await run_full_pipeline_variant(
+                    llm, cached, store,
+                    divergence_instructions=variant["instructions"],
+                    divergence_output_qualifier=variant["output_qualifier"],
+                )
+                duration = time.monotonic() - t0
+
+                result = VariantResult(
+                    variant_name=label,
+                    topic_slug=cached.slug,
+                    synthesis=synth,
+                    filter_stats=stats,
+                    params={"divergence_variant": variant_name},
+                    duration_s=duration,
+                )
+                if synth:
+                    result.scores["gemini_pro"] = await judge_synthesis(
+                        llm, synth, model_override=judge_model,
+                    )
+                report.results.append(result)
+            except Exception as e:
+                logger.error(
+                    f"    Suite H variant {variant_name}/{cached.slug} failed: {e}"
+                )
+
+    for variant_name in variant_names:
+        label = f"div_{variant_name}"
+        report.stats[label] = _aggregate_variant_stats(
+            report.results, label,
+        )
+
+    return report
+
+
 # ── Main Experiment Runner ───────────────────────────────────────────────────
 
 SUITE_RUNNERS = {
@@ -906,6 +972,7 @@ SUITE_RUNNERS = {
     "E": "run_suite_e",
     "F": "run_suite_f",
     "G": "run_suite_g",
+    "H": "run_suite_h",
 }
 
 ALL_SUITES = list(SUITE_RUNNERS.keys())
@@ -951,11 +1018,17 @@ async def run_experiments(
         return report
 
     # Raise daily budget limit for experiment duration
+    # Must account for already-spent amounts so the guard doesn't block
     original_daily_limit = None
     if hasattr(llm, "_budget_guard") and llm._budget_guard:
         original_daily_limit = llm._budget_guard._config.daily_limit_usd
-        llm._budget_guard._config.daily_limit_usd = max(budget_usd, original_daily_limit)
-        logger.info(f"Raised daily budget limit to ${budget_usd:.2f} for experiment")
+        current_spend = llm._budget_guard.today_spend
+        new_limit = max(current_spend + budget_usd, original_daily_limit)
+        llm._budget_guard._config.daily_limit_usd = new_limit
+        logger.info(
+            f"Raised daily budget limit to ${new_limit:.2f} for experiment "
+            f"(already spent ${current_spend:.2f}, headroom ${budget_usd:.2f})"
+        )
 
     # Initialize store
     exp_dir = data_dir / "experiments"
@@ -1031,6 +1104,11 @@ async def run_experiments(
 
                 elif suite_id == "G":
                     report.suites["G"] = await run_suite_g(
+                        llm, cached_topics, store,
+                    )
+
+                elif suite_id == "H":
+                    report.suites["H"] = await run_suite_h(
                         llm, cached_topics, store,
                     )
             except Exception as e:

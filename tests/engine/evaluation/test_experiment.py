@@ -259,3 +259,30 @@ async def test_multi_judge_calls_all_models():
     assert "gemini_pro" in result
     assert "ds_reasoner" in result
     assert mock_judge.call_count == 2
+
+
+# ── Suite H: Divergence Prompt Variants ──────────────────────────────────────
+
+def test_suite_h_registered():
+    """Suite H is registered in SUITE_RUNNERS."""
+    from nexus.engine.evaluation.experiment import SUITE_RUNNERS
+    assert "H" in SUITE_RUNNERS
+
+
+def test_run_full_pipeline_variant_accepts_divergence_instructions():
+    """run_full_pipeline_variant accepts divergence_instructions param."""
+    import inspect
+    from nexus.engine.evaluation.experiment import run_full_pipeline_variant
+    sig = inspect.signature(run_full_pipeline_variant)
+    assert "divergence_instructions" in sig.parameters
+    assert "divergence_output_qualifier" in sig.parameters
+
+
+def test_suite_h_variant_names():
+    """DIVERGENCE_VARIANTS has the expected 4 variant names."""
+    from nexus.engine.synthesis.knowledge import DIVERGENCE_VARIANTS
+    assert len(DIVERGENCE_VARIANTS) == 4
+    assert "baseline" in DIVERGENCE_VARIANTS
+    assert "broadened" in DIVERGENCE_VARIANTS
+    assert "structured" in DIVERGENCE_VARIANTS
+    assert "encouraged" in DIVERGENCE_VARIANTS

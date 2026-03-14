@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from nexus.engine.knowledge.events import Event
+from nexus.engine.knowledge.events import Event, has_independent_sources
 from nexus.engine.sources.polling import ContentItem
 from nexus.engine.synthesis.knowledge import TopicSynthesis
 
@@ -33,6 +33,13 @@ def convergence_ratio(events: list[Event]) -> float:
         return 0.0
     multi_source = sum(1 for e in events if len(e.sources) >= 2)
     return round(multi_source / len(events), 3)
+
+
+def independent_convergence_ratio(events: list[Event]) -> float:
+    """Fraction of events confirmed by 2+ independent sources."""
+    if not events:
+        return 0.0
+    return round(sum(1 for e in events if has_independent_sources(e)) / len(events), 3)
 
 
 def language_coverage(articles: list[ContentItem]) -> dict:
@@ -70,6 +77,7 @@ def compute_run_metrics(
         "date": date.today().isoformat(),
         "source_diversity_index": source_diversity_index(all_articles),
         "convergence_ratio": convergence_ratio(all_events),
+        "independent_convergence_ratio": independent_convergence_ratio(all_events),
         "language_coverage": language_coverage(all_articles),
         "extraction_stats": extraction_stats(all_articles),
         "event_dedup_ratio": event_dedup_ratio(extracted_event_count, len(all_events)),

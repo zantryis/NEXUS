@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from nexus.config.models import TopicConfig
 from nexus.engine.knowledge.compression import Summary
-from nexus.engine.knowledge.events import Event
+from nexus.engine.knowledge.events import Event, are_independent
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.engine.sources.polling import ContentItem
 from nexus.engine.synthesis.threads import (
@@ -57,7 +57,7 @@ class TopicSynthesis(BaseModel):
     metadata: dict = Field(default_factory=dict)
 
 
-_SYNTHESIS_BASE_PROMPT = (
+_SYNTHESIS_PRE_DIVERGENCE = (
     "You are a knowledge synthesis engine. Given events, articles, and topic context, "
     "produce a structured analysis.\n\n"
     "## Source affiliations\n"
@@ -77,10 +77,24 @@ _SYNTHESIS_BASE_PROMPT = (
     "2. Identify convergence: facts confirmed by 2+ INDEPENDENT sources "
     "(different outlets, ideally different affiliations or countries). "
     "If all events in a thread come from the SAME outlet, convergence MUST be empty.\n"
-    "3. Identify divergence: where two DIFFERENT outlets report on the SAME event "
-    "with genuinely conflicting framing, emphasis, or interpretation. "
-    "Do NOT flag different coverage areas or different topics as divergence. "
-    "Only flag when outlets disagree on the same underlying event or claim.\n"
+)
+
+_DIVERGENCE_INSTRUCTIONS_DEFAULT = (
+    "3. Identify divergence: where two DIFFERENT outlets covering the SAME event "
+    "frame it differently. Each source now has structured framing data: "
+    "[editorial_tone] editorial_focus; actor_framing. "
+    "Compare these across sources in each thread. Look for:\n"
+    "  a) TONE CONTRAST: Different editorial tones (e.g., one is 'alarmist', another 'dismissive')\n"
+    "  b) FOCUS DIVERGENCE: Different aspects emphasized (e.g., humanitarian vs military)\n"
+    "  c) ACTOR FRAMING: Different characterization of the same actors (e.g., 'aggressors' vs 'defenders', "
+    "'killed' vs 'dead', 'militants' vs 'fighters', active vs passive voice)\n"
+    "  d) OMISSION: Key context one outlet includes but another leaves out\n"
+    "For each divergence entry, note the category in the shared_event field as a prefix, "
+    "e.g., '[TONE CONTRAST] Israeli ground incursion into Lebanon'.\n"
+    "Do NOT flag coverage of entirely different stories as divergence.\n"
+)
+
+_SYNTHESIS_POST_DIVERGENCE = (
     "4. Note key entities involved\n"
     "5. Rate significance (1-10)\n\n"
     "## Thread consolidation\n"
@@ -89,7 +103,9 @@ _SYNTHESIS_BASE_PROMPT = (
     "chain MUST be merged into one. Prefer fewer, richer threads over many sparse ones.\n\n"
 )
 
-_SYNTHESIS_OUTPUT_FORMAT = (
+_SYNTHESIS_BASE_PROMPT = _SYNTHESIS_PRE_DIVERGENCE + _DIVERGENCE_INSTRUCTIONS_DEFAULT + _SYNTHESIS_POST_DIVERGENCE
+
+_SYNTHESIS_OUTPUT_FORMAT_PRE = (
     "## Output JSON\n"
     "{\n"
     '  "threads": [\n'
@@ -111,15 +127,103 @@ _SYNTHESIS_OUTPUT_FORMAT = (
     "  ]\n"
     "}\n\n"
     "IMPORTANT: Return an empty list for convergence if sources are not independent. "
-    "Return an empty list for divergence if no genuine framing conflicts exist. "
+)
+
+_DIVERGENCE_OUTPUT_QUALIFIER_DEFAULT = (
+    "For divergence, compare the structured framing data (tone, focus, actor characterization) "
+    "for every thread with 2+ independent sources. When sources have different tone words "
+    "or emphasize different aspects, that IS divergence — report it. "
+)
+
+_SYNTHESIS_OUTPUT_FORMAT_POST = (
     "Quality over quantity — only include well-supported entries."
+)
+
+_SYNTHESIS_OUTPUT_FORMAT = (
+    _SYNTHESIS_OUTPUT_FORMAT_PRE + _DIVERGENCE_OUTPUT_QUALIFIER_DEFAULT + _SYNTHESIS_OUTPUT_FORMAT_POST
 )
 
 # Keep backward-compatible reference for any external imports
 SYNTHESIS_SYSTEM_PROMPT = _SYNTHESIS_BASE_PROMPT + _SYNTHESIS_OUTPUT_FORMAT
 
 
-def _build_synthesis_prompt(topic: TopicConfig) -> str:
+# ── Divergence Prompt Variants (for experiment Suite H) ──────────────────────
+
+DIVERGENCE_VARIANTS = {
+    "baseline": {
+        "instructions": (
+            "3. Identify divergence: where two DIFFERENT outlets report on the SAME event "
+            "with genuinely conflicting framing, emphasis, or interpretation. "
+            "Do NOT flag different coverage areas or different topics as divergence. "
+            "Only flag when outlets disagree on the same underlying event or claim.\n"
+        ),
+        "output_qualifier": (
+            "Return an empty list for divergence if no genuine framing conflicts exist. "
+        ),
+    },
+    "broadened": {
+        "instructions": (
+            "3. Identify divergence: where two DIFFERENT outlets covering the SAME event or "
+            "development use notably different framing, emphasis, tone, or interpretation. "
+            "Divergence includes:\n"
+            "  - Different causal explanations for the same event\n"
+            "  - Different emphasis (e.g., one leads with casualties, another with geopolitics)\n"
+            "  - Different characterization of actors (e.g., 'aggressor' vs 'defender')\n"
+            "  - Selective omission of context that another outlet includes\n"
+            "Do NOT flag coverage of entirely different stories as divergence.\n"
+        ),
+        "output_qualifier": (
+            "For divergence, actively look for framing differences between outlets covering "
+            "the same events. Most multi-source threads SHOULD have at least one divergence entry. "
+        ),
+    },
+    "structured": {
+        "instructions": (
+            "3. Identify divergence: where two DIFFERENT outlets covering the SAME event "
+            "frame it differently. Check each of these divergence categories:\n"
+            "  a) FRAMING: Different narrative frames (e.g., 'security operation' vs 'invasion')\n"
+            "  b) EMPHASIS: Different lead angles (e.g., military vs humanitarian vs economic)\n"
+            "  c) OMISSION: Key context one outlet includes but another leaves out\n"
+            "  d) TONE: Editorial tone difference (e.g., neutral reporting vs alarm/condemnation)\n"
+            "  e) ATTRIBUTION: Different sources quoted or credited for the same claim\n"
+            "For each divergence entry, note the category in the shared_event field as a prefix, "
+            "e.g., '[FRAMING] Israeli ground incursion into Lebanon'.\n"
+            "Do NOT flag coverage of entirely different stories as divergence.\n"
+        ),
+        "output_qualifier": (
+            "For divergence, systematically check each category (framing, emphasis, omission, "
+            "tone, attribution) for every thread with 2+ independent sources. "
+            "Most multi-source threads will have divergence. "
+        ),
+    },
+    "encouraged": {
+        "instructions": (
+            "3. Identify divergence: where two DIFFERENT outlets covering the SAME event "
+            "or development present it differently. Sources from different countries and "
+            "affiliations ALMOST ALWAYS frame events differently — your job is to find and "
+            "articulate these differences. Look for:\n"
+            "  - How each outlet characterizes the actors and their motivations\n"
+            "  - What each outlet emphasizes vs downplays\n"
+            "  - What context each outlet provides or omits\n"
+            "  - Differences in tone (alarm, neutrality, approval, condemnation)\n"
+            "If a thread has sources from different affiliations/countries covering the same "
+            "event, there is ALMOST CERTAINLY divergence — look harder.\n"
+            "Do NOT flag coverage of entirely different stories as divergence.\n"
+        ),
+        "output_qualifier": (
+            "For divergence, every thread with sources from different affiliations or countries "
+            "should have at least one divergence entry. If you find none, re-examine — framing "
+            "differences between state/private/public outlets are nearly always present. "
+        ),
+    },
+}
+
+
+def _build_synthesis_prompt(
+    topic: TopicConfig,
+    divergence_instructions: str | None = None,
+    divergence_output_qualifier: str | None = None,
+) -> str:
     """Build a scope-aware synthesis system prompt."""
     scope = getattr(topic, "scope", "medium")
     scope_instruction = ""
@@ -142,7 +246,105 @@ def _build_synthesis_prompt(topic: TopicConfig) -> str:
             "Threads should reflect distinct story arcs within the same domain.\n\n"
         )
 
-    return _SYNTHESIS_BASE_PROMPT + scope_instruction + _SYNTHESIS_OUTPUT_FORMAT
+    div_instr = divergence_instructions or _DIVERGENCE_INSTRUCTIONS_DEFAULT
+    div_qual = divergence_output_qualifier or _DIVERGENCE_OUTPUT_QUALIFIER_DEFAULT
+
+    base = _SYNTHESIS_PRE_DIVERGENCE + div_instr + _SYNTHESIS_POST_DIVERGENCE
+    output_fmt = _SYNTHESIS_OUTPUT_FORMAT_PRE + div_qual + _SYNTHESIS_OUTPUT_FORMAT_POST
+
+    return base + scope_instruction + output_fmt
+
+
+def _validate_convergence(threads: list[NarrativeThread]) -> None:
+    """Strip convergence entries where confirmed_by sources are not independent. Modifies in-place."""
+    for thread in threads:
+        if not thread.convergence:
+            continue
+        # Build outlet → source metadata map from all events in thread
+        outlet_meta: dict[str, dict] = {}
+        for event in thread.events:
+            for s in event.sources:
+                outlet = s.get("outlet", "")
+                if outlet and outlet not in outlet_meta:
+                    outlet_meta[outlet] = s
+
+        validated = []
+        for c in thread.convergence:
+            if not isinstance(c, dict):
+                validated.append(c)  # Legacy string format — keep
+                continue
+            confirmed = c.get("confirmed_by", [])
+            if len(confirmed) < 2:
+                continue  # Single-source convergence invalid by definition
+            # Check for at least one independent pair
+            has_pair = any(
+                are_independent(outlet_meta.get(confirmed[i], {}), outlet_meta.get(confirmed[j], {}))
+                for i in range(len(confirmed)) for j in range(i + 1, len(confirmed))
+            )
+            if has_pair:
+                validated.append(c)
+            else:
+                logger.debug(f"Stripped non-independent convergence: {c.get('fact', '')[:60]}")
+        thread.convergence = validated
+
+
+def _check_thread_overlaps(threads: list[NarrativeThread]) -> list[tuple[int, int, float]]:
+    """Check all thread pairs for entity overlap. Returns pairs with Jaccard > 0.5."""
+    overlaps = []
+    for i in range(len(threads)):
+        set_i = {e.lower() for e in threads[i].key_entities}
+        if not set_i:
+            continue
+        for j in range(i + 1, len(threads)):
+            set_j = {e.lower() for e in threads[j].key_entities}
+            if not set_j:
+                continue
+            intersection = set_i & set_j
+            union = set_i | set_j
+            jaccard = len(intersection) / len(union)
+            if jaccard > 0.5:
+                overlaps.append((i, j, round(jaccard, 3)))
+                logger.warning(
+                    f"Thread overlap detected: [{i}] '{threads[i].headline[:40]}' "
+                    f"↔ [{j}] '{threads[j].headline[:40]}' "
+                    f"(Jaccard={jaccard:.2f}, shared: {intersection})"
+                )
+    return overlaps
+
+
+def _format_events(events: list[Event]) -> str:
+    """Format events for the synthesis LLM prompt, including per-source framing."""
+    event_lines = []
+    for i, e in enumerate(events):
+        source_parts = []
+        for s in e.sources:
+            line = f"    - {s.get('outlet', '?')} ({s.get('affiliation', '?')}/{s.get('country', '?')})"
+            framing = s.get("framing", "")
+            if framing:
+                line += f": {framing}"
+            source_parts.append(line)
+        sources_block = "\n".join(source_parts) if source_parts else "    - (none)"
+        event_lines.append(
+            f"[Event {i}] [{e.date}] (sig:{e.significance}) {e.summary}\n"
+            f"  Entities: {', '.join(e.entities)}\n"
+            f"  Sources:\n{sources_block}"
+        )
+    return "\n".join(event_lines)
+
+
+def _build_article_snippets(events: list[Event], articles: list[ContentItem]) -> str:
+    """Build supplementary article excerpts for multi-source events."""
+    url_to_article = {a.url: a for a in articles}
+    lines = []
+    for i, e in enumerate(events):
+        if len(e.sources) < 2:
+            continue
+        for s in e.sources:
+            article = url_to_article.get(s.get("url"))
+            if article and article.full_text:
+                text = article.full_text[:200].replace("\n", " ")
+                lines.append(f"[Event {i}] {s.get('outlet', '?')}: {article.title} -- {text}...")
+    return "\n".join(lines) if lines else ""
 
 
 async def synthesize_topic(
@@ -154,6 +356,8 @@ async def synthesize_topic(
     monthly_summaries: list[Summary],
     store: KnowledgeStore | None = None,
     topic_slug: str | None = None,
+    divergence_instructions: str | None = None,
+    divergence_output_qualifier: str | None = None,
 ) -> TopicSynthesis:
     """Build the TopicSynthesis knowledge object via LLM analysis."""
     # Build source balance from articles
@@ -176,17 +380,7 @@ async def synthesize_topic(
         )
 
     # Format events for LLM
-    event_lines = []
-    for i, e in enumerate(events):
-        sources_str = ", ".join(
-            f"{s.get('outlet', '?')} ({s.get('affiliation', '?')}/{s.get('country', '?')})"
-            for s in e.sources
-        )
-        event_lines.append(
-            f"[Event {i}] [{e.date}] (sig:{e.significance}) {e.summary}\n"
-            f"  Entities: {', '.join(e.entities)}\n"
-            f"  Sources: {sources_str}"
-        )
+    event_lines_str = _format_events(events)
 
     # Background context
     bg_lines = []
@@ -199,13 +393,20 @@ async def synthesize_topic(
         f"Topic: {topic.name}\n"
         f"Subtopics: {', '.join(topic.subtopics)}\n\n"
         f"Background:\n{chr(10).join(bg_lines) or 'None'}\n\n"
-        f"Events to analyze:\n" + "\n".join(event_lines)
+        f"Events to analyze:\n{event_lines_str}"
     )
+
+    # Append article snippets for multi-source divergence analysis
+    snippets = _build_article_snippets(events, articles)
+    if snippets:
+        user_prompt += f"\n\n## Source article excerpts (for divergence analysis)\n{snippets}"
 
     try:
         response = await llm.complete(
             config_key="knowledge_summary",
-            system_prompt=_build_synthesis_prompt(topic),
+            system_prompt=_build_synthesis_prompt(
+                topic, divergence_instructions, divergence_output_qualifier,
+            ),
             user_prompt=user_prompt,
             json_response=True,
         )
@@ -229,6 +430,10 @@ async def synthesize_topic(
                 key_entities=t.get("key_entities", []),
                 significance=int(t.get("significance", 5)),
             ))
+
+        # Post-synthesis validation
+        _validate_convergence(threads)
+        _check_thread_overlaps(threads)
 
         synthesis = TopicSynthesis(
             topic_name=topic.name,

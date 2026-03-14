@@ -210,3 +210,21 @@ def test_format_event_context():
 
 def test_format_event_context_empty():
     assert _format_event_context([]) == ""
+
+
+@pytest.mark.asyncio
+async def test_pass2_parse_error_fallback_rejects(topic):
+    """Pass 2 batch parse failure → conservative fallback (reject, not accept)."""
+    mock_llm = AsyncMock()
+    mock_llm.complete.return_value = "totally not valid json {{{"
+
+    items = [
+        ContentItem(title="A", url="https://a.com", source_id="t", full_text="text"),
+        ContentItem(title="B", url="https://b.com", source_id="t", full_text="text"),
+    ]
+
+    results = await score_significance_batch(mock_llm, items, topic, "- prior event")
+    assert len(results) == 2
+    for r in results:
+        assert r["significance"] == 3, f"Expected significance=3, got {r['significance']}"
+        assert r["is_novel"] is False, f"Expected is_novel=False, got {r['is_novel']}"

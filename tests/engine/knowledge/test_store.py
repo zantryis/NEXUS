@@ -87,6 +87,23 @@ async def test_get_events_date_filter(store):
     assert loaded[0].summary == "Old"
 
 
+async def test_event_source_framing_roundtrip(store):
+    """Framing field in source dict survives add_events → get_events roundtrip."""
+    event = _make_event(sources=[
+        {"url": "https://reuters.com/1", "outlet": "reuters",
+         "affiliation": "private", "country": "US", "language": "en",
+         "framing": "[neutral] Reports policy details; US as enforcer"},
+        {"url": "https://tass.com/1", "outlet": "tass",
+         "affiliation": "state", "country": "RU", "language": "ru",
+         "framing": "[critical] Emphasizes economic damage; US as aggressor"},
+    ])
+    await store.add_events([event], "iran-us")
+    loaded = await store.get_events("iran-us")
+    assert len(loaded) == 1
+    assert loaded[0].sources[0]["framing"] == "[neutral] Reports policy details; US as enforcer"
+    assert loaded[0].sources[1]["framing"] == "[critical] Emphasizes economic damage; US as aggressor"
+
+
 async def test_get_events_topic_isolation(store):
     await store.add_events([_make_event(summary="Iran event")], "iran-us")
     await store.add_events([_make_event(summary="AI event")], "ai-ml")
@@ -302,6 +319,35 @@ async def test_get_active_threads_by_topic(store):
     iran_threads = await store.get_active_threads("iran-us")
     assert len(iran_threads) == 1
     assert iran_threads[0]["slug"] == "t1"
+
+
+async def test_mark_stale_threads(store):
+    """mark_stale_threads demotes old threads, leaves recent ones active."""
+    from datetime import date
+
+    # Create two active threads
+    tid_old = await store.upsert_thread("old-thread", "Old Thread", status="active")
+    tid_recent = await store.upsert_thread("recent-thread", "Recent Thread", status="active")
+
+    # Add events: old one from 20 days ago, recent one from 3 days ago
+    old_event = _make_event(summary="Old event", d="2026-02-22")
+    recent_event = _make_event(summary="Recent event", d="2026-03-11")
+    old_ids = await store.add_events([old_event], "test")
+    recent_ids = await store.add_events([recent_event], "test")
+
+    # Link events to threads
+    await store.link_thread_events(tid_old, old_ids)
+    await store.link_thread_events(tid_recent, recent_ids)
+
+    # Mark stale with reference date of March 14
+    count = await store.mark_stale_threads(stale_after_days=14, reference_date=date(2026, 3, 14))
+    assert count == 1  # Only old thread should be marked stale
+
+    # Verify states
+    active = await store.get_active_threads()
+    slugs = {t["slug"] for t in active}
+    assert "recent-thread" in slugs
+    assert "old-thread" not in slugs
 
 
 async def test_convergence_divergence(store):

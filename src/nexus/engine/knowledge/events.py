@@ -15,6 +15,11 @@ from nexus.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
 
+VALID_TONES = frozenset({
+    "neutral", "alarmist", "supportive", "critical",
+    "dismissive", "celebratory", "cautious", "defensive",
+})
+
 
 class Event(BaseModel):
     date: date
@@ -96,12 +101,42 @@ def merge_events(target: "Event", source: "Event") -> "Event":
     return target
 
 
+def are_independent(source_a: dict, source_b: dict) -> bool:
+    """Two sources are independent if they differ on affiliation OR country.
+
+    Sources with unknown/empty metadata are treated as potentially independent
+    (benefit of the doubt).
+    """
+    affil_a = source_a.get("affiliation", "").strip()
+    affil_b = source_b.get("affiliation", "").strip()
+    country_a = source_a.get("country", "").strip()
+    country_b = source_b.get("country", "").strip()
+    if not affil_a or not affil_b or not country_a or not country_b:
+        return True
+    return affil_a != affil_b or country_a != country_b
+
+
+def has_independent_sources(event: Event) -> bool:
+    """Check if an event has at least 2 independent sources."""
+    for i in range(len(event.sources)):
+        for j in range(i + 1, len(event.sources)):
+            if are_independent(event.sources[i], event.sources[j]):
+                return True
+    return False
+
+
 EXTRACT_SYSTEM_PROMPT = (
     "You extract structured event data from news articles. "
     "Given an article and topic context, output JSON with: "
     "date (YYYY-MM-DD), summary (1-2 sentences in the user's language), "
     "entities (key actors/organizations), relation_to_prior (how this connects to recent events), "
-    "significance (1-10).\n\n"
+    "significance (1-10), "
+    "editorial_tone (ONE word from: neutral, alarmist, supportive, critical, dismissive, "
+    "celebratory, cautious, defensive), "
+    "editorial_focus (5-10 words: what specific aspect does this article lead with or emphasize), "
+    "actor_framing (5-15 words: how this article characterizes the key actors — note "
+    "agency language like 'killed' (assigns blame) vs 'dead' (passive), active vs passive voice, "
+    "and labels like 'aggressors', 'victims', 'defenders', 'militants' vs 'fighters').\n\n"
     "CRITICAL DATE RULES:\n"
     "- The date field is WHEN THE EVENT HAPPENED, not when it might happen in the future.\n"
     "- Today's date is {current_date}. The event date MUST be on or before today.\n"
@@ -182,6 +217,15 @@ async def extract_event(
             )
             event_date = processing_date
 
+        # Build structured framing string from constrained fields
+        tone = data.get("editorial_tone", "neutral")
+        if tone.lower().strip() not in VALID_TONES:
+            logger.debug(f"Invalid editorial_tone '{tone}' for {item.url}, defaulting to 'neutral'")
+            tone = "neutral"
+        focus = data.get("editorial_focus", "")
+        actors = data.get("actor_framing", "")
+        framing = f"[{tone}] {focus}; {actors}".strip("; ") if (focus or actors) else ""
+
         return Event(
             date=event_date,
             summary=data["summary"],
@@ -191,6 +235,7 @@ async def extract_event(
                 "outlet": item.source_id,
                 "affiliation": item.source_affiliation or "",
                 "country": item.source_country or "",
+                "framing": framing,
             }],
             entities=data.get("entities", []),
             relation_to_prior=data.get("relation_to_prior", ""),

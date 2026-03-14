@@ -4,6 +4,7 @@ from datetime import date
 from nexus.engine.evaluation.metrics import (
     source_diversity_index,
     convergence_ratio,
+    independent_convergence_ratio,
     language_coverage,
     extraction_stats,
     event_dedup_ratio,
@@ -76,3 +77,30 @@ def test_extraction_stats():
 def test_event_dedup_ratio():
     assert event_dedup_ratio(10, 7) == 0.7
     assert event_dedup_ratio(0, 0) == 1.0
+
+
+def test_independent_convergence_ratio():
+    """Only counts events where at least one source pair is independent."""
+    independent_event = Event(
+        date=date(2026, 3, 9), summary="Test", significance=5,
+        sources=[
+            {"url": "https://a.com", "outlet": "nyt", "affiliation": "private", "country": "US"},
+            {"url": "https://b.com", "outlet": "tass", "affiliation": "state", "country": "RU"},
+        ],
+    )
+    non_independent_event = Event(
+        date=date(2026, 3, 9), summary="Test", significance=5,
+        sources=[
+            {"url": "https://c.com", "outlet": "cgtn", "affiliation": "state", "country": "CN"},
+            {"url": "https://d.com", "outlet": "xinhua", "affiliation": "state", "country": "CN"},
+        ],
+    )
+    single_source = Event(
+        date=date(2026, 3, 9), summary="Test", significance=5,
+        sources=[{"url": "https://e.com", "outlet": "bbc", "affiliation": "public", "country": "GB"}],
+    )
+
+    assert independent_convergence_ratio([independent_event, non_independent_event, single_source]) == 0.333
+    assert independent_convergence_ratio([independent_event]) == 1.0
+    assert independent_convergence_ratio([non_independent_event]) == 0.0
+    assert independent_convergence_ratio([]) == 0.0

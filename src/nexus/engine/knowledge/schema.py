@@ -6,7 +6,7 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 8
+CURRENT_VERSION = 9
 
 DDL = """
 -- Schema version tracking
@@ -279,6 +279,12 @@ CREATE INDEX IF NOT EXISTS idx_pipeline_runs_started ON pipeline_runs(started_at
 """
 
 
+MIGRATION_V9 = """
+-- Per-source editorial framing (v9)
+ALTER TABLE event_sources ADD COLUMN framing TEXT NOT NULL DEFAULT '';
+"""
+
+
 async def initialize_schema(db: aiosqlite.Connection) -> None:
     """Create all tables and indexes. Idempotent."""
     await db.executescript(DDL)
@@ -318,6 +324,10 @@ async def initialize_schema(db: aiosqlite.Connection) -> None:
     if current < 8:
         await db.executescript(MIGRATION_V8)
         logger.info("Applied migration v8: pipeline_runs table")
+
+    if current < 9:
+        await db.executescript(MIGRATION_V9)
+        logger.info("Applied migration v9: event_sources framing column")
 
     if current < CURRENT_VERSION:
         await db.execute(

@@ -10,6 +10,7 @@ from nexus.engine.synthesis.threads import (
     match_events_to_threads,
     create_thread_slug,
     promote_thread_status,
+    check_staleness,
 )
 
 
@@ -214,3 +215,21 @@ async def test_match_llm_failure_falls_back():
     matches = await match_events_to_threads(mock_llm, events, threads)
     assert len(matches) == 1
     assert matches[0].is_new_thread is True
+
+
+# ── Thread staleness ───────────────────────────────────────────
+
+
+def test_check_staleness_active_recent():
+    """Active thread with recent events stays active."""
+    assert check_staleness("active", date(2026, 3, 9), reference_date=date(2026, 3, 14)) == "active"
+
+
+def test_check_staleness_active_old():
+    """Active thread with no recent events → stale."""
+    assert check_staleness("active", date(2026, 2, 20), reference_date=date(2026, 3, 14)) == "stale"
+
+
+def test_check_staleness_resolved_unaffected():
+    """Resolved threads stay resolved regardless of event age."""
+    assert check_staleness("resolved", date(2026, 1, 1), reference_date=date(2026, 3, 14)) == "resolved"

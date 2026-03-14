@@ -67,6 +67,19 @@ def promote_thread_status(current_status: str, event_dates: list[date]) -> str:
     return "emerging"
 
 
+STALE_AFTER_DAYS = 14
+
+
+def check_staleness(current_status: str, last_event_date: date, reference_date: date | None = None) -> str:
+    """Demote active/emerging threads to 'stale' if no events in STALE_AFTER_DAYS days."""
+    ref = reference_date or date.today()
+    if current_status in ("resolved", "stale"):
+        return current_status
+    if (ref - last_event_date).days >= STALE_AFTER_DAYS:
+        return "stale"
+    return current_status
+
+
 MATCH_SYSTEM_PROMPT = (
     "You are a thread matching engine. Given new events and existing narrative threads, "
     "determine which thread each event belongs to, or if it starts a new thread.\n\n"
