@@ -539,6 +539,8 @@ def run_experiment():
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
     deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
     openai_api_key = os.getenv("OPENAI_API_KEY")
+    litellm_base_url = os.getenv("LITELLM_BASE_URL")
+    litellm_api_key = os.getenv("LITELLM_API_KEY")
 
     llm = LLMClient(
         config.models,
@@ -547,12 +549,18 @@ def run_experiment():
         deepseek_api_key=deepseek_api_key,
         openai_api_key=openai_api_key,
         budget_config=config.budget,
+        litellm_base_url=litellm_base_url,
+        litellm_api_key=litellm_api_key,
     )
 
     # Parse CLI args
     suites = None
     topics = None
     budget_usd = 15.0
+    export_fixtures = None
+    load_fixtures = None
+    rejudge = None
+    env = "local"
 
     args = sys.argv[2:]
     i = 0
@@ -566,6 +574,18 @@ def run_experiment():
         elif args[i] == "--budget" and i + 1 < len(args):
             budget_usd = float(args[i + 1])
             i += 2
+        elif args[i] == "--export-fixtures" and i + 1 < len(args):
+            export_fixtures = Path(args[i + 1])
+            i += 2
+        elif args[i] == "--load-fixtures" and i + 1 < len(args):
+            load_fixtures = Path(args[i + 1])
+            i += 2
+        elif args[i] == "--rejudge" and i + 1 < len(args):
+            rejudge = Path(args[i + 1])
+            i += 2
+        elif args[i] == "--env" and i + 1 < len(args):
+            env = args[i + 1]
+            i += 2
         else:
             i += 1
 
@@ -577,6 +597,13 @@ def run_experiment():
     if topics:
         print(f"  Topics: {', '.join(topics)}")
     print(f"  Budget cap: ${budget_usd:.2f}")
+    print(f"  Environment: {env}")
+    if load_fixtures:
+        print(f"  Loading fixtures from: {load_fixtures}")
+    if export_fixtures:
+        print(f"  Exporting fixtures to: {export_fixtures}")
+    if rejudge:
+        print(f"  Re-judging syntheses from: {rejudge}")
     print()
 
     report = asyncio.run(run_experiments(
@@ -584,6 +611,10 @@ def run_experiment():
         suites=suites,
         topics=topics,
         budget_usd=budget_usd,
+        export_fixtures=export_fixtures,
+        load_fixtures=load_fixtures,
+        rejudge=rejudge,
+        env=env,
     ))
 
     # Output full markdown report

@@ -20,6 +20,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import yaml
+
 from nexus.config.models import ModelsConfig, NexusConfig, TopicConfig
 from nexus.engine.evaluation.benchmark import (
     StyleResult, build_naive_synthesis, judge_briefing_text,
@@ -43,6 +45,29 @@ class CachedTopicData:
     raw_articles: list[ContentItem] = field(default_factory=list)
     ingested_articles: list[ContentItem] = field(default_factory=list)
     recent_events: list[Event] = field(default_factory=list)
+
+    def to_json(self, path: Path) -> None:
+        """Save article fixtures for cross-environment replay."""
+        data = {
+            "topic_cfg": self.topic_cfg.model_dump(mode="json"),
+            "slug": self.slug,
+            "raw_articles": [a.model_dump(mode="json") for a in self.raw_articles],
+            "ingested_articles": [a.model_dump(mode="json") for a in self.ingested_articles],
+            "recent_events": [e.model_dump(mode="json") for e in self.recent_events],
+        }
+        path.write_text(json.dumps(data, indent=2, default=str))
+
+    @classmethod
+    def from_json(cls, path: Path) -> "CachedTopicData":
+        """Load article fixtures from JSON."""
+        data = json.loads(path.read_text())
+        return cls(
+            topic_cfg=TopicConfig(**data["topic_cfg"]),
+            slug=data["slug"],
+            raw_articles=[ContentItem(**a) for a in data.get("raw_articles", [])],
+            ingested_articles=[ContentItem(**a) for a in data.get("ingested_articles", [])],
+            recent_events=[Event(**e) for e in data.get("recent_events", [])],
+        )
 
 
 @dataclass
@@ -77,6 +102,7 @@ class ExperimentReport:
     timestamp: str = ""
     duration_s: float = 0.0
     limitations: list = field(default_factory=list)
+    environment: dict = field(default_factory=dict)
 
     def to_json(self) -> dict:
         result = {
@@ -84,6 +110,7 @@ class ExperimentReport:
             "duration_s": self.duration_s,
             "total_cost": self.total_cost,
             "limitations": self.limitations,
+            "environment": self.environment,
             "suites": {},
         }
         for sid, sr in self.suites.items():
@@ -108,8 +135,14 @@ class ExperimentReport:
             f"**Duration**: {self.duration_s:.0f}s",
             f"**Cost**: Gemini ${self.total_cost.get('gemini', 0):.2f}, "
             f"DeepSeek ${self.total_cost.get('deepseek', 0):.2f}",
-            "",
         ]
+        if self.environment:
+            lines.append(f"**Environment**: {self.environment.get('env', 'local')}")
+            if self.environment.get("fixture_source"):
+                lines.append(f"**Fixtures**: {self.environment['fixture_source']}")
+            if self.environment.get("rejudge_source"):
+                lines.append(f"**Re-judge source**: {self.environment['rejudge_source']}")
+        lines.append("")
 
         for sid, sr in self.suites.items():
             lines.append(f"## Suite {sid}: {sr.description}")
@@ -195,6 +228,37 @@ class ExperimentReport:
         lines.append("")
 
         return "\n".join(lines)
+
+
+# ── Synthesis Fixture Export/Import ───────────────────────────────────────────
+
+def export_synthesis_fixtures(results: list[VariantResult], path: Path) -> None:
+    """Save synthesis outputs per variant for re-judging in another environment."""
+    path.mkdir(parents=True, exist_ok=True)
+    for r in results:
+        if r.synthesis:
+            fname = f"{r.variant_name}__{r.topic_slug}.yaml"
+            (path / fname).write_text(yaml.dump(
+                r.synthesis.model_dump(), default_flow_style=False, allow_unicode=True
+            ))
+
+
+def load_synthesis_fixtures(path: Path) -> list[VariantResult]:
+    """Load synthesis fixtures as VariantResult stubs (synthesis only, no scores)."""
+    results = []
+    for f in sorted(path.glob("*.yaml")):
+        parts = f.stem.split("__", 1)
+        if len(parts) != 2:
+            continue
+        variant_name, topic_slug = parts
+        data = yaml.safe_load(f.read_text())
+        results.append(VariantResult(
+            variant_name=variant_name,
+            topic_slug=topic_slug,
+            synthesis=TopicSynthesis(**data),
+            params={"source": "fixture"},
+        ))
+    return results
 
 
 # ── Statistics ───────────────────────────────────────────────────────────────
@@ -841,22 +905,43 @@ async def run_suite_f(
     return report
 
 
+SUITE_G_LOCAL_COMBOS = [
+    {"label": "all_flash", "filtering": "gemini-3-flash-preview", "knowledge_summary": "gemini-3-flash-preview"},
+    {"label": "upgrade_filter", "filtering": "gemini-3.1-pro-preview", "knowledge_summary": "gemini-3-flash-preview"},
+    {"label": "upgrade_extract_synth", "filtering": "gemini-3-flash-preview", "knowledge_summary": "gemini-3.1-pro-preview"},
+    {"label": "all_pro", "filtering": "gemini-3.1-pro-preview", "knowledge_summary": "gemini-3.1-pro-preview"},
+    {"label": "all_ds_chat", "filtering": "deepseek-chat", "knowledge_summary": "deepseek-chat"},
+    {"label": "ds_smart_synth", "filtering": "deepseek-chat", "knowledge_summary": "deepseek-reasoner"},
+    {"label": "all_ds_reasoner", "filtering": "deepseek-reasoner", "knowledge_summary": "deepseek-reasoner"},
+]
+
+SUITE_G_CLOUD_COMBOS = [
+    {"label": "all_sonnet", "filtering": "litellm/claude-sonnet-4-6", "knowledge_summary": "litellm/claude-sonnet-4-6"},
+    {"label": "all_gpt", "filtering": "litellm/gpt-5.4", "knowledge_summary": "litellm/gpt-5.4"},
+    {"label": "all_opus", "filtering": "litellm/claude-opus-4-6", "knowledge_summary": "litellm/claude-opus-4-6"},
+    {"label": "sonnet_filter_gpt_synth", "filtering": "litellm/claude-sonnet-4-6", "knowledge_summary": "litellm/gpt-5.4"},
+    {"label": "sonnet_filter_opus_synth", "filtering": "litellm/claude-sonnet-4-6", "knowledge_summary": "litellm/claude-opus-4-6"},
+    {"label": "gpt_filter_opus_synth", "filtering": "litellm/gpt-5.4", "knowledge_summary": "litellm/claude-opus-4-6"},
+]
+
+
 async def run_suite_g(
     llm: LLMClient,
     cached_topics: list[CachedTopicData],
     store,
     judge_model: str = "gemini-3.1-pro-preview",
+    env: str = "local",
 ) -> SuiteReport:
     """Suite G: Model Combination Matrix — test different models per stage."""
-    combos = [
-        {"label": "all_flash", "filtering": "gemini-3-flash-preview", "knowledge_summary": "gemini-3-flash-preview"},
-        {"label": "upgrade_filter", "filtering": "gemini-3.1-pro-preview", "knowledge_summary": "gemini-3-flash-preview"},
-        {"label": "upgrade_extract_synth", "filtering": "gemini-3-flash-preview", "knowledge_summary": "gemini-3.1-pro-preview"},
-        {"label": "all_pro", "filtering": "gemini-3.1-pro-preview", "knowledge_summary": "gemini-3.1-pro-preview"},
-        {"label": "all_ds_chat", "filtering": "deepseek-chat", "knowledge_summary": "deepseek-chat"},
-        {"label": "ds_smart_synth", "filtering": "deepseek-chat", "knowledge_summary": "deepseek-reasoner"},
-        {"label": "all_ds_reasoner", "filtering": "deepseek-reasoner", "knowledge_summary": "deepseek-reasoner"},
-    ]
+    if env == "cloud":
+        combos = SUITE_G_CLOUD_COMBOS
+    elif env == "all":
+        combos = SUITE_G_LOCAL_COMBOS + SUITE_G_CLOUD_COMBOS
+    else:
+        combos = SUITE_G_LOCAL_COMBOS
+
+    judge_models = _get_judge_models(env)
+
     report = SuiteReport(
         suite_id="G",
         description="Model Combination Matrix",
@@ -887,10 +972,7 @@ async def run_suite_g(
                     params=combo, duration_s=duration,
                 )
                 if synth:
-                    for judge_name, judge_m in [
-                        ("gemini_pro", "gemini-3.1-pro-preview"),
-                        ("deepseek_chat", "deepseek-chat"),
-                    ]:
+                    for judge_name, judge_m in judge_models:
                         try:
                             result.scores[judge_name] = await judge_synthesis(
                                 llm, synth, model_override=judge_m,
@@ -902,7 +984,7 @@ async def run_suite_g(
                 logger.error(f"    Suite G variant {label}/{cached.slug} failed: {e}")
 
     for combo in combos:
-        for judge_name in ("gemini_pro", "deepseek_chat"):
+        for judge_name, _ in judge_models:
             key = f"{combo['label']}_{judge_name}"
             report.stats[key] = _aggregate_variant_stats(
                 report.results, combo["label"], judge_label=judge_name,
@@ -971,6 +1053,22 @@ async def run_suite_h(
     return report
 
 
+# ── Environment-Specific Judge Models ────────────────────────────────────────
+
+def _get_judge_models(env: str) -> list[tuple[str, str]]:
+    """Return (label, model) pairs for judging based on environment."""
+    if env == "cloud":
+        return [
+            ("opus", "litellm/claude-opus-4-6"),
+            ("gpt", "litellm/gpt-5.4"),
+        ]
+    else:
+        return [
+            ("gemini_pro", "gemini-3.1-pro-preview"),
+            ("deepseek_chat", "deepseek-chat"),
+        ]
+
+
 # ── Main Experiment Runner ───────────────────────────────────────────────────
 
 SUITE_RUNNERS = {
@@ -994,6 +1092,10 @@ async def run_experiments(
     suites: list[str] | None = None,
     topics: list[str] | None = None,
     budget_usd: float = 15.0,
+    export_fixtures: Path | None = None,
+    load_fixtures: Path | None = None,
+    rejudge: Path | None = None,
+    env: str = "local",
 ) -> ExperimentReport:
     """Main entry point — cache articles, run suites, report results."""
     from nexus.engine.knowledge.store import KnowledgeStore
@@ -1010,6 +1112,11 @@ async def run_experiments(
             f"N={len(config.topics)} topics",
             "Article availability depends on RSS feed state at time of polling",
         ],
+        environment={
+            "env": env,
+            "fixture_source": str(load_fixtures) if load_fixtures else "live_polling",
+            "rejudge_source": str(rejudge) if rejudge else None,
+        },
     )
 
     # Filter topics
@@ -1047,13 +1154,27 @@ async def run_experiments(
     await llm.set_store(store)
 
     try:
-        # Phase 1: Cache articles for all topics
-        logger.info("Phase 1: Caching articles for all topics")
+        # Phase 1: Cache articles (or load from fixtures)
         cached_topics: list[CachedTopicData] = []
-        for tc in topic_configs:
-            cache = await cache_topic_articles(llm, data_dir, store, tc)
-            if cache.ingested_articles:
-                cached_topics.append(cache)
+        if load_fixtures:
+            logger.info(f"Phase 1: Loading fixtures from {load_fixtures}")
+            for json_file in sorted(load_fixtures.glob("*.json")):
+                cache = CachedTopicData.from_json(json_file)
+                if cache.ingested_articles:
+                    cached_topics.append(cache)
+            logger.info(f"Loaded fixtures for {len(cached_topics)} topics")
+        else:
+            logger.info("Phase 1: Caching articles for all topics")
+            for tc in topic_configs:
+                cache = await cache_topic_articles(llm, data_dir, store, tc)
+                if cache.ingested_articles:
+                    cached_topics.append(cache)
+            # Export article fixtures if requested
+            if export_fixtures and cached_topics:
+                export_fixtures.mkdir(parents=True, exist_ok=True)
+                for cache in cached_topics:
+                    cache.to_json(export_fixtures / f"{cache.slug}.json")
+                logger.info(f"Exported article fixtures for {len(cached_topics)} topics")
 
         if not cached_topics:
             logger.error("No articles cached for any topic")
@@ -1113,7 +1234,7 @@ async def run_experiments(
 
                 elif suite_id == "G":
                     report.suites["G"] = await run_suite_g(
-                        llm, cached_topics, store,
+                        llm, cached_topics, store, env=env,
                     )
 
                 elif suite_id == "H":
@@ -1124,11 +1245,58 @@ async def run_experiments(
                 logger.error(f"Suite {suite_id} failed: {e} — continuing with remaining suites")
                 report.limitations.append(f"Suite {suite_id} failed: {type(e).__name__}")
 
+        # Re-judge synthesis fixtures from another environment
+        if rejudge and rejudge.exists():
+            logger.info(f"Re-judging synthesis fixtures from {rejudge}")
+            rejudge_results = load_synthesis_fixtures(rejudge)
+            if rejudge_results:
+                rejudge_report = SuiteReport(
+                    suite_id="REJUDGE",
+                    description="Re-judged fixtures from another environment",
+                    claim="Same synthesis, authoritative judge",
+                )
+                judge_models = _get_judge_models(env)
+                for r in rejudge_results:
+                    for judge_name, judge_m in judge_models:
+                        try:
+                            r.scores[judge_name] = await judge_synthesis(
+                                llm, r.synthesis, model_override=judge_m,
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"Re-judge {judge_name} failed for "
+                                f"{r.variant_name}/{r.topic_slug}: {e}"
+                            )
+                    rejudge_report.results.append(r)
+                # Aggregate stats
+                variants = {r.variant_name for r in rejudge_results}
+                for v in variants:
+                    for judge_name, _ in judge_models:
+                        rejudge_report.stats[f"{v}_{judge_name}"] = (
+                            _aggregate_variant_stats(
+                                rejudge_report.results, v, judge_label=judge_name,
+                            )
+                        )
+                report.suites["REJUDGE"] = rejudge_report
+                logger.info(
+                    f"Re-judged {len(rejudge_results)} synthesis fixtures "
+                    f"with {len(judge_models)} judges"
+                )
+
+        # Export synthesis fixtures if requested
+        if export_fixtures:
+            all_results = [r for sr in report.suites.values() for r in sr.results]
+            synth_dir = export_fixtures / "syntheses"
+            export_synthesis_fixtures(all_results, synth_dir)
+            logger.info(f"Exported synthesis fixtures to {synth_dir}")
+
         # Final cost
         cost = llm.usage.cost_summary()
+        by_prov = cost.get("by_provider", {})
         report.total_cost = {
-            "gemini": cost.get("by_provider", {}).get("gemini", 0),
-            "deepseek": cost.get("by_provider", {}).get("deepseek", 0),
+            "gemini": by_prov.get("gemini", 0),
+            "deepseek": by_prov.get("deepseek", 0),
+            "litellm": by_prov.get("litellm", 0),
             "total_usd": cost.get("total_usd", 0),
         }
         report.duration_s = time.monotonic() - start_time

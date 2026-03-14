@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 
 def _resolve_provider(model_name: str) -> str:
     """Determine provider from model name prefix."""
-    if model_name.startswith("ollama/"):
+    if model_name.startswith("litellm/"):
+        return "litellm"
+    elif model_name.startswith("ollama/"):
         return "ollama"
     elif model_name.startswith("gemini"):
         return "gemini"
@@ -97,6 +99,8 @@ class LLMClient:
         openai_api_key: Optional[str] = None,
         ollama_base_url: Optional[str] = None,
         budget_config: Optional[BudgetConfig] = None,
+        litellm_base_url: Optional[str] = None,
+        litellm_api_key: Optional[str] = None,
     ):
         self._config = models_config
         self._gemini_client = None
@@ -133,6 +137,15 @@ class LLMClient:
         if openai_api_key:
             from openai import AsyncOpenAI
             self._openai_client = AsyncOpenAI(api_key=openai_api_key)
+
+        # Lazy-init LiteLLM proxy (OpenAI-compatible)
+        self._litellm_client = None
+        if litellm_api_key and litellm_base_url:
+            from openai import AsyncOpenAI
+            self._litellm_client = AsyncOpenAI(
+                api_key=litellm_api_key,
+                base_url=litellm_base_url,
+            )
 
     async def set_store(self, store) -> None:
         """Attach a KnowledgeStore for persistent usage logging.
@@ -219,6 +232,9 @@ class LLMClient:
                 model, system_prompt, user_prompt, json_response)
         elif provider == "deepseek":
             text, in_tok, out_tok = await self._complete_deepseek(
+                model, system_prompt, user_prompt, json_response)
+        elif provider == "litellm":
+            text, in_tok, out_tok = await self._complete_litellm(
                 model, system_prompt, user_prompt, json_response)
         elif provider == "ollama":
             text, in_tok, out_tok = await self._complete_ollama(
@@ -344,6 +360,37 @@ class LLMClient:
             kwargs["response_format"] = {"type": "json_object"}
 
         response = await self._deepseek_client.chat.completions.create(**kwargs)
+
+        in_tok = getattr(getattr(response, 'usage', None), 'prompt_tokens', 0) or 0
+        out_tok = getattr(getattr(response, 'usage', None), 'completion_tokens', 0) or 0
+        return response.choices[0].message.content, in_tok, out_tok
+
+    async def _complete_litellm(
+        self, model: str, system_prompt: str, user_prompt: str, json_response: bool
+    ) -> tuple[str, int, int]:
+        if not self._litellm_client:
+            raise RuntimeError(
+                "LiteLLM proxy not configured — set LITELLM_BASE_URL and LITELLM_API_KEY"
+            )
+
+        # Strip litellm/ prefix — the proxy handles provider routing
+        model_name = model.removeprefix("litellm/")
+
+        effective_system = system_prompt
+        if json_response:
+            effective_system += "\n\nIMPORTANT: Respond with valid JSON only. No markdown, no explanation."
+
+        kwargs: dict = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": effective_system},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        if json_response:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        response = await self._litellm_client.chat.completions.create(**kwargs)
 
         in_tok = getattr(getattr(response, 'usage', None), 'prompt_tokens', 0) or 0
         out_tok = getattr(getattr(response, 'usage', None), 'completion_tokens', 0) or 0

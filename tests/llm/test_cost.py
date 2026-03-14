@@ -79,6 +79,23 @@ def test_cost_summary_mixed_providers():
     assert result["total_usd"] == pytest.approx(gemini_cost + deepseek_cost)
 
 
+def test_estimate_cost_litellm_prefix():
+    """LiteLLM-prefixed models use the underlying model's pricing."""
+    base_cost = estimate_cost("claude-opus-4-6", 1_000_000, 1_000_000)
+    litellm_cost = estimate_cost("litellm/claude-opus-4-6", 1_000_000, 1_000_000)
+    assert litellm_cost == base_cost
+    assert litellm_cost > 0  # sanity: opus is expensive
+
+    # Also works for other providers behind litellm
+    assert estimate_cost("litellm/gpt-5.4", 1000, 500) == estimate_cost("gpt-5.4", 1000, 500)
+    assert estimate_cost("litellm/claude-sonnet-4-6", 1000, 500) == estimate_cost("claude-sonnet-4-6", 1000, 500)
+
+
+def test_estimate_cost_litellm_unknown():
+    """LiteLLM-prefixed unknown model returns 0."""
+    assert estimate_cost("litellm/some-unknown-model", 1000, 500) == 0.0
+
+
 def test_usage_tracker_cost_summary():
     """UsageTracker.cost_summary() delegates to cost module."""
     tracker = UsageTracker()

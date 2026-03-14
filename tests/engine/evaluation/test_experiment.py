@@ -286,3 +286,165 @@ def test_suite_h_variant_names():
     assert "broadened" in DIVERGENCE_VARIANTS
     assert "structured" in DIVERGENCE_VARIANTS
     assert "encouraged" in DIVERGENCE_VARIANTS
+
+
+# ── CachedTopicData Serialization ────────────────────────────────────────────
+
+def test_cached_topic_data_roundtrip(tmp_path):
+    """CachedTopicData serializes and deserializes cleanly."""
+    from nexus.engine.evaluation.experiment import CachedTopicData
+    from nexus.engine.sources.polling import ContentItem
+    from nexus.engine.knowledge.events import Event
+
+    topic_cfg = TopicConfig(name="Iran-US Relations", subtopics=["nuclear"])
+    articles = [
+        ContentItem(
+            url="https://example.com/1", title="Test Article",
+            source_id="bbc", source_affiliation="public",
+            source_country="GB", source_language="en",
+            full_text="Full text of the article.",
+        ),
+    ]
+    events = [
+        Event(date="2026-03-14", summary="Test event", entities=["Iran", "USA"],
+              sources=[{"outlet": "BBC", "affiliation": "public", "country": "GB"}]),
+    ]
+
+    original = CachedTopicData(
+        topic_cfg=topic_cfg, slug="iran-us-relations",
+        raw_articles=articles, ingested_articles=articles,
+        recent_events=events,
+    )
+
+    path = tmp_path / "test.json"
+    original.to_json(path)
+    assert path.exists()
+
+    loaded = CachedTopicData.from_json(path)
+    assert loaded.slug == "iran-us-relations"
+    assert loaded.topic_cfg.name == "Iran-US Relations"
+    assert len(loaded.ingested_articles) == 1
+    assert loaded.ingested_articles[0].title == "Test Article"
+    assert len(loaded.recent_events) == 1
+    assert loaded.recent_events[0].summary == "Test event"
+
+
+def test_cached_topic_data_empty_lists(tmp_path):
+    """Roundtrip with no articles/events."""
+    from nexus.engine.evaluation.experiment import CachedTopicData
+
+    original = CachedTopicData(
+        topic_cfg=TopicConfig(name="Empty"), slug="empty",
+    )
+    path = tmp_path / "empty.json"
+    original.to_json(path)
+
+    loaded = CachedTopicData.from_json(path)
+    assert loaded.slug == "empty"
+    assert loaded.ingested_articles == []
+    assert loaded.recent_events == []
+
+
+# ── Synthesis Fixture Serialization ──────────────────────────────────────────
+
+def test_synthesis_fixture_roundtrip(tmp_path):
+    """Synthesis export + load roundtrip preserves data."""
+    from nexus.engine.evaluation.experiment import (
+        VariantResult, export_synthesis_fixtures, load_synthesis_fixtures,
+    )
+    from nexus.engine.synthesis.knowledge import TopicSynthesis, NarrativeThread
+
+    synth = TopicSynthesis(
+        topic_name="Iran-US Relations",
+        threads=[NarrativeThread(
+            headline="Nuclear talks resume", events=[], convergence=[],
+            divergence=[], key_entities=["Iran", "IAEA"], significance=8,
+        )],
+        background=[], source_balance={"state": 3, "public": 5},
+        languages_represented=["en", "fa"],
+    )
+    results = [
+        VariantResult(variant_name="all_flash", topic_slug="iran-us", synthesis=synth),
+        VariantResult(variant_name="all_pro", topic_slug="iran-us", synthesis=synth),
+        VariantResult(variant_name="no_synth", topic_slug="iran-us", synthesis=None),
+    ]
+
+    export_synthesis_fixtures(results, tmp_path / "synth")
+    assert (tmp_path / "synth" / "all_flash__iran-us.yaml").exists()
+    assert (tmp_path / "synth" / "all_pro__iran-us.yaml").exists()
+    assert not (tmp_path / "synth" / "no_synth__iran-us.yaml").exists()  # None skipped
+
+    loaded = load_synthesis_fixtures(tmp_path / "synth")
+    assert len(loaded) == 2
+    assert loaded[0].variant_name == "all_flash"
+    assert loaded[0].topic_slug == "iran-us"
+    assert loaded[0].synthesis.topic_name == "Iran-US Relations"
+    assert len(loaded[0].synthesis.threads) == 1
+    assert loaded[0].synthesis.threads[0].headline == "Nuclear talks resume"
+
+
+# ── Suite G Cloud Combos ─────────────────────────────────────────────────────
+
+def test_suite_g_local_combos_count():
+    from nexus.engine.evaluation.experiment import SUITE_G_LOCAL_COMBOS
+    assert len(SUITE_G_LOCAL_COMBOS) == 7
+
+
+def test_suite_g_cloud_combos_count():
+    from nexus.engine.evaluation.experiment import SUITE_G_CLOUD_COMBOS
+    assert len(SUITE_G_CLOUD_COMBOS) == 6
+
+
+def test_suite_g_cloud_combos_use_litellm_prefix():
+    from nexus.engine.evaluation.experiment import SUITE_G_CLOUD_COMBOS
+    for combo in SUITE_G_CLOUD_COMBOS:
+        for k, v in combo.items():
+            if k != "label":
+                assert v.startswith("litellm/"), f"{combo['label']}.{k} = {v} missing litellm/ prefix"
+
+
+def test_suite_g_labels_unique():
+    from nexus.engine.evaluation.experiment import SUITE_G_LOCAL_COMBOS, SUITE_G_CLOUD_COMBOS
+    all_labels = [c["label"] for c in SUITE_G_LOCAL_COMBOS + SUITE_G_CLOUD_COMBOS]
+    assert len(all_labels) == len(set(all_labels)), "Duplicate labels found"
+
+
+def test_get_judge_models_local():
+    from nexus.engine.evaluation.experiment import _get_judge_models
+    judges = _get_judge_models("local")
+    labels = [j[0] for j in judges]
+    assert "gemini_pro" in labels
+    assert "deepseek_chat" in labels
+
+
+def test_get_judge_models_cloud():
+    from nexus.engine.evaluation.experiment import _get_judge_models
+    judges = _get_judge_models("cloud")
+    labels = [j[0] for j in judges]
+    assert "opus" in labels
+    assert "gpt" in labels
+    # No Gemini Pro on cloud
+    assert all("gemini" not in m for _, m in judges)
+
+
+# ── Cloud Presets ────────────────────────────────────────────────────────────
+
+def test_cloud_presets_exist():
+    from nexus.config.presets import PRESETS
+    assert "cloud-balanced" in PRESETS
+    assert "cloud-quality" in PRESETS
+
+
+def test_cloud_presets_use_litellm():
+    from nexus.config.presets import PRESETS
+    for name in ("cloud-balanced", "cloud-quality"):
+        cfg = PRESETS[name]
+        for field in ("filtering", "knowledge_summary", "agent"):
+            val = getattr(cfg, field)
+            assert val.startswith("litellm/"), f"{name}.{field} = {val} missing litellm/ prefix"
+
+
+def test_model_choices_has_litellm():
+    from nexus.config.presets import MODEL_CHOICES
+    assert "litellm" in MODEL_CHOICES
+    assert len(MODEL_CHOICES["litellm"]) >= 3

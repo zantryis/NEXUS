@@ -33,6 +33,8 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """Calculate cost in USD for a single call. Returns 0.0 for unknown/free models."""
     if model.startswith("ollama/"):
         return 0.0
+    if model.startswith("litellm/"):
+        model = model.removeprefix("litellm/")
     pricing = PRICING.get(model)
     if not pricing:
         return 0.0

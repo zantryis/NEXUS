@@ -29,6 +29,11 @@ MODEL_CHOICES = {
         "ollama/llama3",
         "ollama/mistral",
     ],
+    "litellm": [
+        "litellm/claude-sonnet-4-6",
+        "litellm/claude-opus-4-6",
+        "litellm/gpt-5.4",
+    ],
 }
 
 # Pipeline stages that map to model config fields
@@ -94,6 +99,19 @@ PRESETS = {
         knowledge_summary="claude-haiku-4-5-20251001", breaking_news="claude-haiku-4-5-20251001",
         agent="claude-sonnet-4-6",
     ),
+    # ── Cloud (via LiteLLM proxy) ──
+    "cloud-balanced": ModelsConfig(
+        discovery="litellm/claude-sonnet-4-6", filtering="litellm/claude-sonnet-4-6",
+        synthesis="litellm/gpt-5.4", dialogue_script="litellm/gpt-5.4",
+        knowledge_summary="litellm/claude-sonnet-4-6", breaking_news="litellm/claude-sonnet-4-6",
+        agent="litellm/gpt-5.4",
+    ),
+    "cloud-quality": ModelsConfig(
+        discovery="litellm/claude-sonnet-4-6", filtering="litellm/claude-sonnet-4-6",
+        synthesis="litellm/claude-opus-4-6", dialogue_script="litellm/claude-opus-4-6",
+        knowledge_summary="litellm/claude-sonnet-4-6", breaking_news="litellm/claude-sonnet-4-6",
+        agent="litellm/claude-opus-4-6",
+    ),
 }
 
 # Info dict for UI display (preset picker cards)
@@ -106,6 +124,8 @@ PRESET_INFO = {
     "openai-balanced": {"label": "OpenAI Balanced", "cost": "~$0.10/day", "provider": "openai"},
     "openai-quality": {"label": "OpenAI Quality", "cost": "~$0.25/day", "provider": "openai"},
     "anthropic": {"label": "Anthropic (Claude)", "cost": "~$0.10/day", "provider": "anthropic"},
+    "cloud-balanced": {"label": "Cloud Balanced (LiteLLM)", "cost": "~$0.50/day", "provider": "litellm"},
+    "cloud-quality": {"label": "Cloud Quality (LiteLLM)", "cost": "~$2.00/day", "provider": "litellm"},
 }
 
 

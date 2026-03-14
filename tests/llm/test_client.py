@@ -101,3 +101,34 @@ def test_openai_client_initialized():
 def test_openai_client_not_initialized_without_key():
     client = LLMClient(ModelsConfig())
     assert client._openai_client is None
+
+
+# ── LiteLLM provider ──
+
+
+def test_resolve_provider_litellm():
+    assert _resolve_provider("litellm/claude-opus-4-6") == "litellm"
+    assert _resolve_provider("litellm/gpt-5.4") == "litellm"
+    assert _resolve_provider("litellm/claude-sonnet-4-6") == "litellm"
+
+
+def test_resolve_provider_litellm_over_gemini():
+    """litellm/ prefix takes priority over gemini prefix match."""
+    assert _resolve_provider("litellm/gemini-3.1-pro-preview") == "litellm"
+
+
+def test_litellm_client_initialized():
+    client = LLMClient(
+        ModelsConfig(),
+        litellm_base_url="http://localhost:4000",
+        litellm_api_key="test-litellm-key",
+    )
+    assert client._litellm_client is not None
+
+
+def test_litellm_client_not_initialized_without_both():
+    """Needs BOTH base_url and api_key."""
+    client = LLMClient(ModelsConfig(), litellm_api_key="key-only")
+    assert client._litellm_client is None
+    client = LLMClient(ModelsConfig(), litellm_base_url="http://localhost:4000")
+    assert client._litellm_client is None
