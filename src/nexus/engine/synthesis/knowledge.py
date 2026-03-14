@@ -130,9 +130,10 @@ _SYNTHESIS_OUTPUT_FORMAT_PRE = (
 )
 
 _DIVERGENCE_OUTPUT_QUALIFIER_DEFAULT = (
-    "For divergence, compare the structured framing data (tone, focus, actor characterization) "
-    "for every thread with 2+ independent sources. When sources have different tone words "
-    "or emphasize different aspects, that IS divergence — report it. "
+    "For divergence, systematically check each category (tone contrast, focus divergence, "
+    "actor framing, omission) for every thread with 2+ independent sources. "
+    "Compare the structured framing data ([tone] focus; actors) across sources. "
+    "Most multi-source threads will have divergence — if you find none, re-examine. "
 )
 
 _SYNTHESIS_OUTPUT_FORMAT_POST = (
