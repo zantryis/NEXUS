@@ -175,7 +175,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full module map and schema detail
 
 ## Benchmark
 
-Controlled experiment across 3 topics, 7 test suites, evaluated by two independent LLM judges (Gemini Pro + DeepSeek Reasoner, cross-judge Pearson r=0.86). Scores use anchored 2-10 rubrics with explicit level definitions. Full methodology and per-suite breakdowns in [docs/benchmark-results.md](docs/benchmark-results.md).
+Controlled experiment across 3 topics, 8 test suites, evaluated by two independent LLM judges (Gemini Pro + DeepSeek Reasoner, cross-judge Pearson r=0.86). Scores use anchored 2-10 rubrics with explicit level definitions. Supports cross-environment comparison via fixture export and re-judging with authoritative cloud models. Full methodology and per-suite breakdowns in [docs/benchmark-results.md](docs/benchmark-results.md).
 
 ### Pipeline Quality (N=3 topics, mean +/- std)
 
@@ -201,6 +201,8 @@ Controlled experiment across 3 topics, 7 test suites, evaluated by two independe
 pip install -e ".[all,dev]"
 pytest                          # Run unit tests
 pytest -m e2e                   # Run E2E smoke tests (requires API keys)
+python -m nexus experiment      # Run benchmark suites (A-H)
+python -m nexus experiment --suite A,G --export-fixtures data/fixtures/local  # Export for cloud
 ```
 
 ## Project Structure
@@ -218,7 +220,7 @@ src/nexus/
 data/
   sources/        Per-topic RSS source registries (pre-built for 4 topics)
   config.yaml     Your personal configuration (gitignored — created by setup wizard)
-tests/            640 tests mirroring src structure (unit + e2e)
+tests/            760+ tests mirroring src structure (unit + e2e)
 ```
 
 ## License
