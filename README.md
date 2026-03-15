@@ -171,7 +171,7 @@ SQLite Knowledge      Telegram Bot         Dashboard
                        Q&A + alerts)        Jinja2)
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full module map and schema details.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full module map and schema details. For a founder/team-facing product strategy memo on positioning and roadmap, see [docs/product-north-star.md](docs/product-north-star.md).
 
 ## Benchmark
 
