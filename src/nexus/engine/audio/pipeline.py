@@ -1,5 +1,6 @@
 """Audio pipeline orchestrator — script gen → TTS → concatenation."""
 
+import asyncio
 import logging
 from datetime import date
 from pathlib import Path
@@ -58,12 +59,18 @@ async def run_audio_pipeline(
 
     segments: list[bytes] = []
     for i, turn in enumerate(script.turns):
-        try:
-            audio_bytes = await tts.synthesize(turn)
-            segments.append(audio_bytes)
-        except Exception as e:
-            logger.warning(f"{lang_label}TTS failed for turn {i}: {e}")
-            continue
+        for attempt in range(3):
+            try:
+                audio_bytes = await tts.synthesize(turn)
+                segments.append(audio_bytes)
+                break
+            except Exception as e:
+                if attempt == 2:
+                    logger.warning(f"{lang_label}TTS failed for turn {i}: {e}")
+                else:
+                    logger.info(f"{lang_label}TTS retry {attempt + 1} for turn {i}: {e}")
+                    await asyncio.sleep(1.5 * (attempt + 1))
+                    continue
 
     if not segments:
         logger.warning(f"{lang_label}No audio segments produced, skipping concatenation.")

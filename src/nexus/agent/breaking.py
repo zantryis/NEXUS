@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 
 from nexus.config.models import NexusConfig, TopicConfig
 from nexus.engine.knowledge.store import KnowledgeStore
@@ -15,13 +16,15 @@ logger = logging.getLogger(__name__)
 
 # Diverse wire feeds: major agencies + social signal
 DEFAULT_WIRE_FEEDS = [
-    # Wire agencies (fast, reliable)
-    {"type": "rss", "url": "https://feeds.reuters.com/reuters/topNews",
-     "id": "wire-reuters", "affiliation": "private", "country": "UK", "tier": "A"},
+    # Major world-news feeds (fast, broad, currently parse reliably here)
     {"type": "rss", "url": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
      "id": "wire-nyt", "affiliation": "private", "country": "US", "tier": "A"},
     {"type": "rss", "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
      "id": "wire-bbc", "affiliation": "public", "country": "GB", "tier": "A"},
+    {"type": "rss", "url": "https://www.theguardian.com/world/rss",
+     "id": "wire-guardian-world", "affiliation": "private", "country": "GB", "tier": "A"},
+    {"type": "rss", "url": "https://www.aljazeera.com/xml/rss/all.xml",
+     "id": "wire-aljazeera", "affiliation": "private", "country": "QA", "tier": "A"},
     # Social/crowd signal (faster breaking detection)
     {"type": "reddit", "subreddit": "worldnews", "sort": "hot",
      "id": "wire-reddit-worldnews"},
@@ -57,6 +60,59 @@ def _hash_headline(headline: str) -> str:
 def _topic_slug(topic: TopicConfig) -> str:
     """Derive slug from topic name."""
     return topic.name.lower().replace(" ", "-").replace("/", "-")
+
+
+def _topic_keywords(topic: TopicConfig) -> list[str]:
+    """Build a lightweight keyword set for heuristic breaking fallback."""
+    raw_terms = [topic.name, *topic.subtopics]
+    keywords: list[str] = []
+    seen: set[str] = set()
+    stop = {
+        "and", "the", "for", "with", "from", "into", "about", "news", "relations",
+        "global", "research", "transition", "technical", "programs", "labs",
+    }
+    for term in raw_terms:
+        parts = re.split(r"[^a-z0-9+]+", term.lower())
+        expanded = [term.lower(), *parts]
+        for piece in expanded:
+            piece = piece.strip()
+            if len(piece) < 3 or piece in stop:
+                continue
+            if piece not in seen:
+                seen.add(piece)
+                keywords.append(piece)
+    return keywords
+
+
+def _heuristic_score_item(item: ContentItem, topic: TopicConfig) -> tuple[int, str]:
+    """Heuristic topic relevance when the hosted LLM proxy is unavailable."""
+    text = " ".join(filter(None, [item.title or "", item.snippet or ""]))
+    haystack = text.lower()
+    keywords = _topic_keywords(topic)
+    topic_name = topic.name.lower()
+
+    phrase_hit = topic_name in haystack
+    hit_terms = [kw for kw in keywords if kw in haystack]
+    hit_count = len(set(hit_terms))
+
+    score = 0
+    if phrase_hit:
+        score += 4
+    score += min(hit_count, 5)
+    if any(sub.lower() in haystack for sub in topic.subtopics):
+        score += 2
+
+    if score >= 7:
+        final = min(9, score)
+    elif phrase_hit or hit_count >= 2:
+        final = 7
+    else:
+        final = min(score, 5)
+
+    reason = "heuristic keyword fallback"
+    if hit_terms:
+        reason += f": {', '.join(sorted(set(hit_terms))[:4])}"
+    return final, reason
 
 
 async def _poll_all_feeds(feed_configs: list[dict]) -> list[ContentItem]:
@@ -117,8 +173,11 @@ async def _score_batch_for_topic(
         return [score_map.get(i, (0, "Missing")) for i in range(len(items))]
 
     except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
-        logger.warning(f"Breaking news batch scoring failed: {e}")
-        return [(0, "Parse error")] * len(items)
+        logger.warning(f"Breaking news batch scoring parse failed: {e}; using heuristic fallback")
+        return [_heuristic_score_item(item, topic) for item in items]
+    except Exception as e:
+        logger.warning(f"Breaking news batch scoring failed: {e}; using heuristic fallback")
+        return [_heuristic_score_item(item, topic) for item in items]
 
 
 async def _score_topic(

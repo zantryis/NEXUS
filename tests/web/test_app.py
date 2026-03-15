@@ -120,6 +120,30 @@ async def test_dashboard_shows_sidebar(client):
     assert "Active Threads" in resp.text or "Welcome to Nexus" in resp.text
 
 
+async def test_dashboard_shows_health_panel(client, monkeypatch):
+    monkeypatch.setenv("LITELLM_PROXY_URL", "https://proxy.example/v1")
+    monkeypatch.setenv("LITELLM_PROXY_API_KEY", "secret")
+    monkeypatch.setenv("LITELLM_MODEL_GPT", "gpt-5.4")
+    resp = await client.get("/")
+    assert resp.status_code == 200
+    assert "System Health" in resp.text
+
+
+async def test_api_health_returns_snapshot(seeded_app, monkeypatch):
+    monkeypatch.setenv("LITELLM_PROXY_URL", "https://proxy.example/v1")
+    monkeypatch.setenv("LITELLM_PROXY_API_KEY", "secret")
+    monkeypatch.setenv("LITELLM_MODEL_GPT", "gpt-5.4")
+
+    transport = ASGITransport(app=seeded_app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.get("/api/health")
+    assert resp.status_code in (200, 503)
+    body = resp.json()
+    assert "status" in body
+    assert "pipeline" in body
+    assert "deliverables" in body
+
+
 async def test_topic_detail(client):
     resp = await client.get("/topics/iran-us")
     assert resp.status_code == 200

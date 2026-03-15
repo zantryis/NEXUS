@@ -1,13 +1,19 @@
-"""Provider-agnostic LLM client. Supports Gemini, Anthropic, OpenAI, DeepSeek, and Ollama."""
+"""Provider-agnostic LLM client.
+
+Supports Gemini, Anthropic, OpenAI, DeepSeek, Ollama, and LiteLLM.
+"""
 
 import asyncio
 import logging
+import os
 import time
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 import httpx
+from dotenv import dotenv_values
 
 from nexus.config.models import BudgetConfig, ModelsConfig
 from nexus.llm.budget import BudgetDegradedError, BudgetExceededError, BudgetGuard
@@ -15,23 +21,80 @@ from nexus.llm.cost import estimate_cost
 
 logger = logging.getLogger(__name__)
 
+LITELLM_MODEL_ENV_MAP = {
+    "gpt": "LITELLM_MODEL_GPT",
+    "opus": "LITELLM_MODEL_OPUS",
+    "sonnet": "LITELLM_MODEL_SONNET",
+    "gemini": "LITELLM_MODEL_GEMINI",
+}
+
+# Best-effort normalization for usage/cost tracking when hosted env aliases are used.
+LITELLM_CANONICAL_MODEL_MAP = {
+    "gpt": "gpt-5.4",
+    "opus": "claude-opus-4-6",
+    "sonnet": "claude-sonnet-4-6",
+    "gemini": "gemini-3.1-pro-preview",
+    "opus-4.6": "claude-opus-4-6",
+    "sonnet-4.6": "claude-sonnet-4-6",
+}
+
+
+def _env_first(*names: str) -> str:
+    """Return the first non-empty env var value from the provided names."""
+    for name in names:
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _parse_explicit_expiry(value: str) -> datetime | None:
+    """Parse an ISO8601-ish expiry string from env."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _litellm_env_file_path() -> Path | None:
+    """Optional env file used by hosted runtimes to refresh rotated creds."""
+    raw = os.getenv("NEXUS_ENV_FILE", "").strip()
+    return Path(raw) if raw else None
+
+
+def _is_auth_error(exc: Exception) -> bool:
+    """Best-effort detection for provider auth failures."""
+    status_code = getattr(exc, "status_code", None)
+    response = getattr(exc, "response", None)
+    if status_code is None and response is not None:
+        status_code = getattr(response, "status_code", None)
+    if status_code == 401:
+        return True
+    message = str(exc).lower()
+    return "invalid vm proxy token" in message or "unauthorized" in message
+
+
 
 def _resolve_provider(model_name: str) -> str:
     """Determine provider from model name prefix."""
     if model_name.startswith("litellm/"):
         return "litellm"
-    elif model_name.startswith("ollama/"):
+    if model_name.startswith("ollama/"):
         return "ollama"
-    elif model_name.startswith("gemini"):
+    if model_name.startswith("gemini"):
         return "gemini"
-    elif model_name.startswith("claude"):
+    if model_name.startswith(("claude", "opus-", "sonnet-", "haiku-")):
         return "anthropic"
-    elif model_name.startswith("deepseek"):
+    if model_name.startswith("deepseek"):
         return "deepseek"
-    elif model_name.startswith(("gpt-", "o1", "o3", "o4")):
+    if model_name.startswith(("gpt-", "o1", "o3", "o4")):
         return "openai"
-    else:
-        raise ValueError(f"Unknown model provider for: {model_name}")
+    raise ValueError(f"Unknown model provider for: {model_name}")
 
 
 class UsageTracker:
@@ -43,8 +106,15 @@ class UsageTracker:
     def reset(self):
         self._calls: list[dict] = []
 
-    def record(self, provider: str, model: str, config_key: str,
-               input_tokens: int, output_tokens: int, elapsed_s: float):
+    def record(
+        self,
+        provider: str,
+        model: str,
+        config_key: str,
+        input_tokens: int,
+        output_tokens: int,
+        elapsed_s: float,
+    ):
         self._calls.append({
             "provider": provider,
             "model": model,
@@ -138,14 +208,19 @@ class LLMClient:
             from openai import AsyncOpenAI
             self._openai_client = AsyncOpenAI(api_key=openai_api_key)
 
-        # Lazy-init LiteLLM proxy (OpenAI-compatible)
+        # LiteLLM proxy (OpenAI-compatible). The hosted environment may rotate
+        # credentials, so we keep a signature and refresh on demand in
+        # _get_litellm_client().
         self._litellm_client = None
+        self._litellm_signature: tuple[str, str] | None = None
         if litellm_api_key and litellm_base_url:
             from openai import AsyncOpenAI
+            base_url = litellm_base_url.rstrip("/")
             self._litellm_client = AsyncOpenAI(
                 api_key=litellm_api_key,
-                base_url=litellm_base_url,
+                base_url=base_url,
             )
+            self._litellm_signature = (base_url, litellm_api_key)
 
     async def set_store(self, store) -> None:
         """Attach a KnowledgeStore for persistent usage logging.
@@ -170,10 +245,101 @@ class LLMClient:
         self._openai_client = AsyncOpenAI(api_key=token)
 
     def resolve_model(self, config_key: str) -> str:
-        """Look up model name from config key (e.g. 'filtering' -> 'gemini-3-flash-preview')."""
+        """Look up configured model string for a pipeline stage."""
         if not hasattr(self._config, config_key):
             raise ValueError(f"Unknown config key: {config_key}")
         return getattr(self._config, config_key)
+
+    def _resolve_runtime_model(self, configured_model: str) -> str:
+        """Resolve hosted aliases and env references at request time."""
+        if configured_model.startswith("litellm/"):
+            alias = configured_model.split("/", 1)[1].strip()
+            if alias in LITELLM_MODEL_ENV_MAP:
+                env_key = LITELLM_MODEL_ENV_MAP[alias]
+                runtime_model = _env_first(env_key)
+                if not runtime_model:
+                    raise RuntimeError(
+                        f"LiteLLM model alias '{configured_model}' is not configured — set {env_key}"
+                    )
+                return runtime_model
+            return alias
+
+        if configured_model.startswith("env:"):
+            env_key = configured_model[4:].strip()
+            runtime_model = _env_first(env_key)
+            if not runtime_model:
+                raise RuntimeError(
+                    f"Model env reference '{configured_model}' is not configured — set {env_key}"
+                )
+            return runtime_model
+
+        return configured_model
+
+    def _usage_model(self, configured_model: str, runtime_model: str) -> str:
+        """Normalize model names for usage/cost tracking where possible."""
+        if configured_model.startswith("litellm/"):
+            alias = configured_model.split("/", 1)[1].strip()
+            if alias in LITELLM_MODEL_ENV_MAP:
+                return LITELLM_CANONICAL_MODEL_MAP.get(alias, runtime_model)
+            return LITELLM_CANONICAL_MODEL_MAP.get(runtime_model, runtime_model)
+        return LITELLM_CANONICAL_MODEL_MAP.get(runtime_model, runtime_model)
+
+    def _litellm_token_expiry(self) -> datetime | None:
+        """Return proxy token expiry when the hosted environment exposes it."""
+        explicit = _parse_explicit_expiry(os.getenv("LITELLM_PROXY_TOKEN_EXPIRES_AT", ""))
+        if explicit:
+            return explicit
+        return None
+
+    def _refresh_hosted_env(self) -> bool:
+        """Reload env vars from an optional hosted env file.
+
+        This is intentionally generic so self-hosted or hosted deployments can
+        refresh rotated credentials without wiring platform-specific logic into
+        application code.
+        """
+        env_path = _litellm_env_file_path()
+        if not env_path or not env_path.exists():
+            return False
+        try:
+            values = dotenv_values(env_path)
+            applied = False
+            for key, value in values.items():
+                if value is None:
+                    continue
+                if os.getenv(key) != value:
+                    os.environ[key] = value
+                    applied = True
+            if applied:
+                logger.info("Reloaded runtime env from %s", env_path)
+            return applied
+        except Exception:
+            logger.warning("Failed to reload runtime env from %s", env_path, exc_info=True)
+            return False
+
+    def _get_litellm_client(self, force_refresh: bool = False):
+        """Return an OpenAI-compatible LiteLLM client, refreshing creds from env."""
+        expiry = self._litellm_token_expiry()
+        if expiry and expiry <= datetime.now(timezone.utc):
+            self._refresh_hosted_env()
+
+        base_url = _env_first("LITELLM_BASE_URL", "LITELLM_PROXY_URL").rstrip("/")
+        api_key = _env_first("LITELLM_API_KEY", "LITELLM_PROXY_API_KEY")
+        if not base_url or not api_key:
+            raise RuntimeError(
+                "LiteLLM proxy not configured — set LITELLM_BASE_URL/LITELLM_API_KEY "
+                "or LITELLM_PROXY_URL/LITELLM_PROXY_API_KEY"
+            )
+
+        signature = (base_url, api_key)
+        if force_refresh:
+            self._litellm_client = None
+            self._litellm_signature = None
+        if self._litellm_client is None or self._litellm_signature != signature:
+            from openai import AsyncOpenAI
+            self._litellm_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+            self._litellm_signature = signature
+        return self._litellm_client
 
     @property
     def budget_status(self) -> str:
@@ -204,8 +370,10 @@ class LLMClient:
         json_response: bool = False,
     ) -> str:
         """Send a completion request through the configured model."""
-        model = self.resolve_model(config_key)
-        provider = _resolve_provider(model)
+        configured_model = self.resolve_model(config_key)
+        provider = _resolve_provider(configured_model)
+        runtime_model = self._resolve_runtime_model(configured_model)
+        usage_model = self._usage_model(configured_model, runtime_model)
 
         # Budget check before making the call
         if self._budget_guard:
@@ -223,30 +391,30 @@ class LLMClient:
 
         if provider == "gemini":
             text, in_tok, out_tok = await self._complete_gemini(
-                model, system_prompt, user_prompt, json_response)
+                runtime_model, system_prompt, user_prompt, json_response)
         elif provider == "anthropic":
             text, in_tok, out_tok = await self._complete_anthropic(
-                model, system_prompt, user_prompt, json_response)
+                runtime_model, system_prompt, user_prompt, json_response)
         elif provider == "openai":
             text, in_tok, out_tok = await self._complete_openai(
-                model, system_prompt, user_prompt, json_response)
+                runtime_model, system_prompt, user_prompt, json_response)
         elif provider == "deepseek":
             text, in_tok, out_tok = await self._complete_deepseek(
-                model, system_prompt, user_prompt, json_response)
+                runtime_model, system_prompt, user_prompt, json_response)
         elif provider == "litellm":
             text, in_tok, out_tok = await self._complete_litellm(
-                model, system_prompt, user_prompt, json_response)
+                runtime_model, system_prompt, user_prompt, json_response)
         elif provider == "ollama":
             text, in_tok, out_tok = await self._complete_ollama(
-                model, system_prompt, user_prompt, json_response)
+                runtime_model, system_prompt, user_prompt, json_response)
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
         elapsed = time.monotonic() - t0
-        self.usage.record(provider, model, config_key, in_tok, out_tok, elapsed)
+        self.usage.record(provider, usage_model, config_key, in_tok, out_tok, elapsed)
 
         # Record cost to budget guard after successful call
-        cost = estimate_cost(model, in_tok, out_tok)
+        cost = estimate_cost(usage_model, in_tok, out_tok)
         if self._budget_guard:
             self._budget_guard.record_cost(cost)
 
@@ -254,7 +422,7 @@ class LLMClient:
         if self._store:
             try:
                 task = asyncio.ensure_future(self._store.add_usage_record(
-                    date.today().isoformat(), provider, model, config_key,
+                    date.today().isoformat(), provider, usage_model, config_key,
                     in_tok, out_tok, cost,
                 ))
                 self._pending_usage_tasks.add(task)
@@ -368,12 +536,7 @@ class LLMClient:
     async def _complete_litellm(
         self, model: str, system_prompt: str, user_prompt: str, json_response: bool
     ) -> tuple[str, int, int]:
-        if not self._litellm_client:
-            raise RuntimeError(
-                "LiteLLM proxy not configured — set LITELLM_BASE_URL and LITELLM_API_KEY"
-            )
-
-        # Strip litellm/ prefix — the proxy handles provider routing
+        client = self._get_litellm_client()
         model_name = model.removeprefix("litellm/")
 
         effective_system = system_prompt
@@ -390,7 +553,15 @@ class LLMClient:
         if json_response:
             kwargs["response_format"] = {"type": "json_object"}
 
-        response = await self._litellm_client.chat.completions.create(**kwargs)
+        try:
+            response = await client.chat.completions.create(**kwargs)
+        except Exception as e:
+            if _is_auth_error(e) and self._refresh_hosted_env():
+                logger.warning("LiteLLM auth error detected; reloading env and retrying once")
+                client = self._get_litellm_client(force_refresh=True)
+                response = await client.chat.completions.create(**kwargs)
+            else:
+                raise
 
         in_tok = getattr(getattr(response, 'usage', None), 'prompt_tokens', 0) or 0
         out_tok = getattr(getattr(response, 'usage', None), 'completion_tokens', 0) or 0

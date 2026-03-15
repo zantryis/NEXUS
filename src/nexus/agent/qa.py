@@ -7,6 +7,7 @@ Two-stage approach:
 
 import json
 import logging
+import re
 
 from nexus.config.models import NexusConfig
 from nexus.engine.knowledge.store import KnowledgeStore
@@ -52,6 +53,97 @@ QA_SYSTEM_PROMPT = (
     "Output language: {output_language}\n"
 )
 
+_STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "by", "did", "do", "for", "from",
+    "happen", "happened", "how", "i", "in", "is", "it", "latest", "me", "news",
+    "of", "on", "recent", "tell", "that", "the", "this", "to", "today", "update",
+    "updates", "was", "what", "when", "where", "who", "why", "with", "you",
+}
+
+
+def _fallback_analysis(question: str) -> dict:
+    """Cheap local analysis when the LLM is unavailable."""
+    tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9\-/+']+", question)
+    entities = [
+        token for token in tokens
+        if len(token) > 2 and token.lower() not in _STOPWORDS
+    ][:6]
+    language = "en" if question.isascii() else "auto"
+    return {"entities": entities, "intent": "recent", "language": language}
+
+
+async def _fallback_answer(
+    store: KnowledgeStore,
+    config: NexusConfig,
+    question: str,
+    analysis: dict,
+) -> str:
+    """Return a deterministic answer from the knowledge store when LLM calls fail."""
+    terms = {
+        str(t).lower() for t in analysis.get("entities", [])
+        if str(t).strip()
+    }
+    terms.update(
+        token.lower() for token in re.findall(r"[A-Za-z0-9][A-Za-z0-9\-/+']+", question)
+        if len(token) > 2 and token.lower() not in _STOPWORDS
+    )
+
+    topic_stats = await store.get_topic_stats()
+    days = 7 if analysis.get("intent") == "background" else 3
+    candidates: list[tuple[int, object, str]] = []
+
+    for ts in topic_stats:
+        slug = ts["topic_slug"]
+        events = await store.get_recent_events(slug, days=days, limit=8)
+        for event in events:
+            haystack = " ".join([
+                slug.replace("-", " "),
+                getattr(event, "summary", "") or "",
+                " ".join(getattr(event, "entities", []) or []),
+            ]).lower()
+            score = sum(1 for term in terms if term in haystack)
+            if not terms:
+                score = 1
+            if score > 0:
+                candidates.append((score, event, slug))
+
+    candidates.sort(
+        key=lambda item: (item[0], getattr(item[1], "date", None)),
+        reverse=True,
+    )
+    selected = candidates[:5]
+
+    if not selected:
+        threads = await store.get_active_threads()
+        if threads:
+            bullets = [
+                f"• **{t['headline']}** — significance {t['significance']}"
+                for t in threads[:4]
+            ]
+            return (
+                "Here are the most active threads in the current knowledge base.\n\n"
+                "**Most active threads**\n"
+                + "\n".join(bullets)
+            )
+        return (
+            "I don’t have a strong local match in the current knowledge base yet. "
+            "Try /briefing for the latest full digest."
+        )
+
+    lines = [
+        "Here’s the latest from the current knowledge base.",
+        "",
+    ]
+    if analysis.get("entities"):
+        lines.append(f"**Query focus:** {', '.join(analysis['entities'][:4])}")
+        lines.append("")
+    for _, event, slug in selected:
+        outlets = ", ".join(s.get("outlet", "?") for s in getattr(event, "sources", [])[:3])
+        date_str = getattr(event, "date", "")
+        lines.append(f"• **{slug.replace('-', ' ').title()}** [{date_str}] {event.summary} ({outlets})")
+
+    return "\n".join(lines)
+
 
 async def _analyze_question(llm: LLMClient, question: str) -> dict:
     """Extract entities, intent, and language from a question."""
@@ -64,8 +156,9 @@ async def _analyze_question(llm: LLMClient, question: str) -> dict:
         )
         return json.loads(raw)
     except Exception as e:
-        logger.warning(f"Question analysis failed, using defaults: {e}")
-        return {"entities": [], "intent": "recent", "language": "en"}
+        fallback = _fallback_analysis(question)
+        logger.warning(f"Question analysis failed, using local fallback: {e}")
+        return fallback
 
 
 async def _gather_context(
@@ -169,6 +262,8 @@ async def answer_question(
 
     # Detect response language: match user's input language
     response_lang = analysis.get("language", config.user.output_language)
+    if response_lang == "auto":
+        response_lang = config.user.output_language
 
     # Stage 2: gather targeted context from knowledge store
     context = await _gather_context(store, analysis)
@@ -186,8 +281,12 @@ async def answer_question(
     system_prompt = QA_SYSTEM_PROMPT.format(output_language=response_lang)
     user_prompt = f"Knowledge context:\n{context}\n\nUser question: {question}"
 
-    return await llm.complete(
-        config_key="agent",
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
-    )
+    try:
+        return await llm.complete(
+            config_key="agent",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        )
+    except Exception as e:
+        logger.warning(f"Q&A generation failed, using store fallback: {e}")
+        return await _fallback_answer(store, config, question, analysis)

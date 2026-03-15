@@ -88,6 +88,31 @@ async def test_handle_status(bot):
     assert call_kwargs.kwargs.get("parse_mode") == "HTML"
 
 
+@patch("nexus.agent.bot.build_health_snapshot", new_callable=AsyncMock)
+async def test_handle_health(mock_health, bot):
+    mock_health.return_value = {
+        "status": "warning",
+        "pipeline": {
+            "last_run": {"status": "completed", "event_count": 5, "topics": ["AI"]},
+            "configured_topic_count": 2,
+        },
+        "deliverables": {"briefing_today": True, "audio_today": False},
+        "telegram": {"enabled": True, "chat_id_configured": True},
+        "litellm": {"used": True, "configured": True, "token_ttl_minutes": 8},
+        "issues": [{"message": "Today's briefing exists, but today's podcast audio is missing.", "severity": "warning"}],
+    }
+    update = MagicMock()
+    update.effective_chat.id = 12345
+    update.message.reply_text = AsyncMock()
+
+    await bot._handle_health(update, MagicMock())
+
+    sent = update.message.reply_text.call_args.args[0]
+    assert "System health" in sent
+    assert "podcast=no" in sent
+    assert update.message.reply_text.call_args.kwargs["parse_mode"] == "HTML"
+
+
 @patch("nexus.agent.bot.answer_question", new_callable=AsyncMock)
 async def test_handle_message_loading_animation(mock_qa, bot):
     """Q&A shows loading message, then edits it with the answer."""
@@ -121,6 +146,38 @@ async def test_handle_message_loading_animation(mock_qa, bot):
     assert final_edit.kwargs["message_id"] == 42
     assert final_edit.kwargs.get("parse_mode") == "HTML"
     assert "<b>Iran</b>" in final_edit.kwargs["text"]
+
+
+@patch("nexus.agent.breaking.check_breaking_news", new_callable=AsyncMock)
+async def test_handle_breaking_falls_back_to_recent_alerts(mock_check_breaking, bot):
+    mock_check_breaking.return_value = {}
+    bot._store.get_recent_breaking_alerts = AsyncMock(return_value=[
+        {
+            "headline": "Major Iran escalation",
+            "source_url": "https://example.com/iran",
+            "significance_score": 8,
+            "topic_slug": "iran-us-relations",
+            "alerted_at": "2026-03-15 08:00:00",
+        },
+    ])
+
+    status_msg = MagicMock()
+    status_msg.message_id = 99
+
+    update = MagicMock()
+    update.effective_chat.id = 12345
+    update.message.reply_text = AsyncMock(return_value=status_msg)
+
+    context = MagicMock()
+    context.bot.edit_message_text = AsyncMock()
+    context.bot.send_message = AsyncMock()
+
+    await bot._handle_breaking(update, context)
+
+    assert context.bot.edit_message_text.called
+    edited = context.bot.edit_message_text.call_args.kwargs["text"]
+    assert "No new breaking headlines" in edited
+    assert "Major Iran escalation" in edited
 
 
 @patch("nexus.agent.bot.deliver_briefing", new_callable=AsyncMock)

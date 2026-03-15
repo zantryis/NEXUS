@@ -2704,3 +2704,69 @@ a.entity-tag:hover {
     .form-row { grid-template-columns: 1fr; }
     .chat-panel { width: calc(100vw - 2rem); right: -0.5rem; }
 }
+
+/* ── Health Panel ── */
+.health-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+}
+
+.health-overview {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: fit-content;
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}
+
+.health-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.health-ok {
+    background: var(--nx-green-soft);
+    color: var(--nx-green);
+}
+
+.health-warning {
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+}
+
+.health-critical {
+    background: var(--nx-red-soft);
+    color: var(--nx-red);
+}
+
+.health-issues {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.health-issue {
+    font-size: 0.8rem;
+    line-height: 1.4;
+    padding: 0.55rem 0.7rem;
+    border-radius: 10px;
+    border: 1px solid var(--nx-border);
+    background: var(--nx-glass-subtle);
+}
+
+.health-issue-warning {
+    border-color: rgba(245, 158, 11, 0.25);
+    background: var(--nx-orange-soft);
+}
+
+.health-issue-critical {
+    border-color: rgba(239, 68, 68, 0.25);
+    background: var(--nx-red-soft);
+}

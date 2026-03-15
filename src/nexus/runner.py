@@ -32,6 +32,8 @@ async def run_all(
     deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
     openai_api_key = os.getenv("OPENAI_API_KEY")
     elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+    litellm_base_url = os.getenv("LITELLM_BASE_URL") or os.getenv("LITELLM_PROXY_URL")
+    litellm_api_key = os.getenv("LITELLM_API_KEY") or os.getenv("LITELLM_PROXY_API_KEY")
 
     ollama_base_url = os.getenv("OLLAMA_BASE_URL")
 
@@ -44,6 +46,8 @@ async def run_all(
         openai_api_key=openai_api_key,
         ollama_base_url=ollama_base_url,
         budget_config=config.budget,
+        litellm_base_url=litellm_base_url,
+        litellm_api_key=litellm_api_key,
     )
 
     store = KnowledgeStore(data_dir / "knowledge.db")
