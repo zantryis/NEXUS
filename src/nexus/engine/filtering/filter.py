@@ -56,6 +56,10 @@ NOVEL_BONUS = 1.0
 NON_NOVEL_BONUS = 0.7
 DIVERSITY_MAX_ITEMS = 30
 
+# Scope-dependent significance thresholds — narrow topics need lower
+# thresholds to avoid over-filtering niche developments
+SIGNIFICANCE_THRESHOLD = {"narrow": 3, "medium": 4, "broad": 5}
+
 
 @dataclass
 class FilterResult:
@@ -376,8 +380,9 @@ async def filter_items(
             composite = (relevance * eff_rel_w + sig * eff_sig_w) * novelty_bonus
             item.relevance_score = round(composite, 1)
 
-            # Keep if significance >= 4 or novel
-            if sig >= 4 or is_novel:
+            # Keep if significance meets scope-dependent threshold or novel
+            sig_threshold = SIGNIFICANCE_THRESHOLD.get(topic.scope, 4)
+            if sig >= sig_threshold or is_novel:
                 log["passed_pass2"] = True
                 log["final_score"] = item.relevance_score
                 pass2_results.append(item)

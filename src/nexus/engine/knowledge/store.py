@@ -678,6 +678,87 @@ class KnowledgeStore:
             return json.loads(row[0])
         return None
 
+    async def get_previous_synthesis(
+        self, topic_slug: str, before_date: date,
+    ) -> dict | None:
+        """Load the most recent TopicSynthesis snapshot before the given date."""
+        cursor = await self.db.execute(
+            "SELECT data_json FROM syntheses WHERE topic_slug = ? AND date < ? "
+            "ORDER BY date DESC LIMIT 1",
+            (topic_slug, before_date.isoformat()),
+        )
+        row = await cursor.fetchone()
+        if row:
+            return json.loads(row[0])
+        return None
+
+    async def get_synthesis_dates(self, topic_slug: str) -> list[str]:
+        """Get all dates with synthesis snapshots for a topic, most recent first."""
+        cursor = await self.db.execute(
+            "SELECT DISTINCT date FROM syntheses WHERE topic_slug = ? "
+            "ORDER BY date DESC",
+            (topic_slug,),
+        )
+        return [r[0] for r in await cursor.fetchall()]
+
+    async def get_all_synthesis_dates(self) -> list[str]:
+        """Get all dates with any synthesis snapshot, most recent first."""
+        cursor = await self.db.execute(
+            "SELECT DISTINCT date FROM syntheses ORDER BY date DESC",
+        )
+        return [r[0] for r in await cursor.fetchall()]
+
+    async def get_filter_log_dates(self, topic_slug: str | None = None) -> list[str]:
+        """Get all dates with filter log entries, most recent first."""
+        if topic_slug:
+            cursor = await self.db.execute(
+                "SELECT DISTINCT run_date FROM filter_log "
+                "WHERE topic_slug = ? ORDER BY run_date DESC",
+                (topic_slug,),
+            )
+        else:
+            cursor = await self.db.execute(
+                "SELECT DISTINCT run_date FROM filter_log ORDER BY run_date DESC",
+            )
+        return [r[0] for r in await cursor.fetchall()]
+
+    async def get_filter_log_topics(self) -> list[str]:
+        """Get all topic slugs that have filter log entries."""
+        cursor = await self.db.execute(
+            "SELECT DISTINCT topic_slug FROM filter_log ORDER BY topic_slug",
+        )
+        return [r[0] for r in await cursor.fetchall()]
+
+    async def get_adjacent_signals(
+        self, run_date: date, min_significance: int = 6, max_relevance: int = 4,
+    ) -> list[dict]:
+        """Find articles with high significance but low relevance — potential niche signals.
+
+        These are articles from existing sources that are significant developments
+        but don't match any configured topic well.
+        """
+        cursor = await self.db.execute(
+            "SELECT url, title, source_id, source_affiliation, source_country, "
+            "topic_slug, relevance_score, significance_score, significance_reason "
+            "FROM filter_log "
+            "WHERE run_date = ? "
+            "AND significance_score IS NOT NULL "
+            "AND significance_score >= ? "
+            "AND relevance_score IS NOT NULL "
+            "AND relevance_score <= ? "
+            "ORDER BY significance_score DESC",
+            (run_date.isoformat(), min_significance, max_relevance),
+        )
+        return [
+            {
+                "url": r[0], "title": r[1], "source_id": r[2],
+                "source_affiliation": r[3], "source_country": r[4],
+                "topic_slug": r[5], "relevance_score": r[6],
+                "significance_score": r[7], "reason": r[8],
+            }
+            for r in await cursor.fetchall()
+        ]
+
     # ── Pages ─────────────────────────────────────────────────────────
 
     async def save_page(
