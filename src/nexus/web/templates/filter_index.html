@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Filter Log — Nexus{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h2>Filter Log</h2>
+    <div class="page-subtitle">See what your pipeline accepted, rejected, and why.</div>
+</div>
+
+{% if not topic_summaries %}
+<div class="empty-state"><p>No filter log data yet. Run the pipeline to generate filter decisions.</p></div>
+{% else %}
+
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1rem;margin-bottom:2rem;">
+{% for topic in topic_summaries %}
+<div class="card">
+    <div class="card-section">
+        <div class="card-section-title">{{ topic.slug | replace('-', ' ') | title }}</div>
+        <div style="display:flex;gap:1.5rem;margin-top:0.5rem;">
+            <div>
+                <span style="font-size:1.3rem;font-weight:700;color:var(--nx-text);">{{ topic.stats.total }}</span>
+                <span style="font-size:0.8rem;color:var(--nx-text-dim);">polled</span>
+            </div>
+            <div>
+                <span style="font-size:1.3rem;font-weight:700;color:var(--nx-green);">{{ topic.stats.get('accepted', 0) }}</span>
+                <span style="font-size:0.8rem;color:var(--nx-text-dim);">accepted</span>
+            </div>
+            <div>
+                <span style="font-size:1.3rem;font-weight:700;color:var(--nx-red);">{{ topic.stats.total - topic.stats.get('accepted', 0) }}</span>
+                <span style="font-size:0.8rem;color:var(--nx-text-dim);">rejected</span>
+            </div>
+        </div>
+        {% if topic.stats.total > 0 %}
+        <div style="margin-top:0.75rem;">
+            <div style="background:var(--nx-bg);border-radius:4px;height:8px;overflow:hidden;display:flex;">
+                {% set accept_pct = (topic.stats.get('accepted', 0) / topic.stats.total * 100) %}
+                {% set rel_pct = (topic.stats.get('rejected_relevance', 0) / topic.stats.total * 100) %}
+                {% set sig_pct = (topic.stats.get('rejected_significance', 0) / topic.stats.total * 100) %}
+                {% set div_pct = (topic.stats.get('rejected_diversity', 0) / topic.stats.total * 100) %}
+                <div style="width:{{ accept_pct }}%;background:var(--nx-green);" title="Accepted: {{ topic.stats.get('accepted', 0) }}"></div>
+                <div style="width:{{ rel_pct }}%;background:#e74c3c;" title="Rejected (relevance): {{ topic.stats.get('rejected_relevance', 0) }}"></div>
+                <div style="width:{{ sig_pct }}%;background:#e67e22;" title="Rejected (significance): {{ topic.stats.get('rejected_significance', 0) }}"></div>
+                <div style="width:{{ div_pct }}%;background:#9b59b6;" title="Rejected (diversity): {{ topic.stats.get('rejected_diversity', 0) }}"></div>
+            </div>
+            <div style="font-size:0.75rem;color:var(--nx-text-dim);margin-top:0.3rem;display:flex;gap:1rem;flex-wrap:wrap;">
+                {% if topic.stats.get('rejected_relevance', 0) > 0 %}
+                <span>&#9632; <span style="color:#e74c3c;">relevance</span> {{ topic.stats.get('rejected_relevance', 0) }}</span>
+                {% endif %}
+                {% if topic.stats.get('rejected_significance', 0) > 0 %}
+                <span>&#9632; <span style="color:#e67e22;">significance</span> {{ topic.stats.get('rejected_significance', 0) }}</span>
+                {% endif %}
+                {% if topic.stats.get('rejected_diversity', 0) > 0 %}
+                <span>&#9632; <span style="color:#9b59b6;">diversity</span> {{ topic.stats.get('rejected_diversity', 0) }}</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    <div class="card-section" style="padding-top:0;">
+        <div style="font-size:0.8rem;color:var(--nx-text-dim);margin-bottom:0.4rem;">Recent runs:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:0.3rem;">
+            {% for d in topic.dates[:10] %}
+            <a href="/filters/{{ topic.slug }}/{{ d }}"
+               class="badge" style="text-decoration:none;{% if d == topic.latest_date %}background:var(--nx-accent);color:var(--nx-bg);{% endif %}">
+                {{ d[5:] }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endfor %}
+</div>
+
+{% endif %}
+
+{% if adjacent_signals %}
+<div class="card" style="margin-top:1rem;">
+    <div class="card-section">
+        <div class="card-section-title">Adjacent Signals (Today)</div>
+        <div style="font-size:0.85rem;color:var(--nx-text-dim);margin-bottom:0.5rem;">
+            Significant articles that don't match your topics well — things you might be missing.
+        </div>
+        {% for signal in adjacent_signals[:10] %}
+        <div style="margin-bottom:0.6rem;padding-left:0.75rem;border-left:2px solid var(--nx-accent);">
+            <a href="{{ signal.url }}" target="_blank" rel="noopener" style="color:var(--nx-text);text-decoration:none;font-size:0.9rem;">
+                {{ signal.title }}
+            </a>
+            <div style="font-size:0.75rem;color:var(--nx-text-dim);">
+                {{ signal.source_id }} &middot;
+                sig {{ signal.significance_score }} / rel {{ signal.relevance_score }}
+                &middot; {{ signal.topic_slug | replace('-', ' ') }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

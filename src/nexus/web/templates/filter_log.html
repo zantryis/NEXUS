@@ -4,23 +4,52 @@
 
 <div class="page-header">
     <h2>Filter Log: {{ topic_slug | replace('-', ' ') | title }}</h2>
-    <div class="page-subtitle">{{ run_date }}</div>
+    <div class="page-subtitle">
+        <a href="/filters/" style="color:var(--nx-text-dim);text-decoration:none;">&larr; All topics</a>
+        &middot;
+        {% if available_dates and available_dates | length > 1 %}
+        <select onchange="window.location='/filters/{{ topic_slug }}/'+this.value" style="background:var(--nx-bg-raised);color:var(--nx-text);border:1px solid var(--nx-border);padding:0.2rem 0.4rem;border-radius:4px;font-size:0.85rem;">
+            {% for d in available_dates %}
+            <option value="{{ d }}" {% if d == run_date %}selected{% endif %}>{{ d }}</option>
+            {% endfor %}
+        </select>
+        {% else %}
+        {{ run_date }}
+        {% endif %}
+    </div>
 </div>
 
 {% if stats.get('total', 0) > 0 %}
-<div class="card" style="margin-bottom: 1.5rem; display:flex; gap:2rem; padding:1rem 1.25rem;">
-    <div>
-        <span style="font-size:1.5rem;font-weight:700;color:var(--nx-text);">{{ stats.total }}</span>
-        <span style="font-size:0.8rem;color:var(--nx-text-dim);margin-left:0.3rem;">articles polled</span>
+<div class="card" style="margin-bottom:1.5rem;">
+    <div class="card-section" style="display:flex;gap:2rem;flex-wrap:wrap;">
+        <div>
+            <span style="font-size:1.5rem;font-weight:700;color:var(--nx-text);">{{ stats.total }}</span>
+            <span style="font-size:0.8rem;color:var(--nx-text-dim);margin-left:0.3rem;">polled</span>
+        </div>
+        <div>
+            <span style="font-size:1.5rem;font-weight:700;color:var(--nx-green);">{{ stats.get('accepted', 0) }}</span>
+            <span style="font-size:0.8rem;color:var(--nx-text-dim);margin-left:0.3rem;">accepted</span>
+        </div>
+        <div>
+            <span style="font-size:1.5rem;font-weight:700;color:var(--nx-red);">{{ stats.total - stats.get('accepted', 0) }}</span>
+            <span style="font-size:0.8rem;color:var(--nx-text-dim);margin-left:0.3rem;">rejected</span>
+        </div>
     </div>
-    <div>
-        <span style="font-size:1.5rem;font-weight:700;color:var(--nx-green);">{{ stats.get('accepted', 0) }}</span>
-        <span style="font-size:0.8rem;color:var(--nx-text-dim);margin-left:0.3rem;">accepted</span>
+    {% if stats.total > 0 %}
+    <div class="card-section" style="padding-top:0;">
+        <div style="font-size:0.8rem;color:var(--nx-text-dim);display:flex;gap:1rem;flex-wrap:wrap;">
+            {% if stats.get('rejected_relevance', 0) > 0 %}
+            <span>Pass 1 (relevance): {{ stats.get('rejected_relevance', 0) }} rejected</span>
+            {% endif %}
+            {% if stats.get('rejected_significance', 0) > 0 %}
+            <span>Pass 2 (significance): {{ stats.get('rejected_significance', 0) }} rejected</span>
+            {% endif %}
+            {% if stats.get('rejected_diversity', 0) > 0 %}
+            <span>Diversity cap: {{ stats.get('rejected_diversity', 0) }} rejected</span>
+            {% endif %}
+        </div>
     </div>
-    <div>
-        <span style="font-size:1.5rem;font-weight:700;color:var(--nx-red);">{{ stats.total - stats.get('accepted', 0) }}</span>
-        <span style="font-size:0.8rem;color:var(--nx-text-dim);margin-left:0.3rem;">rejected</span>
-    </div>
+    {% endif %}
 </div>
 {% endif %}
 
@@ -32,13 +61,19 @@
             <th>Source</th>
             <th class="num">Relevance</th>
             <th class="num">Significance</th>
+            <th>Novel</th>
             <th>Outcome</th>
+            <th>Reason</th>
         </tr>
     </thead>
     <tbody>
         {% for entry in log %}
         <tr class="filter-{{ entry.outcome }}">
-            <td>{{ entry.title }}</td>
+            <td>
+                <a href="{{ entry.url }}" target="_blank" rel="noopener" style="color:var(--nx-text);text-decoration:none;">
+                    {{ entry.title[:80] }}{{ '...' if entry.title | length > 80 else '' }}
+                </a>
+            </td>
             <td>
                 <span class="badge badge-{{ entry.source_affiliation }}">
                     {{ entry.source_id }}/{{ entry.source_country }}
@@ -46,9 +81,29 @@
             </td>
             <td class="num">{{ entry.relevance_score if entry.relevance_score is not none else '-' }}</td>
             <td class="num">{{ entry.significance_score if entry.significance_score is not none else '-' }}</td>
+            <td>
+                {% if entry.is_novel is not none %}
+                {% if entry.is_novel %}
+                <span style="color:var(--nx-green);">&#10003;</span>
+                {% else %}
+                <span style="color:var(--nx-text-dim);">&#10005;</span>
+                {% endif %}
+                {% else %}
+                -
+                {% endif %}
+            </td>
             <td><span class="badge badge-{{ 'accepted' if entry.outcome == 'accepted' else 'rejected' }}">
-                {{ entry.outcome }}
+                {{ entry.outcome | replace('rejected_', '') }}
             </span></td>
+            <td style="font-size:0.8rem;color:var(--nx-text-dim);max-width:250px;">
+                {% if entry.outcome == 'accepted' or entry.outcome == 'rejected_diversity' %}
+                {{ entry.significance_reason[:100] if entry.significance_reason else entry.relevance_reason[:100] }}
+                {% elif entry.outcome == 'rejected_significance' %}
+                {{ entry.significance_reason[:100] if entry.significance_reason else '' }}
+                {% else %}
+                {{ entry.relevance_reason[:100] if entry.relevance_reason else '' }}
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </tbody>

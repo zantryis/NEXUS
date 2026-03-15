@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}What Changed — {{ target_date }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h2>What Changed</h2>
+    <div class="page-subtitle">
+        {% if available_dates | length > 1 %}
+        <select onchange="window.location='/changes/?date='+this.value" style="background:var(--nx-bg-raised);color:var(--nx-text);border:1px solid var(--nx-border);padding:0.25rem 0.5rem;border-radius:4px;">
+            {% for d in available_dates %}
+            <option value="{{ d }}" {% if d == target_date %}selected{% endif %}>{{ d }}{% if d == today %} (today){% endif %}</option>
+            {% endfor %}
+        </select>
+        {% else %}
+        {{ target_date }}
+        {% endif %}
+    </div>
+</div>
+
+{% if not diffs %}
+<div class="empty-state"><p>No synthesis data for this date.</p></div>
+{% else %}
+
+{% for diff in diffs %}
+<div class="card" style="margin-bottom:1.5rem;">
+    <div class="card-section">
+        <div class="card-section-title" style="font-size:1.1rem;">
+            {{ diff.topic_name }}
+            {% if not diff.has_previous %}
+            <span class="badge badge-emerging" style="margin-left:0.5rem;">First run</span>
+            {% elif diff.is_empty %}
+            <span class="badge" style="margin-left:0.5rem;opacity:0.5;">No changes</span>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if diff.new_threads %}
+    <div class="card-section">
+        <div class="card-section-title" style="color:var(--nx-green);">New Threads</div>
+        {% for thread in diff.new_threads %}
+        <div class="change-item" style="margin-bottom:0.75rem;">
+            <div style="font-weight:600;">{{ thread.headline }}</div>
+            <div style="font-size:0.85rem;color:var(--nx-text-dim);margin-top:0.25rem;">
+                {{ thread.events | length }} event{{ 's' if thread.events | length != 1 else '' }}
+                {% if thread.key_entities %}
+                &middot; {{ thread.key_entities[:5] | join(', ') }}
+                {% endif %}
+                &middot; significance {{ thread.significance }}/10
+            </div>
+            {% for event in thread.events[:3] %}
+            <div style="font-size:0.85rem;margin-top:0.3rem;padding-left:1rem;border-left:2px solid var(--nx-green);">
+                [{{ event.date }}] {{ event.summary }}
+            </div>
+            {% endfor %}
+            {% if thread.events | length > 3 %}
+            <div style="font-size:0.8rem;color:var(--nx-text-dim);padding-left:1rem;">
+                +{{ thread.events | length - 3 }} more events
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if diff.updated_threads %}
+    <div class="card-section">
+        <div class="card-section-title" style="color:var(--nx-accent);">Updated Threads</div>
+        {% for update in diff.updated_threads %}
+        <div class="change-item" style="margin-bottom:0.75rem;">
+            <div style="font-weight:600;">
+                {{ update.thread.headline }}
+                <span style="font-size:0.8rem;color:var(--nx-text-dim);font-weight:400;">
+                    ({{ update.prev_event_count }} &#8594; {{ update.thread.events | length }} events)
+                </span>
+            </div>
+            {% for event in update.new_events[:3] %}
+            <div style="font-size:0.85rem;margin-top:0.3rem;padding-left:1rem;border-left:2px solid var(--nx-accent);">
+                [{{ event.date }}] {{ event.summary }}
+            </div>
+            {% endfor %}
+            {% if update.new_events | length > 3 %}
+            <div style="font-size:0.8rem;color:var(--nx-text-dim);padding-left:1rem;">
+                +{{ update.new_events | length - 3 }} more new events
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if diff.resolved_threads %}
+    <div class="card-section">
+        <div class="card-section-title" style="color:var(--nx-text-dim);">No Longer Active</div>
+        {% for headline in diff.resolved_threads %}
+        <div style="font-size:0.85rem;text-decoration:line-through;color:var(--nx-text-dim);margin-bottom:0.25rem;">
+            {{ headline }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if diff.new_convergence %}
+    <div class="card-section">
+        <div class="card-section-title" style="color:var(--nx-green);">New Convergence</div>
+        {% for item in diff.new_convergence %}
+        <div style="margin-bottom:0.5rem;">
+            <span style="font-weight:500;font-size:0.85rem;">{{ item.thread_headline }}:</span>
+            {% for fact in item.facts[:3] %}
+            <div style="font-size:0.85rem;padding-left:1rem;margin-top:0.2rem;">
+                {% if fact is mapping %}
+                &#10003; {{ fact.get('fact', fact) }}
+                <span style="color:var(--nx-text-dim);">({{ fact.get('confirmed_by', []) | join(', ') }})</span>
+                {% else %}
+                &#10003; {{ fact }}
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if diff.new_divergence %}
+    <div class="card-section">
+        <div class="card-section-title" style="color:var(--nx-red);">New Divergence</div>
+        {% for item in diff.new_divergence %}
+        <div style="margin-bottom:0.5rem;">
+            <span style="font-weight:500;font-size:0.85rem;">{{ item.thread_headline }}:</span>
+            {% for d in item.items[:3] %}
+            <div style="font-size:0.85rem;padding-left:1rem;margin-top:0.2rem;">
+                &#8800; {{ d.get('shared_event', d.get('claim', '?')) }}:
+                <span style="color:var(--nx-text-dim);">{{ d.get('source_a', '?') }} vs {{ d.get('source_b', '?') }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if diff.new_entities %}
+    <div class="card-section">
+        <div class="card-section-title">New Entities</div>
+        <div style="display:flex;flex-wrap:wrap;gap:0.4rem;">
+            {% for entity in diff.new_entities %}
+            <span class="entity-tag">{{ entity }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if diff.source_balance_shift %}
+    <div class="card-section">
+        <div class="card-section-title">Source Balance Shift</div>
+        <div style="font-size:0.85rem;display:flex;gap:1rem;flex-wrap:wrap;">
+            {% for affil, delta in diff.source_balance_shift.items() %}
+            <span>
+                {{ affil }}:
+                <span style="color:{% if delta > 0 %}var(--nx-green){% else %}var(--nx-red){% endif %};">
+                    {{ '+' if delta > 0 else '' }}{{ delta }}
+                </span>
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endfor %}
+
+{% endif %}
+
+{% if adjacent_signals %}
+<div class="card" style="margin-top:2rem;">
+    <div class="card-section">
+        <div class="card-section-title" style="font-size:1.1rem;">Adjacent Signals</div>
+        <div style="font-size:0.85rem;color:var(--nx-text-dim);margin-bottom:0.75rem;">
+            Articles from your sources that are significant but don't match your configured topics — potential niche discoveries.
+        </div>
+    </div>
+    <div class="card-section">
+        {% for signal in adjacent_signals[:15] %}
+        <div style="margin-bottom:0.75rem;padding-left:1rem;border-left:2px solid var(--nx-accent);">
+            <div>
+                <a href="{{ signal.url }}" target="_blank" rel="noopener" style="color:var(--nx-text);text-decoration:none;font-weight:500;">
+                    {{ signal.title }}
+                </a>
+            </div>
+            <div style="font-size:0.8rem;color:var(--nx-text-dim);margin-top:0.2rem;">
+                <span class="badge badge-{{ signal.source_affiliation }}">{{ signal.source_id }}</span>
+                significance {{ signal.significance_score }}/10
+                &middot; relevance {{ signal.relevance_score }}/10 to {{ signal.topic_slug | replace('-', ' ') }}
+            </div>
+            {% if signal.reason %}
+            <div style="font-size:0.8rem;color:var(--nx-text-dim);font-style:italic;margin-top:0.15rem;">
+                {{ signal.reason }}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

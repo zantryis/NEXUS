@@ -26,7 +26,7 @@ async def test_breaking_uses_default_feeds(mock_poll):
     call_args = mock_poll.call_args[0][0]
     assert len(call_args) >= len(DEFAULT_WIRE_FEEDS)
     feed_ids = [f.get("id", "") for f in call_args]
-    assert "wire-reuters" in feed_ids
+    assert "wire-guardian-world" in feed_ids
     assert "wire-nyt" in feed_ids
     assert "wire-bbc" in feed_ids
 
@@ -60,7 +60,7 @@ async def test_breaking_merges_default_and_custom(mock_poll):
 
     call_args = mock_poll.call_args[0][0]
     feed_ids = [f.get("id", "") for f in call_args]
-    assert "wire-reuters" in feed_ids  # default
+    assert "wire-guardian-world" in feed_ids  # default
     assert "tg-reuters" in feed_ids    # custom
 
 
