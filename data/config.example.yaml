@@ -2,11 +2,11 @@
 # Or run: python -m nexus setup (easier!)
 
 # Model preset — determines which LLM provider + models to use
-# Available: free | cheap | balanced | quality | openai-cheap | openai-balanced | openai-quality | anthropic | custom
+# Available: free | cheap | balanced | quality | openai-cheap | openai-balanced | openai-quality | anthropic | cloud-balanced | cloud-quality | custom
 # "free" uses Ollama (local, no API key), "cheap" uses DeepSeek (~$0.01/day),
 # "balanced" uses Gemini Flash+Pro (~$0.05/day), "quality" uses Gemini Pro (~$0.15/day)
 # "openai-cheap" uses GPT-4.1 Nano/Mini (~$0.03/day), "anthropic" uses Claude Haiku/Sonnet (~$0.10/day)
-# "custom" uses the per-stage model assignments in the models: section below
+# "cloud-*" uses a LiteLLM proxy, and "custom" uses the per-stage model assignments below
 preset: balanced
 
 user:
@@ -45,6 +45,20 @@ topics:
 #   dialogue_script: "gemini-3.1-pro-preview"
 #   breaking_news: "gemini-3-flash-preview"
 #   agent: "gemini-3.1-pro-preview"
+#
+# LiteLLM examples:
+# models:
+#   filtering: "litellm/gpt-5.4"
+#   synthesis: "litellm/claude-opus-4-6"
+#
+# Hosted rotating-alias example:
+# models:
+#   filtering: "litellm/gpt"
+#   synthesis: "litellm/opus"
+#   knowledge_summary: "litellm/gpt"
+#   dialogue_script: "litellm/opus"
+#   breaking_news: "litellm/gpt"
+#   agent: "litellm/opus"
 
 # Audio podcast generation
 audio:

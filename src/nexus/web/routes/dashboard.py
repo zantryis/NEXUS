@@ -324,6 +324,8 @@ async def trigger_pipeline(request: Request):
     async def _run():
         try:
             from dotenv import load_dotenv
+            from telegram import Bot
+            from nexus.agent.delivery import deliver_briefing
             from nexus.config.loader import load_config
             from nexus.llm.client import LLMClient
             from nexus.engine.pipeline import run_pipeline
@@ -345,7 +347,7 @@ async def trigger_pipeline(request: Request):
             )
 
             smoke_cap = int(os.getenv("NEXUS_SMOKE_MODE", "0"))
-            await run_pipeline(
+            briefing_path = await run_pipeline(
                 config, llm, data_dir,
                 gemini_api_key=api_key,
                 openai_api_key=openai_api_key,
@@ -353,6 +355,20 @@ async def trigger_pipeline(request: Request):
                 max_ingest=smoke_cap or None,
                 trigger="manual",
             )
+
+            if config.telegram.enabled and config.telegram.chat_id:
+                token = os.getenv("TELEGRAM_BOT_TOKEN")
+                if token:
+                    today = date.today().isoformat()
+                    audio_path = data_dir / "artifacts" / "audio" / f"{today}.mp3"
+                    await deliver_briefing(
+                        Bot(token=token),
+                        config.telegram.chat_id,
+                        briefing_path.read_text(),
+                        audio_path if audio_path.exists() else None,
+                    )
+                else:
+                    logger.warning("Manual pipeline completed but TELEGRAM_BOT_TOKEN is not set; skipping delivery")
         except Exception as e:
             logger.error(f"Manual pipeline run failed: {e}", exc_info=True)
 

@@ -132,3 +132,48 @@ def test_litellm_client_not_initialized_without_both():
     assert client._litellm_client is None
     client = LLMClient(ModelsConfig(), litellm_base_url="http://localhost:4000")
     assert client._litellm_client is None
+
+
+def test_resolve_runtime_model_hosted_alias(monkeypatch):
+    monkeypatch.setenv("LITELLM_MODEL_GPT", "gpt-5.4")
+    client = LLMClient(ModelsConfig())
+    assert client._resolve_runtime_model("litellm/gpt") == "gpt-5.4"
+
+
+def test_resolve_runtime_model_env_reference(monkeypatch):
+    monkeypatch.setenv("NEXUS_TEST_MODEL", "gpt-5.4")
+    client = LLMClient(ModelsConfig())
+    assert client._resolve_runtime_model("env:NEXUS_TEST_MODEL") == "gpt-5.4"
+
+
+def test_get_litellm_client_refreshes_when_proxy_creds_rotate(monkeypatch):
+    monkeypatch.setenv("LITELLM_PROXY_URL", "https://proxy.example/v1")
+    monkeypatch.setenv("LITELLM_PROXY_API_KEY", "key-1")
+
+    client = LLMClient(ModelsConfig())
+    first_client = MagicMock()
+    second_client = MagicMock()
+
+    with patch("openai.AsyncOpenAI", side_effect=[first_client, second_client]) as mock_openai:
+        assert client._get_litellm_client() is first_client
+        assert client._get_litellm_client() is first_client
+        monkeypatch.setenv("LITELLM_PROXY_API_KEY", "key-2")
+        assert client._get_litellm_client() is second_client
+
+    assert mock_openai.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_complete_uses_runtime_model_for_litellm_alias(monkeypatch):
+    monkeypatch.setenv("LITELLM_MODEL_GPT", "gpt-5.4")
+    client = LLMClient(ModelsConfig(filtering="litellm/gpt"))
+    client._complete_litellm = AsyncMock(return_value=("ok", 11, 7))
+
+    result = await client.complete(
+        config_key="filtering",
+        system_prompt="system",
+        user_prompt="user",
+    )
+
+    assert result == "ok"
+    client._complete_litellm.assert_awaited_once_with("gpt-5.4", "system", "user", False)

@@ -47,7 +47,9 @@ async def test_analyze_question_fallback_on_error():
     llm = AsyncMock()
     llm.complete = AsyncMock(side_effect=Exception("API error"))
     result = await _analyze_question(llm, "test")
-    assert result == {"entities": [], "intent": "recent", "language": "en"}
+    assert result["intent"] == "recent"
+    assert result["language"] == "en"
+    assert "test" in result["entities"]
 
 
 async def test_analyze_question_chinese():
@@ -162,3 +164,16 @@ async def test_answer_question_reference_intent(config, mock_store):
     # System prompt should mention general knowledge
     second_call = llm.complete.call_args_list[1]
     assert "general knowledge" in second_call.kwargs["system_prompt"].lower()
+
+
+async def test_answer_question_falls_back_to_store_when_generation_fails(config, mock_store):
+    llm = AsyncMock()
+    llm.complete = AsyncMock(side_effect=[
+        '{"entities": ["Iran"], "intent": "recent", "language": "en"}',
+        Exception("Invalid VM proxy token"),
+    ])
+
+    answer = await answer_question(llm, mock_store, config, "What happened with Iran?")
+    assert "knowledge base" in answer.lower()
+    assert "US sanctions imposed" in answer
+    assert "Live model unavailable" not in answer

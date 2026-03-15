@@ -120,7 +120,7 @@ async def test_generate_dialogue_script_includes_context():
 
 
 async def test_generate_dialogue_script_fallback_on_bad_json():
-    """Bad JSON from LLM should produce a fallback single-turn script."""
+    """Bad JSON from LLM should produce a fallback script."""
     llm = AsyncMock()
     llm.complete = AsyncMock(return_value="not valid json {{{")
 
@@ -130,3 +130,27 @@ async def test_generate_dialogue_script_fallback_on_bad_json():
     script = await generate_dialogue_script(llm, config, syntheses)
     assert isinstance(script, DialogueScript)
     assert len(script.turns) >= 1
+
+
+async def test_generate_dialogue_script_parses_fenced_json():
+    llm = AsyncMock()
+    llm.complete = AsyncMock(return_value='```json\n{"turns": [{"speaker": "A", "text": "Hi."}]}\n```')
+
+    config = _make_config()
+    syntheses = _make_synthesis()
+
+    script = await generate_dialogue_script(llm, config, syntheses)
+    assert len(script.turns) == 1
+    assert script.turns[0].text == "Hi."
+
+
+async def test_generate_dialogue_script_fallback_on_empty_turns():
+    llm = AsyncMock()
+    llm.complete = AsyncMock(return_value=json.dumps({"turns": []}))
+
+    config = _make_config()
+    syntheses = _make_synthesis()
+
+    script = await generate_dialogue_script(llm, config, syntheses)
+    assert len(script.turns) >= 3
+    assert script.turns[0].speaker == "A"

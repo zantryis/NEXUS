@@ -53,6 +53,7 @@ def test_model_choices_has_all_providers():
     assert "anthropic" in MODEL_CHOICES
     assert "deepseek" in MODEL_CHOICES
     assert "ollama" in MODEL_CHOICES
+    assert "litellm" in MODEL_CHOICES
 
 
 def test_model_choices_has_latest_models():
@@ -61,6 +62,8 @@ def test_model_choices_has_latest_models():
     assert "gpt-5-mini" in MODEL_CHOICES["openai"]
     assert "claude-sonnet-4-6" in MODEL_CHOICES["anthropic"]
     assert "claude-haiku-4-5-20251001" in MODEL_CHOICES["anthropic"]
+    assert "litellm/gpt" in MODEL_CHOICES["litellm"]
+    assert "litellm/opus" in MODEL_CHOICES["litellm"]
 
 
 def test_pipeline_stages_cover_all_config_fields():

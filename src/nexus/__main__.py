@@ -65,12 +65,18 @@ def run_engine():
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
     deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
     openai_api_key = os.getenv("OPENAI_API_KEY")
+    litellm_base_url = os.getenv("LITELLM_BASE_URL") or os.getenv("LITELLM_PROXY_URL")
+    litellm_api_key = os.getenv("LITELLM_API_KEY") or os.getenv("LITELLM_PROXY_API_KEY")
 
-    # Free/Ollama preset doesn't need API keys
+    # Free/Ollama preset doesn't need API keys.
+    # Hosted LiteLLM proxy credentials also count as a valid provider path.
     if (not api_key and not anthropic_api_key and not deepseek_api_key
-            and not openai_api_key and config.preset != "free"):
+            and not openai_api_key and not (litellm_base_url and litellm_api_key)
+            and config.preset != "free"):
         print("No API key found. Set one in .env:")
         print("  GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, or DEEPSEEK_API_KEY")
+        print("  Or LiteLLM proxy creds: LITELLM_BASE_URL/LITELLM_API_KEY")
+        print("  Or hosted proxy creds: LITELLM_PROXY_URL/LITELLM_PROXY_API_KEY")
         print("  Or use preset: free for local Ollama")
         sys.exit(1)
 
@@ -92,6 +98,8 @@ def run_engine():
         openai_api_key=openai_api_key,
         ollama_base_url=ollama_base_url,
         budget_config=config.budget,
+        litellm_base_url=litellm_base_url,
+        litellm_api_key=litellm_api_key,
     )
 
     do_capture = "--capture" in sys.argv

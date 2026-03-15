@@ -181,3 +181,21 @@ async def test_breaking_caps_alerts_per_topic(mock_poll):
 
     assert "iran-us-relations" in result
     assert len(result["iran-us-relations"]) <= MAX_ALERTS_PER_TOPIC
+
+
+@patch("nexus.agent.breaking._poll_all_feeds")
+async def test_breaking_uses_heuristic_fallback_when_llm_fails(mock_poll):
+    mock_poll.return_value = _make_items([
+        "US expands Iran sanctions after nuclear standoff",
+        "Completely unrelated headline",
+    ])
+    store = _mock_store()
+    llm = AsyncMock()
+    llm.complete = AsyncMock(side_effect=Exception("Invalid VM proxy token"))
+
+    config = _make_config(threshold=7)
+    result = await check_breaking_news(llm, config, store)
+
+    assert "iran-us-relations" in result
+    assert len(result["iran-us-relations"]) == 1
+    assert "Iran sanctions" in result["iran-us-relations"][0]["headline"]

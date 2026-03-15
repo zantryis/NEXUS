@@ -12,6 +12,8 @@ def test_resolve_gemini():
 def test_resolve_anthropic():
     assert _resolve_provider("claude-sonnet-4-6") == "anthropic"
     assert _resolve_provider("claude-opus-4-6") == "anthropic"
+    assert _resolve_provider("opus-4.6") == "anthropic"
+    assert _resolve_provider("sonnet-4.6") == "anthropic"
 
 
 def test_resolve_deepseek():

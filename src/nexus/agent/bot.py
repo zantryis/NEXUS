@@ -74,6 +74,16 @@ class NexusBot:
         )
 
         await self._application.initialize()
+        try:
+            from telegram import BotCommand
+            await self._application.bot.set_my_commands([
+                BotCommand("start", "Register this chat with Nexus"),
+                BotCommand("briefing", "Get today's briefing and podcast"),
+                BotCommand("breaking", "Check for breaking news now"),
+                BotCommand("status", "Show Nexus system status"),
+            ])
+        except Exception:
+            logger.debug("Failed to register Telegram slash commands", exc_info=True)
         await self._application.start()
         await self._application.updater.start_polling(drop_pending_updates=True)
         logger.info("Nexus Telegram bot started (long-polling)")
@@ -158,6 +168,7 @@ class NexusBot:
     async def _handle_breaking(self, update, context):
         """Handle /breaking — on-demand breaking news check (animated single bubble)."""
         chat_id = update.effective_chat.id
+        logger.info(f"Telegram /breaking received from chat {chat_id}")
         if not self._is_authorized(chat_id):
             await update.message.reply_text("Unauthorized.")
             return
@@ -241,11 +252,47 @@ class NexusBot:
                             chat_id=chat_id, text=chunk,
                         )
             else:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=status_msg.message_id,
-                    text="No breaking news at this time.",
-                )
+                recent_alerts = await self._store.get_recent_breaking_alerts(hours=24)
+                if recent_alerts:
+                    recent_by_topic: dict[str, list[dict]] = {}
+                    for alert in recent_alerts:
+                        recent_by_topic.setdefault(alert.get("topic_slug") or "other", []).append(alert)
+                    digest_text = (
+                        "ℹ️ No new breaking headlines since the last alert cycle. "
+                        "Here are the most recent breaking items from the last 24 hours.\n\n"
+                        + format_breaking_digest(recent_by_topic)
+                    )
+                    chunks = split_message(digest_text)
+                    try:
+                        await context.bot.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=status_msg.message_id,
+                            text=chunks[0],
+                            parse_mode="HTML",
+                            disable_web_page_preview=True,
+                        )
+                    except Exception:
+                        await context.bot.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=status_msg.message_id,
+                            text=chunks[0],
+                        )
+                    for chunk in chunks[1:]:
+                        try:
+                            await context.bot.send_message(
+                                chat_id=chat_id,
+                                text=chunk,
+                                parse_mode="HTML",
+                                disable_web_page_preview=True,
+                            )
+                        except Exception:
+                            await context.bot.send_message(chat_id=chat_id, text=chunk)
+                else:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=status_msg.message_id,
+                        text="No new breaking headlines in the monitored feeds right now.",
+                    )
 
         except Exception as e:
             done.set()
@@ -288,6 +335,7 @@ class NexusBot:
     async def _handle_message(self, update, context):
         """Handle text messages — route to Q&A."""
         chat_id = update.effective_chat.id
+        logger.info(f"Telegram text received from chat {chat_id}: {getattr(update.message, 'text', '')[:120]}")
         if not self._is_authorized(chat_id):
             return
 

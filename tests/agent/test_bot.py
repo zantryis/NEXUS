@@ -123,6 +123,38 @@ async def test_handle_message_loading_animation(mock_qa, bot):
     assert "<b>Iran</b>" in final_edit.kwargs["text"]
 
 
+@patch("nexus.agent.breaking.check_breaking_news", new_callable=AsyncMock)
+async def test_handle_breaking_falls_back_to_recent_alerts(mock_check_breaking, bot):
+    mock_check_breaking.return_value = {}
+    bot._store.get_recent_breaking_alerts = AsyncMock(return_value=[
+        {
+            "headline": "Major Iran escalation",
+            "source_url": "https://example.com/iran",
+            "significance_score": 8,
+            "topic_slug": "iran-us-relations",
+            "alerted_at": "2026-03-15 08:00:00",
+        },
+    ])
+
+    status_msg = MagicMock()
+    status_msg.message_id = 99
+
+    update = MagicMock()
+    update.effective_chat.id = 12345
+    update.message.reply_text = AsyncMock(return_value=status_msg)
+
+    context = MagicMock()
+    context.bot.edit_message_text = AsyncMock()
+    context.bot.send_message = AsyncMock()
+
+    await bot._handle_breaking(update, context)
+
+    assert context.bot.edit_message_text.called
+    edited = context.bot.edit_message_text.call_args.kwargs["text"]
+    assert "No new breaking headlines" in edited
+    assert "Major Iran escalation" in edited
+
+
 @patch("nexus.agent.bot.deliver_briefing", new_callable=AsyncMock)
 @patch("nexus.agent.bot.build_feedback_keyboard")
 async def test_handle_briefing_additional_languages(mock_keyboard, mock_deliver, tmp_path):

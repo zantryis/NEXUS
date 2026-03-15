@@ -33,6 +33,10 @@ MODEL_CHOICES = {
         "litellm/claude-sonnet-4-6",
         "litellm/claude-opus-4-6",
         "litellm/gpt-5.4",
+        "litellm/gpt",
+        "litellm/opus",
+        "litellm/sonnet",
+        "litellm/gemini",
     ],
 }
 
@@ -134,6 +138,7 @@ def preset_names() -> set[str]:
     return set(PRESETS.keys()) | {"custom"}
 
 
+
 def apply_preset(preset_name: str, overrides: dict | None = None) -> ModelsConfig:
     """Get a ModelsConfig from a preset name, with optional field overrides."""
     if preset_name not in PRESETS:
@@ -143,6 +148,7 @@ def apply_preset(preset_name: str, overrides: dict | None = None) -> ModelsConfi
     if overrides:
         base.update(overrides)
     return ModelsConfig(**base)
+
 
 
 def all_model_choices() -> list[str]:

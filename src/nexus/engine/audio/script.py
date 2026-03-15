@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from datetime import date
 
 from pydantic import BaseModel, Field
@@ -68,6 +69,63 @@ DIALOGUE_SYSTEM_PROMPT = (
 )
 
 
+def _strip_json_fences(text: str) -> str:
+    """Remove common markdown fences around JSON payloads."""
+    text = text.strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*```$", "", text)
+    return text.strip()
+
+
+def _fallback_dialogue_script(syntheses: list[TopicSynthesis], report_date: date) -> DialogueScript:
+    """Create a minimal but usable two-host fallback script."""
+    turns: list[DialogueTurn] = [
+        DialogueTurn(
+            speaker="A",
+            text=(
+                f"Good morning, welcome to The Nexus Report for {report_date.strftime('%B %d, %Y')}. "
+                "I'm Nova, and Atlas is here with me."
+            ),
+        ),
+        DialogueTurn(
+            speaker="B",
+            text="Morning, Nova. Let's move quickly through the biggest developments shaping today's briefing.",
+        ),
+    ]
+
+    for syn in syntheses:
+        if not syn.threads:
+            continue
+        thread = syn.threads[0]
+        first_event = thread.events[0] if thread.events else None
+        source_name = "our source set"
+        summary = thread.headline
+        if first_event:
+            summary = first_event.summary or thread.headline
+            if first_event.sources:
+                source_name = first_event.sources[0].get("outlet", source_name)
+        turns.append(
+            DialogueTurn(
+                speaker="A",
+                text=f"On {syn.topic_name}, according to {source_name}, {summary}.",
+            )
+        )
+        turns.append(
+            DialogueTurn(
+                speaker="B",
+                text=f"That's the key line we're watching in {syn.topic_name.lower()} today.",
+            )
+        )
+
+    turns.append(
+        DialogueTurn(
+            speaker="A",
+            text=f"That's your Nexus Report for {report_date.strftime('%B %d, %Y')}. Thanks for listening.",
+        )
+    )
+    return DialogueScript(turns=turns)
+
+
 async def generate_dialogue_script(
     llm: LLMClient,
     config: NexusConfig,
@@ -94,7 +152,7 @@ async def generate_dialogue_script(
             user_prompt=context,
             json_response=True,
         )
-        data = json.loads(response)
+        data = json.loads(_strip_json_fences(response))
 
         # Handle both {"turns": [...]} and bare [...]
         if isinstance(data, list):
@@ -103,14 +161,11 @@ async def generate_dialogue_script(
             turns_data = data.get("turns", [])
 
         turns = [DialogueTurn(**t) for t in turns_data]
+        if not turns:
+            logger.warning("Dialogue script model returned zero turns; using fallback script.")
+            return _fallback_dialogue_script(syntheses, report_date)
         return DialogueScript(turns=turns)
 
     except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
         logger.warning(f"Dialogue script generation failed: {e}")
-        # Fallback: produce a minimal script from synthesis context
-        fallback_text = "Here's a summary of today's developments. " + " ".join(
-            s.topic_name for s in syntheses
-        )
-        return DialogueScript(turns=[
-            DialogueTurn(speaker="A", text=fallback_text),
-        ])
+        return _fallback_dialogue_script(syntheses, report_date)
