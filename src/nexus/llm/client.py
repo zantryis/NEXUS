@@ -8,10 +8,12 @@ import logging
 import os
 import time
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 import httpx
+from dotenv import dotenv_values
 
 from nexus.config.models import BudgetConfig, ModelsConfig
 from nexus.llm.budget import BudgetDegradedError, BudgetExceededError, BudgetGuard
@@ -44,6 +46,37 @@ def _env_first(*names: str) -> str:
         if value:
             return value
     return ""
+
+
+def _parse_explicit_expiry(value: str) -> datetime | None:
+    """Parse an ISO8601-ish expiry string from env."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _litellm_env_file_path() -> Path | None:
+    """Optional env file used by hosted runtimes to refresh rotated creds."""
+    raw = os.getenv("NEXUS_ENV_FILE", "").strip()
+    return Path(raw) if raw else None
+
+
+def _is_auth_error(exc: Exception) -> bool:
+    """Best-effort detection for provider auth failures."""
+    status_code = getattr(exc, "status_code", None)
+    response = getattr(exc, "response", None)
+    if status_code is None and response is not None:
+        status_code = getattr(response, "status_code", None)
+    if status_code == 401:
+        return True
+    message = str(exc).lower()
+    return "invalid vm proxy token" in message or "unauthorized" in message
 
 
 
@@ -251,8 +284,45 @@ class LLMClient:
             return LITELLM_CANONICAL_MODEL_MAP.get(runtime_model, runtime_model)
         return LITELLM_CANONICAL_MODEL_MAP.get(runtime_model, runtime_model)
 
-    def _get_litellm_client(self):
+    def _litellm_token_expiry(self) -> datetime | None:
+        """Return proxy token expiry when the hosted environment exposes it."""
+        explicit = _parse_explicit_expiry(os.getenv("LITELLM_PROXY_TOKEN_EXPIRES_AT", ""))
+        if explicit:
+            return explicit
+        return None
+
+    def _refresh_hosted_env(self) -> bool:
+        """Reload env vars from an optional hosted env file.
+
+        This is intentionally generic so self-hosted or hosted deployments can
+        refresh rotated credentials without wiring platform-specific logic into
+        application code.
+        """
+        env_path = _litellm_env_file_path()
+        if not env_path or not env_path.exists():
+            return False
+        try:
+            values = dotenv_values(env_path)
+            applied = False
+            for key, value in values.items():
+                if value is None:
+                    continue
+                if os.getenv(key) != value:
+                    os.environ[key] = value
+                    applied = True
+            if applied:
+                logger.info("Reloaded runtime env from %s", env_path)
+            return applied
+        except Exception:
+            logger.warning("Failed to reload runtime env from %s", env_path, exc_info=True)
+            return False
+
+    def _get_litellm_client(self, force_refresh: bool = False):
         """Return an OpenAI-compatible LiteLLM client, refreshing creds from env."""
+        expiry = self._litellm_token_expiry()
+        if expiry and expiry <= datetime.now(timezone.utc):
+            self._refresh_hosted_env()
+
         base_url = _env_first("LITELLM_BASE_URL", "LITELLM_PROXY_URL").rstrip("/")
         api_key = _env_first("LITELLM_API_KEY", "LITELLM_PROXY_API_KEY")
         if not base_url or not api_key:
@@ -262,6 +332,9 @@ class LLMClient:
             )
 
         signature = (base_url, api_key)
+        if force_refresh:
+            self._litellm_client = None
+            self._litellm_signature = None
         if self._litellm_client is None or self._litellm_signature != signature:
             from openai import AsyncOpenAI
             self._litellm_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
@@ -480,7 +553,15 @@ class LLMClient:
         if json_response:
             kwargs["response_format"] = {"type": "json_object"}
 
-        response = await client.chat.completions.create(**kwargs)
+        try:
+            response = await client.chat.completions.create(**kwargs)
+        except Exception as e:
+            if _is_auth_error(e) and self._refresh_hosted_env():
+                logger.warning("LiteLLM auth error detected; reloading env and retrying once")
+                client = self._get_litellm_client(force_refresh=True)
+                response = await client.chat.completions.create(**kwargs)
+            else:
+                raise
 
         in_tok = getattr(getattr(response, 'usage', None), 'prompt_tokens', 0) or 0
         out_tok = getattr(getattr(response, 'usage', None), 'completion_tokens', 0) or 0

@@ -88,6 +88,31 @@ async def test_handle_status(bot):
     assert call_kwargs.kwargs.get("parse_mode") == "HTML"
 
 
+@patch("nexus.agent.bot.build_health_snapshot", new_callable=AsyncMock)
+async def test_handle_health(mock_health, bot):
+    mock_health.return_value = {
+        "status": "warning",
+        "pipeline": {
+            "last_run": {"status": "completed", "event_count": 5, "topics": ["AI"]},
+            "configured_topic_count": 2,
+        },
+        "deliverables": {"briefing_today": True, "audio_today": False},
+        "telegram": {"enabled": True, "chat_id_configured": True},
+        "litellm": {"used": True, "configured": True, "token_ttl_minutes": 8},
+        "issues": [{"message": "Today's briefing exists, but today's podcast audio is missing.", "severity": "warning"}],
+    }
+    update = MagicMock()
+    update.effective_chat.id = 12345
+    update.message.reply_text = AsyncMock()
+
+    await bot._handle_health(update, MagicMock())
+
+    sent = update.message.reply_text.call_args.args[0]
+    assert "System health" in sent
+    assert "podcast=no" in sent
+    assert update.message.reply_text.call_args.kwargs["parse_mode"] == "HTML"
+
+
 @patch("nexus.agent.bot.answer_question", new_callable=AsyncMock)
 async def test_handle_message_loading_animation(mock_qa, bot):
     """Q&A shows loading message, then edits it with the answer."""

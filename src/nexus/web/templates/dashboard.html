@@ -221,6 +221,45 @@
                 {% endfor %}
             </div>
 
+            {% if health %}
+            <div class="sidebar-section health-section">
+                <div class="sidebar-title">System Health</div>
+                <div class="health-overview health-{{ health.status }}">
+                    <span class="health-dot"></span>
+                    <span class="health-label">{{ health.status | upper }}</span>
+                </div>
+                <div class="sidebar-metric">
+                    <span class="sidebar-metric-label">Last run coverage</span>
+                    <span class="sidebar-metric-value">{{ health.pipeline.last_run_topic_count }}/{{ health.pipeline.configured_topic_count }}</span>
+                </div>
+                <div class="sidebar-metric">
+                    <span class="sidebar-metric-label">Today's outputs</span>
+                    <span class="sidebar-metric-value">{{ 'briefing' if health.deliverables.briefing_today else '—' }}{{ ' + podcast' if health.deliverables.audio_today else '' }}</span>
+                </div>
+                {% if health.litellm.used %}
+                <div class="sidebar-metric">
+                    <span class="sidebar-metric-label">LiteLLM token</span>
+                    <span class="sidebar-metric-value">
+                        {% if health.litellm.token_ttl_minutes is not none %}
+                            {{ health.litellm.token_ttl_minutes }}m
+                        {% elif health.litellm.configured %}
+                            configured
+                        {% else %}
+                            missing
+                        {% endif %}
+                    </span>
+                </div>
+                {% endif %}
+                {% if health.issues %}
+                <div class="health-issues">
+                    {% for issue in health.issues[:3] %}
+                    <div class="health-issue health-issue-{{ issue.severity }}">{{ issue.message }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
             <div class="sidebar-section">
                 <div class="sidebar-title">System</div>
                 <div class="sidebar-metric">

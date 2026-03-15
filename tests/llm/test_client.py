@@ -177,3 +177,51 @@ async def test_complete_uses_runtime_model_for_litellm_alias(monkeypatch):
 
     assert result == "ok"
     client._complete_litellm.assert_awaited_once_with("gpt-5.4", "system", "user", False)
+
+
+def test_refresh_hosted_env_from_env_file(tmp_path, monkeypatch):
+    env_file = tmp_path / "runtime.env"
+    env_file.write_text(
+        "LITELLM_PROXY_URL=https://proxy.example/v1\n"
+        "LITELLM_PROXY_API_KEY=fresh-key\n"
+        "LITELLM_MODEL_GPT=gpt-5.4\n"
+    )
+    monkeypatch.setenv("NEXUS_ENV_FILE", str(env_file))
+    monkeypatch.delenv("LITELLM_PROXY_URL", raising=False)
+    monkeypatch.delenv("LITELLM_PROXY_API_KEY", raising=False)
+
+    client = LLMClient(ModelsConfig())
+    assert client._refresh_hosted_env() is True
+    assert client._get_litellm_client() is not None
+
+
+@pytest.mark.asyncio
+async def test_complete_litellm_retries_after_auth_refresh(tmp_path, monkeypatch):
+    env_file = tmp_path / "runtime.env"
+    env_file.write_text(
+        "LITELLM_PROXY_URL=https://proxy.example/v1\n"
+        "LITELLM_PROXY_API_KEY=fresh-key\n"
+    )
+    monkeypatch.setenv("NEXUS_ENV_FILE", str(env_file))
+    monkeypatch.setenv("LITELLM_PROXY_URL", "https://proxy.example/v1")
+    monkeypatch.setenv("LITELLM_PROXY_API_KEY", "stale-key")
+
+    client = LLMClient(ModelsConfig())
+
+    class FakeAuthError(Exception):
+        status_code = 401
+
+    success = MagicMock()
+    success.choices = [MagicMock(message=MagicMock(content="ok"))]
+    success.usage = MagicMock(prompt_tokens=3, completion_tokens=2)
+
+    stale_client = MagicMock()
+    stale_client.chat.completions.create = AsyncMock(side_effect=FakeAuthError("stale"))
+    fresh_client = MagicMock()
+    fresh_client.chat.completions.create = AsyncMock(return_value=success)
+
+    with patch.object(client, "_get_litellm_client", side_effect=[stale_client, fresh_client]) as mock_get_client:
+        result = await client._complete_litellm("gpt-5.4", "system", "user", False)
+
+    assert result == ("ok", 3, 2)
+    assert mock_get_client.call_args_list[1].kwargs["force_refresh"] is True

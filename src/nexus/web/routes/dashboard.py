@@ -9,6 +9,8 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 
+from nexus.config.loader import load_config
+from nexus.utils.health import build_health_snapshot
 from nexus.web.app import get_store, get_templates
 
 logger = logging.getLogger(__name__)
@@ -89,6 +91,44 @@ def _is_within(parent: Path, child: Path) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _config_error_health(message: str) -> dict:
+    """Fallback snapshot used when config is missing or invalid."""
+    return {
+        "status": "critical",
+        "issues": [{"severity": "critical", "message": message}],
+        "pipeline": {
+            "running": False,
+            "last_run": None,
+            "configured_topics": [],
+            "configured_topic_count": 0,
+            "last_run_topic_count": 0,
+            "missing_topics": [],
+        },
+        "deliverables": {"briefing_today": False, "audio_today": False},
+        "telegram": {"enabled": False, "chat_id_configured": False},
+        "litellm": {
+            "used": False,
+            "configured": False,
+            "base_url_present": False,
+            "api_key_present": False,
+            "steps": {},
+            "alias_targets": {},
+            "missing_aliases": {},
+            "token_expires_at": None,
+            "token_ttl_minutes": None,
+        },
+    }
+
+
+def _load_runtime_config(config_path: Path):
+    """Load config.yaml safely for the dashboard health checks."""
+    try:
+        return load_config(config_path)
+    except Exception as e:
+        logger.warning("Failed to load config for runtime health: %s", e, exc_info=True)
+        return None
 
 
 async def _build_topics_data(store, max_threads: int = 3, max_events: int = 2):
@@ -187,6 +227,15 @@ async def homepage(request: Request):
     # Audio data
     audio_info = _find_audio(data_dir, briefing_date)
 
+    config_path = data_dir / "config.yaml"
+    health_snapshot = None
+    if config_path.exists():
+        config = _load_runtime_config(config_path)
+        if config is not None:
+            health_snapshot = await build_health_snapshot(config, data_dir, store)
+        else:
+            health_snapshot = _config_error_health("Config validation failed. Re-run setup or fix data/config.yaml.")
+
     # Pipeline run info
     last_run = await store.get_last_pipeline_run()
     pipeline_running = await store.is_pipeline_running()
@@ -223,6 +272,7 @@ async def homepage(request: Request):
         "pipeline_running": pipeline_running,
         "cooldown_active": cooldown_active,
         "cooldown_remaining": cooldown_remaining,
+        "health": health_snapshot,
     })
 
 
@@ -379,6 +429,27 @@ async def trigger_pipeline(request: Request):
         ' hx-get="/api/pipeline/status" hx-trigger="every 3s" hx-swap="outerHTML">'
         '<div class="pipeline-spinner"></div> Pipeline started...</div>'
     )
+
+
+@router.get("/api/health")
+async def api_health(request: Request):
+    """Machine-readable health snapshot for dashboard and ops checks."""
+    data_dir = getattr(request.app.state, "data_dir", Path("data"))
+    config_path = data_dir / "config.yaml"
+    if not config_path.exists():
+        return JSONResponse(_config_error_health("No config.yaml found."), status_code=503)
+
+    config = _load_runtime_config(config_path)
+    if config is None:
+        return JSONResponse(
+            _config_error_health("Config validation failed. Re-run setup or fix data/config.yaml."),
+            status_code=503,
+        )
+
+    store = get_store(request)
+    snapshot = await build_health_snapshot(config, data_dir, store)
+    status_code = 503 if snapshot["status"] == "critical" else 200
+    return JSONResponse(snapshot, status_code=status_code)
 
 
 @router.get("/api/pipeline/status")

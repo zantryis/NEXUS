@@ -15,6 +15,7 @@ from nexus.agent.delivery import (
     format_breaking_digest,
 )
 from nexus.agent.feedback import build_feedback_keyboard, handle_feedback_callback
+from nexus.utils.health import build_health_snapshot, health_summary_lines
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ class NexusBot:
         self._application.add_handler(CommandHandler("briefing", self._handle_briefing))
         self._application.add_handler(CommandHandler("breaking", self._handle_breaking))
         self._application.add_handler(CommandHandler("status", self._handle_status))
+        self._application.add_handler(CommandHandler("health", self._handle_health))
         self._application.add_handler(CallbackQueryHandler(self._handle_callback))
         self._application.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_message)
@@ -81,6 +83,7 @@ class NexusBot:
                 BotCommand("briefing", "Get today's briefing and podcast"),
                 BotCommand("breaking", "Check for breaking news now"),
                 BotCommand("status", "Show Nexus system status"),
+                BotCommand("health", "Show delivery and model health"),
             ])
         except Exception:
             logger.debug("Failed to register Telegram slash commands", exc_info=True)
@@ -125,6 +128,7 @@ class NexusBot:
             "/briefing — Get today's briefing\n"
             "/breaking — Check for breaking news now\n"
             "/status — System status\n"
+            "/health — Delivery and model health\n"
             "Or just send me a question about current events."
         )
 
@@ -328,6 +332,20 @@ class NexusBot:
 
         await update.message.reply_text(
             "\n".join(lines), parse_mode="HTML",
+        )
+
+    async def _handle_health(self, update, context):
+        """Handle /health — quick operational health summary."""
+        chat_id = update.effective_chat.id
+        if not self._is_authorized(chat_id):
+            await update.message.reply_text("Unauthorized.")
+            return
+
+        snapshot = await build_health_snapshot(self._config, self._data_dir, self._store)
+        await update.message.reply_text(
+            "\n".join(health_summary_lines(snapshot)),
+            parse_mode="HTML",
+            disable_web_page_preview=True,
         )
 
     _SPINNER = ["\u280b", "\u2819", "\u2839", "\u2838", "\u283c", "\u2834", "\u2826", "\u2827", "\u2807", "\u280f"]
