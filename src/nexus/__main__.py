@@ -935,7 +935,7 @@ def run_forecast():
             src.close()
 
     def _optional_llm(config, selected_engine: str):
-        if selected_engine not in {"native", "actor"}:
+        if selected_engine in {"market"}:
             return None
         api_key = os.getenv("GEMINI_API_KEY")
         anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -984,7 +984,7 @@ def run_forecast():
 
             if subcommand in {"kalshi-sync", "kalshi-bootstrap", "kalshi-auth-check"}:
                 store = None
-            elif subcommand in {"benchmark", "replay", "audit-leakage", "export-graph", "readiness", "kalshi-compare"}:
+            elif subcommand in {"benchmark", "replay", "audit-leakage", "export-graph", "readiness", "kalshi-compare", "kalshi-benchmark"}:
                 temp_dir = Path(tempfile.mkdtemp(prefix="nexus-forecast-benchmark-"))
                 snapshot_path = temp_dir / "knowledge.db"
                 _snapshot_sqlite_db(db_path, snapshot_path)
@@ -1247,8 +1247,215 @@ def run_forecast():
                 print(json.dumps(report, indent=2, default=str))
                 return
 
+            if subcommand == "kalshi-benchmark":
+                from nexus.engine.projection.kalshi_benchmark import (
+                    BenchmarkReport,
+                    build_benchmark_dataset,
+                    build_benchmark_from_metadata,
+                    discover_settled_markets,
+                    load_benchmark_dataset,
+                    run_benchmark,
+                    save_benchmark_dataset,
+                    save_benchmark_report,
+                )
+
+                bench_dir = data_dir / "benchmarks"
+                bench_dir.mkdir(parents=True, exist_ok=True)
+                dataset_path = bench_dir / "kalshi_benchmark_dataset.json"
+                report_path = bench_dir / "kalshi_engine_comparison.json"
+
+                bench_action = args[0] if args else ""
+
+                if bench_action == "--discover":
+                    if config is None:
+                        raise SystemExit(
+                            "Usage: python -m nexus forecast kalshi-benchmark --discover"
+                        )
+                    kalshi_client = KalshiClient(kalshi_config)
+                    kalshi_ledger = KalshiLedger(
+                        Path(kalshi_config.ledger_path)
+                    )
+                    await kalshi_ledger.initialize()
+
+                    # Parse discover-specific flags
+                    days_back = 90
+                    max_markets = 500
+                    exclude_cats = {"Crypto", "Sports", "Entertainment", "Mentions",
+                                    "Climate and Weather", "Social"}
+                    for j, arg in enumerate(args):
+                        if arg == "--days-back" and j + 1 < len(args):
+                            days_back = int(args[j + 1])
+                        elif arg == "--max-markets" and j + 1 < len(args):
+                            max_markets = int(args[j + 1])
+                        elif arg == "--no-exclude":
+                            exclude_cats = set()
+
+                    print(f"Discovering settled Kalshi markets (last {days_back}d, "
+                          f"max {max_markets}, excluding {len(exclude_cats)} categories)...")
+                    settled = await discover_settled_markets(
+                        kalshi_client, days_back=days_back,
+                        max_markets=max_markets,
+                        exclude_categories=exclude_cats,
+                    )
+                    print(f"Found {len(settled)} settled markets.")
+
+                    if not settled:
+                        print("No settled markets found.")
+                        return
+
+                    # Show category breakdown
+                    from collections import Counter as _Counter
+                    cats = _Counter(m.category for m in settled)
+                    for cat, n in cats.most_common(15):
+                        print(f"  {cat:30s} {n:5d}")
+
+                    # Backfill price history for each settled market
+                    print(f"\nBackfilling price history for {len(settled)} tickers...")
+                    from datetime import timedelta as _td
+                    synced = 0
+                    for idx, sm in enumerate(settled):
+                        sync_start = sm.settlement_date - _td(days=35)
+                        sync_end = sm.settlement_date
+                        try:
+                            await sync_kalshi_tickers(
+                                kalshi_ledger, kalshi_client,
+                                tickers=[sm.ticker],
+                                start=sync_start, end=sync_end,
+                            )
+                            synced += 1
+                        except Exception as exc:
+                            pass  # silent — many tickers won't have candlestick data
+                        if (idx + 1) % 50 == 0:
+                            print(f"  Progress: {idx + 1}/{len(settled)} tickers synced ({synced} with data)")
+
+                    # Build dataset — try snapshot cutoffs first, fall back to metadata
+                    print("Building benchmark dataset...")
+                    questions = await build_benchmark_dataset(
+                        kalshi_ledger, settled
+                    )
+                    if not questions:
+                        print("  No candlestick history available — using market metadata prices.")
+                        questions = await build_benchmark_from_metadata(
+                            kalshi_ledger, settled
+                        )
+                    save_benchmark_dataset(questions, dataset_path)
+                    print(
+                        f"Saved {len(questions)} benchmark questions to {dataset_path}"
+                    )
+
+                    # Show probability distribution
+                    extreme = sum(1 for q in questions if q.market_prob_at_cutoff <= 0.05 or q.market_prob_at_cutoff >= 0.95)
+                    mid = sum(1 for q in questions if 0.10 <= q.market_prob_at_cutoff <= 0.90)
+                    print(f"  Extreme (≤0.05 or ≥0.95): {extreme}")
+                    print(f"  Mid-range (0.10-0.90): {mid}")
+                    print(f"  Other: {len(questions) - extreme - mid}")
+                    return
+
+                if bench_action == "--run":
+                    if not dataset_path.exists():
+                        raise SystemExit(
+                            f"No benchmark dataset at {dataset_path}. "
+                            "Run: python -m nexus forecast kalshi-benchmark --discover"
+                        )
+
+                    dataset = load_benchmark_dataset(dataset_path)
+                    print(f"Loaded {len(dataset)} benchmark questions.")
+
+                    # Parse run-specific flags
+                    filter_mid = "--filter-mid" in args
+                    independent = "--independent" in args
+                    concurrency = 5
+                    for j, arg in enumerate(args):
+                        if arg == "--concurrency" and j + 1 < len(args):
+                            concurrency = int(args[j + 1])
+
+                    if filter_mid:
+                        full_count = len(dataset)
+                        dataset = [q for q in dataset
+                                   if 0.05 < q.market_prob_at_cutoff < 0.95]
+                        print(f"  Filtered to {len(dataset)} non-extreme questions "
+                              f"(from {full_count}).")
+
+                    # Determine which engines to run
+                    engine_names = engines  # from --engines arg
+                    if "all" in engine_names:
+                        engine_names = [
+                            "market", "naked", "actor", "graphrag", "perspective"
+                        ]
+
+                    from nexus.engine.projection.kalshi_benchmark import MarketBaselineEngine
+                    from nexus.engine.projection.naked_engine import NakedBenchmarkEngine
+                    from nexus.engine.projection.actor_engine import ActorBenchmarkEngine
+                    from nexus.engine.projection.graphrag_engine import GraphRAGBenchmarkEngine
+                    from nexus.engine.projection.perspective_engine import PerspectiveBenchmarkEngine
+                    from nexus.engine.projection.debate_engine import DebateBenchmarkEngine
+                    from nexus.engine.projection.structural_engine import StructuralBenchmarkEngine
+
+                    engine_map = {
+                        "market": MarketBaselineEngine,
+                        "naked": NakedBenchmarkEngine,
+                        "actor": ActorBenchmarkEngine,
+                        "graphrag": GraphRAGBenchmarkEngine,
+                        "perspective": PerspectiveBenchmarkEngine,
+                        "debate": DebateBenchmarkEngine,
+                        "structural": StructuralBenchmarkEngine,
+                    }
+
+                    bench_engines = {}
+                    for name in engine_names:
+                        if name in engine_map:
+                            bench_engines[name] = engine_map[name]()
+                        else:
+                            print(f"  Warning: unknown engine '{name}', skipping")
+
+                    if not bench_engines:
+                        raise SystemExit("No valid engines to benchmark.")
+
+                    # Use first non-market engine to decide LLM needs
+                    llm_engine = next((n for n in engine_names if n != "market"), "naked")
+                    llm = _optional_llm(config, llm_engine) if config else None
+                    if llm and store:
+                        await llm.set_store(store)
+
+                    mode = "INDEPENDENT (no market anchor)" if independent else "anchored to market"
+                    print(f"Running benchmark with engines: {list(bench_engines.keys())} "
+                          f"(concurrency={concurrency}, mode={mode})")
+                    report = await run_benchmark(
+                        dataset, bench_engines, llm=llm, store=store,
+                        concurrency=concurrency, independent=independent,
+                    )
+                    save_benchmark_report(report, report_path)
+                    print(f"Saved report to {report_path}")
+
+                    # Print summary
+                    print(f"\n{'Engine':<20s} {'Mean Brier':>10s} {'Questions':>10s}")
+                    print("-" * 42)
+                    for ename, eresult in report.engine_results.items():
+                        brier = eresult.get("mean_brier")
+                        n = eresult.get("questions_answered", 0)
+                        brier_str = f"{brier:.4f}" if brier is not None else "N/A"
+                        print(f"{ename:<20s} {brier_str:>10s} {n:>10d}")
+                    return
+
+                if bench_action == "--report":
+                    if not report_path.exists():
+                        raise SystemExit(
+                            f"No benchmark report at {report_path}. "
+                            "Run: python -m nexus forecast kalshi-benchmark --run --engines all"
+                        )
+                    raw = json.loads(report_path.read_text())
+                    print(json.dumps(raw, indent=2, default=str))
+                    return
+
+                raise SystemExit(
+                    "Usage: python -m nexus forecast kalshi-benchmark <--discover|--run|--report>\n"
+                    "  --discover           Find settled markets + backfill prices\n"
+                    "  --run --engines all  Run all engines on benchmark dataset\n"
+                    "  --report             Display saved benchmark results"
+                )
+
             raise SystemExit(
-                "Usage: python -m nexus forecast <generate|replay|resolve|benchmark|audit-leakage|audit-predictions|backfill|backfill-keys|backfill-syntheses|export-graph|readiness|kalshi-bootstrap|kalshi-auth-check|kalshi-sync|kalshi-compare|kalshi-scan|kalshi-loop> [args...]"
+                "Usage: python -m nexus forecast <generate|replay|resolve|benchmark|audit-leakage|audit-predictions|backfill|backfill-keys|backfill-syntheses|export-graph|readiness|kalshi-bootstrap|kalshi-auth-check|kalshi-sync|kalshi-compare|kalshi-scan|kalshi-loop|kalshi-benchmark> [args...]"
             )
         finally:
             if store is not None:

@@ -161,6 +161,58 @@ class ForecastResolution(BaseModel):
     external_ref: str | None = None
 
 
+Verdict = Literal["yes", "no", "uncertain"]
+
+
+class EvidenceFactor(BaseModel):
+    """One structural observation bearing on a prediction question."""
+
+    factor: str
+    direction: Literal["supports_yes", "supports_no", "ambiguous"]
+    weight: Literal["strong", "moderate", "weak"]
+    source_type: str  # trajectory, convergence, causal_chain, relationship_change, cross_topic, divergence, world_knowledge
+
+
+class StructuralAssessment(BaseModel):
+    """Reasoning-first prediction output from the structural engine."""
+
+    question: str
+    verdict: Verdict
+    confidence: ConfidenceLevel
+    factors: list[EvidenceFactor] = Field(default_factory=list)
+    reasoning: str = ""
+    contrarian_view: str = ""
+    key_uncertainties: list[str] = Field(default_factory=list)
+    signposts: list[str] = Field(default_factory=list)
+    base_rate_reasoning: str = ""
+    has_kg_evidence: bool = False
+
+    # Tunable mapping — values calibrated after benchmark runs.
+    _PROBABILITY_TABLE: dict = {
+        ("yes", "high"): 0.92,
+        ("yes", "medium"): 0.75,
+        ("yes", "low"): 0.60,
+        ("no", "high"): 0.08,
+        ("no", "medium"): 0.25,
+        ("no", "low"): 0.40,
+        ("uncertain", "high"): 0.50,
+        ("uncertain", "medium"): 0.50,
+        ("uncertain", "low"): 0.50,
+    }
+
+    @property
+    def implied_probability(self) -> float:
+        """Mechanical mapping for backward-compatible Brier scoring only."""
+        return self._PROBABILITY_TABLE.get((self.verdict, self.confidence), 0.50)
+
+    @property
+    def binary_prediction(self) -> bool | None:
+        """The actual prediction: True=yes, False=no, None=abstain."""
+        if self.verdict == "uncertain":
+            return None
+        return self.verdict == "yes"
+
+
 class GraphSnapshot(BaseModel):
     """Materialized graph snapshot for replay-safe retrieval experiments."""
 
