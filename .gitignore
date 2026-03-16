@@ -25,11 +25,16 @@ data/config.yaml
 data/knowledge.db
 data/knowledge.db-shm
 data/knowledge.db-wal
+data/nexus.db
 data/artifacts/
 data/backtest/
 data/metrics/
 data/knowledge/
 data/evaluation/
+data/benchmarks/
+data/experiments/
+data/fixtures/local/
+experiments/
 
 # OAuth tokens
 data/.oauth-tokens.json

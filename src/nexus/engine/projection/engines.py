@@ -257,42 +257,6 @@ class NativeProjectionEngine:
             return _fallback_projection(payload, self.engine_name, max_items)
 
 
-class GraphitiProjectionEngine:
-    """Optional sidecar adapter. Falls back to deterministic output in-core."""
-
-    engine_name = "graphiti"
-
-    async def project(
-        self,
-        llm: LLMClient | None,
-        payload: ProjectionEngineInput,
-        *,
-        critic_pass: bool = True,
-        max_items: int = 3,
-    ) -> TopicProjection:
-        projection = _fallback_projection(payload, self.engine_name, max_items)
-        projection.metadata["sidecar_mode"] = "graphiti_kuzu_stub"
-        return projection
-
-
-class MirofishSpikeProjectionEngine:
-    """Optional AGPL sidecar adapter. Kept isolated from the runtime path."""
-
-    engine_name = "mirofish-spike"
-
-    async def project(
-        self,
-        llm: LLMClient | None,
-        payload: ProjectionEngineInput,
-        *,
-        critic_pass: bool = True,
-        max_items: int = 3,
-    ) -> TopicProjection:
-        projection = _fallback_projection(payload, self.engine_name, max_items)
-        projection.metadata["sidecar_mode"] = "mirofish_stub"
-        return projection
-
-
 def _collect_evidence_event_ids(payload: ProjectionEngineInput) -> list[int]:
     evidence_ids: list[int] = []
     for thread in payload.trajectory_threads or payload.threads:
@@ -307,25 +271,4 @@ def get_projection_engine(engine_name: str) -> ProjectionEngine:
     normalized = engine_name.strip().lower()
     if normalized == "native":
         return NativeProjectionEngine()
-    if normalized == "graphiti":
-        return GraphitiProjectionEngine()
-    if normalized == "mirofish-spike":
-        return MirofishSpikeProjectionEngine()
     raise ValueError(f"Unknown projection engine: {engine_name}")
-
-
-def export_engine_payload(base_dir: Path, engine_name: str, payload: ProjectionEngineInput) -> Path:
-    """Persist a read-only payload snapshot for sidecar experiments."""
-    out_dir = base_dir / "frameworks" / engine_name.replace("-", "_")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    export_path = out_dir / f"{payload.topic_slug}-{payload.run_date.isoformat()}.json"
-    export_path.write_text(json.dumps({
-        "topic_slug": payload.topic_slug,
-        "topic_name": payload.topic_name,
-        "run_date": payload.run_date.isoformat(),
-        "threads": [thread.model_dump(mode="json") for thread in payload.threads],
-        "recent_events": [event.model_dump(mode="json") for event in payload.recent_events],
-        "cross_topic_signals": [signal.model_dump(mode="json") for signal in payload.cross_topic_signals],
-        "metadata": payload.metadata,
-    }, indent=2))
-    return export_path

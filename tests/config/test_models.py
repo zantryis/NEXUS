@@ -224,7 +224,7 @@ def test_budget_negative_limit():
 def test_future_projection_defaults():
     cfg = FutureProjectionConfig()
     assert cfg.enabled is False
-    assert cfg.engine == "native"
+    assert cfg.engine == "actor"
     assert cfg.horizons == [3, 7, 14]
     assert cfg.max_items_per_topic == 3
     assert cfg.graph_sidecars.adapters == ["kuzu", "graphiti"]

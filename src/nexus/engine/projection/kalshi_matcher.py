@@ -11,9 +11,7 @@ One LLM call per matched market for graph-informed probability generation.
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 from datetime import date, timedelta
 
 from nexus.engine.projection.models import ForecastQuestion
@@ -152,12 +150,10 @@ async def generate_aligned_forecasts(
 ) -> list[ForecastQuestion]:
     """Generate OUR probability for each matched Kalshi market question.
 
-    Uses the graph engine's context builder for entity relationship evidence.
-    One LLM call per matched market (or deterministic fallback without LLM).
+    Uses the actor engine for per-actor reasoning (Phase 2 rewire).
+    Falls back to market implied probability when actor engine unavailable.
     """
-    from nexus.engine.projection.graph_engine import build_graph_context, render_graph_prompt
-    from nexus.engine.projection.forecasting import ForecastEngineInput, _clip_probability
-    from nexus.engine.projection.swarm import anchor_blend
+    from nexus.engine.projection.forecasting import _clip_probability
 
     questions: list[ForecastQuestion] = []
 
@@ -165,81 +161,25 @@ async def generate_aligned_forecasts(
         ticker = market["ticker"]
         market_title = market.get("event_title") or market["title"]
         raw_implied = market.get("implied_probability") or 0.5
-        implied = max(0.05, min(0.95, raw_implied))  # Clip to ForecastQuestion bounds
+        implied = max(0.05, min(0.95, raw_implied))
         matched_entities = market.get("matched_entities", [])
 
-        # Build a minimal ForecastQuestion for graph context building
-        horizon_days = 14  # Default for Kalshi-aligned
+        horizon_days = 14
         resolution_date = run_date + timedelta(days=horizon_days)
-
-        stub_question = ForecastQuestion(
-            question=market_title,
-            forecast_type="binary",
-            target_variable="kalshi_aligned",
-            probability=implied,
-            base_rate=implied,
-            resolution_criteria=f"Kalshi market {ticker} resolution",
-            resolution_date=resolution_date,
-            horizon_days=horizon_days,
-            signpost=market_title,
-            target_metadata={
-                "anchor_entities": matched_entities,
-                "kalshi_ticker": ticker,
-                "kalshi_implied": implied,
-            },
-        )
-
-        # Build graph context for this market's entities
-        stub_payload = ForecastEngineInput(
-            topic_slug=topic_slug,
-            topic_name=topic_slug.replace("-", " ").title(),
-            run_date=run_date,
-            threads=[],
-            recent_events=[],
-            cross_topic_signals=[],
-        )
 
         our_probability = implied  # Default: trust market
 
         if llm is not None:
             try:
-                graph_ctx = await build_graph_context(
-                    store, stub_question, stub_payload,
-                )
-
-                prompt = render_graph_prompt(
-                    question=market_title,
-                    deterministic_probability=implied,
-                    base_rate=implied,
-                    graph_context=graph_ctx,
+                from nexus.engine.projection.actor_engine import predict
+                prediction = await predict(
+                    store, llm, market_title,
                     run_date=run_date,
+                    market_prob=implied,
+                    max_actors=4,
                 )
-
-                raw = await llm.complete(
-                    config_key="synthesis",
-                    system_prompt=(
-                        "You are a graph-informed forecasting engine predicting "
-                        "the probability for a prediction market question. Reason "
-                        "ONLY from the entity relationship graph provided. Never "
-                        "use your own knowledge about world events."
-                    ),
-                    user_prompt=prompt,
-                    json_response=True,
-                )
-
-                cleaned = re.sub(r"```json\s*|\s*```", "", raw)
-                cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL)
-                data = json.loads(cleaned)
-
-                llm_prob = float(data.get("probability", implied))
-                llm_prob = max(0.05, min(0.95, llm_prob))
-
-                # Anchor blend: market implied is anchor, graph shifts it
-                our_probability = anchor_blend(
-                    llm_prob, implied, swarm_weight=0.45,
-                )
-
-            except Exception as exc:
+                our_probability = prediction.calibrated_probability
+            except (ImportError, Exception) as exc:
                 logger.warning(
                     "Kalshi aligned forecast failed for %s: %s", ticker, exc,
                 )

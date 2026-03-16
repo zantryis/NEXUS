@@ -10,13 +10,13 @@ from pathlib import Path
 from nexus.config.models import FutureProjectionConfig, NexusConfig
 from nexus.engine.knowledge.pages import compute_prompt_hash
 from nexus.engine.knowledge.store import KnowledgeStore
-from nexus.engine.projection.engines import ProjectionEngineInput, export_engine_payload
+from nexus.engine.projection.engines import ProjectionEngineInput
 from nexus.engine.projection.forecasting import (
     ForecastEngineInput,
     get_forecast_engine,
     projection_from_forecast_run,
 )
-from nexus.engine.projection.graph import build_graph_snapshot, export_graph_snapshot
+from nexus.engine.projection.graph import build_graph_snapshot
 from nexus.engine.projection.historical import HistoricalTopicState, is_signal_rich_events
 from nexus.engine.projection.models import CausalLink, ForecastRun, ThreadSnapshot, TopicProjection
 from nexus.engine.synthesis.knowledge import TopicSynthesis, synthesize_topic
@@ -79,17 +79,6 @@ async def _generate_forecast_artifacts(
         cross_topic_signals=cross_topic_signals,
         metadata=metadata,
     )
-    export_engine_payload(experiments_dir, "graphiti_kuzu", ProjectionEngineInput(
-        topic_slug=payload.topic_slug,
-        topic_name=payload.topic_name,
-        run_date=payload.run_date,
-        threads=payload.threads,
-        recent_events=payload.recent_events,
-        cross_topic_signals=payload.cross_topic_signals,
-        trajectory_threads=[thread for thread in payload.threads if thread.snapshot_count],
-        metadata=payload.metadata,
-    ))
-    export_graph_snapshot(experiments_dir, engine_name, payload.graph_snapshot)
     engine = get_forecast_engine(engine_name)
     calibration_data = await store.get_historical_calibration()
     forecast_run = await engine.generate(
@@ -100,7 +89,6 @@ async def _generate_forecast_artifacts(
         calibration_data=calibration_data or None,
     )
     forecast_run.metadata.update(metadata)
-    forecast_run.metadata["graph_snapshot_metrics"] = payload.graph_snapshot.metrics
     await store.save_forecast_run(forecast_run)
     projection = projection_from_forecast_run(forecast_run, cross_topic_signals)
     projection.metadata["forecast_run_id"] = forecast_run.run_id
@@ -636,7 +624,7 @@ async def run_kalshi_loop(
         kalshi_run = ForecastRun(
             topic_slug="kalshi-aligned",
             topic_name="Kalshi Market Alignment",
-            engine="graph",
+            engine="actor",
             generated_for=run_date,
             summary=f"Kalshi-aligned forecasts: {len(all_questions)} markets matched.",
             questions=all_questions,

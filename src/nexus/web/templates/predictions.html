@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Nexus — Predictions{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h2>Predictions</h2>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="card" style="text-align: center; padding: 1.5rem;">
+        <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--nx-text-dim); margin-bottom: 0.5rem;">Total</div>
+        <div style="font-size: 1.8rem; font-weight: 700;">{{ summary.total }}</div>
+    </div>
+    <div class="card" style="text-align: center; padding: 1.5rem;">
+        <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--nx-text-dim); margin-bottom: 0.5rem;">Resolved</div>
+        <div style="font-size: 1.8rem; font-weight: 700;">{{ summary.resolved }}</div>
+    </div>
+    <div class="card" style="text-align: center; padding: 1.5rem;">
+        <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--nx-text-dim); margin-bottom: 0.5rem;">Our Brier</div>
+        <div style="font-size: 1.8rem; font-weight: 700;">{% if summary.mean_brier is not none %}{{ "%.3f"|format(summary.mean_brier) }}{% else %}&mdash;{% endif %}</div>
+    </div>
+    <div class="card" style="text-align: center; padding: 1.5rem;">
+        <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--nx-text-dim); margin-bottom: 0.5rem;">Market Brier</div>
+        <div style="font-size: 1.8rem; font-weight: 700;">{% if summary.market_mean_brier is not none %}{{ "%.3f"|format(summary.market_mean_brier) }}{% else %}&mdash;{% endif %}</div>
+    </div>
+    <div class="card" style="text-align: center; padding: 1.5rem;">
+        <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--nx-text-dim); margin-bottom: 0.5rem;">Accuracy</div>
+        <div style="font-size: 1.8rem; font-weight: 700;">{% if summary.accuracy is not none %}{{ summary.accuracy }}%{% else %}&mdash;{% endif %}</div>
+    </div>
+</div>
+
+{% if forecasts %}
+<div class="card-section">
+    <div class="card-section-title">Predictions (Last 90 Days)</div>
+</div>
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Question</th>
+            <th class="num">Our Prob</th>
+            <th class="num">Market</th>
+            <th class="num">Gap</th>
+            <th>Outcome</th>
+            <th class="num">Brier</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for q in forecasts %}
+        <tr>
+            <td>{{ q.generated_for }}</td>
+            <td title="{{ q.question }}">{{ q.question[:80] }}{% if q.question|length > 80 %}...{% endif %}</td>
+            <td class="num">{{ "%.0f"|format(q.probability * 100) }}%</td>
+            <td class="num">{% if q.market_prob is not none %}{{ "%.0f"|format(q.market_prob * 100) }}%{% else %}&mdash;{% endif %}</td>
+            <td class="num">{% if q.gap_pp is not none %}{{ q.gap_pp }}pp{% else %}&mdash;{% endif %}</td>
+            <td>
+                {% if q.outcome_status == 'resolved' %}
+                    {% if q.resolved_bool %}YES{% else %}NO{% endif %}
+                {% else %}
+                    <span style="color: var(--nx-text-dim);">pending</span>
+                {% endif %}
+            </td>
+            <td class="num">{% if q.brier_score is not none %}{{ "%.3f"|format(q.brier_score) }}{% else %}&mdash;{% endif %}</td>
+            <td>
+                {% if q.status_label == 'hit' %}
+                    <span style="color: var(--nx-accent-green, #4ade80);">hit</span>
+                {% elif q.status_label == 'miss' %}
+                    <span style="color: var(--nx-accent-red, #f87171);">miss</span>
+                {% else %}
+                    <span style="color: var(--nx-text-dim);">pending</span>
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    <p>No predictions yet. Run the Kalshi loop or actor forecast engine to generate predictions.</p>
+    <p style="font-size: 0.85rem; color: var(--nx-text-dim); margin-top: 0.5rem;">
+        <code>python -m nexus forecast kalshi-loop</code> or <code>python -m nexus forecast generate</code>
+    </p>
+</div>
+{% endif %}
+
+{% endblock %}

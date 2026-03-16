@@ -289,6 +289,20 @@ async def test_audio_route_404_missing(seeded_app, tmp_path):
         assert resp.status_code == 404
 
 
+async def test_predictions_page_loads(client):
+    """Predictions page returns 200 even with no forecast data."""
+    resp = await client.get("/predictions")
+    assert resp.status_code == 200
+    assert "Predictions" in resp.text
+
+
+async def test_predictions_page_shows_empty_state(client):
+    """Predictions page shows empty state when no forecasts exist."""
+    resp = await client.get("/predictions")
+    assert resp.status_code == 200
+    assert "No predictions yet" in resp.text
+
+
 async def test_dashboard_shows_audio_player(seeded_app, tmp_path):
     """Dashboard shows audio player when MP3 exists for briefing date."""
     # Create briefing + audio

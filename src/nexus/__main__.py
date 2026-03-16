@@ -738,7 +738,7 @@ def run_projection():
                 if config is None:
                     raise SystemExit(
                         "Usage: python -m nexus projection generate [--date YYYY-MM-DD] "
-                        "[--engine native|graphiti|mirofish-spike|graph] [--min-thread-snapshots N] [--topic topic-slug]"
+                        "[--engine actor|native] [--min-thread-snapshots N] [--topic topic-slug]"
                     )
 
                 if topic_slug_filter:
@@ -812,7 +812,7 @@ def run_projection():
             if subcommand == "compare":
                 if start is None or end is None:
                     raise SystemExit(
-                        "Usage: python -m nexus projection compare --engines native,graphiti,mirofish-spike --start YYYY-MM-DD --end YYYY-MM-DD"
+                        "Usage: python -m nexus projection compare --engines actor,native --start YYYY-MM-DD --end YYYY-MM-DD"
                     )
                 report = await compare_projection_engines(store, start=start, end=end, engines=engines)
                 print(json.dumps(report, indent=2, default=str))
@@ -838,12 +838,7 @@ def run_forecast():
     from nexus.engine.knowledge.store import KnowledgeStore
     from nexus.engine.projection.evaluation import (
         audit_forecast_leakage,
-        auto_resolve_forecasts,
-        benchmark_forecast_engines,
         export_graph_bundles,
-        forecast_readiness_report,
-        generate_prediction_audit,
-        render_prediction_audit_markdown,
     )
     from nexus.engine.projection.kalshi import (
         KalshiClient,
@@ -865,7 +860,7 @@ def run_forecast():
     target_date = None
     through = None
     engine = None
-    engines = ["native", "baseline", "trajectory"]
+    engines = ["actor", "native"]
     min_thread_snapshots = None
     topic_slug_filter = None
     profile = "signal-rich"
@@ -940,7 +935,7 @@ def run_forecast():
             src.close()
 
     def _optional_llm(config, selected_engine: str):
-        if selected_engine not in {"native", "swarm", "graph"}:
+        if selected_engine not in {"native", "actor"}:
             return None
         api_key = os.getenv("GEMINI_API_KEY")
         anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -1004,59 +999,19 @@ def run_forecast():
                 if config is None:
                     raise SystemExit(
                         "Usage: python -m nexus forecast generate [--date YYYY-MM-DD] "
-                        "[--engine native|baseline|kuzu] [--min-thread-snapshots N] [--topic topic-slug]"
+                        "[--engine actor|native] [--min-thread-snapshots N] [--topic topic-slug]"
                     )
-                llm = _optional_llm(config, engine or "native")
+                llm = _optional_llm(config, engine or "actor")
                 result = await generate_forecasts_from_store(
                     store,
                     llm,
                     config,
                     target_date=target_date,
                     min_thread_snapshots_override=min_thread_snapshots,
-                    engine_override=engine or "native",
+                    engine_override=engine or "actor",
                     experiments_dir=data_dir / "experiments",
                 )
                 print(json.dumps(result, indent=2, default=str))
-                return
-
-            if subcommand == "resolve":
-                if through is None:
-                    raise SystemExit("Usage: python -m nexus forecast resolve --through YYYY-MM-DD [--engine native]")
-                report = await auto_resolve_forecasts(
-                    store,
-                    start=start or date(2000, 1, 1),
-                    end=through,
-                    engine=engine,
-                )
-                print(json.dumps(report, indent=2, default=str))
-                return
-
-            if subcommand in {"replay", "benchmark"}:
-                if config is None or start is None or end is None:
-                    raise SystemExit(
-                        "Usage: python -m nexus forecast benchmark --engines native,baseline,trajectory "
-                        "--start YYYY-MM-DD --end YYYY-MM-DD [--mode audit|replay] [--profile signal-rich]"
-                    )
-                selected_engines = [engine] if subcommand == "replay" and engine else engines
-                report = await benchmark_forecast_engines(
-                    store,
-                    config,
-                    start=start,
-                    end=end,
-                    engines=selected_engines,
-                    llm=_optional_llm(config, "swarm") if {"swarm", "graph"} & set(selected_engines) else (None if strict else _optional_llm(config, "native")),
-                    mode="replay" if subcommand == "replay" else mode,
-                    profile=profile,
-                    strict=strict,
-                    min_thread_snapshots_override=min_thread_snapshots,
-                )
-                out_dir = data_dir / "benchmarks"
-                out_dir.mkdir(parents=True, exist_ok=True)
-                label = "replay" if subcommand == "replay" else "benchmark"
-                out_path = out_dir / f"forecast-{label}-{mode}-{start.isoformat()}-{end.isoformat()}.json"
-                out_path.write_text(json.dumps(report, indent=2, default=str))
-                print(json.dumps(report, indent=2, default=str))
-                print(f"\nSaved: {out_path}")
                 return
 
             if subcommand == "export-graph":
@@ -1075,28 +1030,6 @@ def run_forecast():
                     target_dir=export_dir,
                 )
                 print(json.dumps(report, indent=2, default=str))
-                return
-
-            if subcommand == "readiness":
-                if config is None or start is None or end is None:
-                    raise SystemExit(
-                        "Usage: python -m nexus forecast readiness --start YYYY-MM-DD --end YYYY-MM-DD "
-                        "[--profile signal-rich]"
-                    )
-                report = await forecast_readiness_report(
-                    store,
-                    config,
-                    start=start,
-                    end=end,
-                    profile=profile,
-                    base_dir=data_dir / "benchmarks",
-                )
-                out_dir = data_dir / "benchmarks"
-                out_dir.mkdir(parents=True, exist_ok=True)
-                out_path = out_dir / f"forecast-readiness-{start.isoformat()}-{end.isoformat()}.json"
-                out_path.write_text(json.dumps(report, indent=2, default=str))
-                print(json.dumps(report, indent=2, default=str))
-                print(f"\nSaved: {out_path}")
                 return
 
             if subcommand == "audit-leakage":
@@ -1222,32 +1155,6 @@ def run_forecast():
                 print(f"\nSaved: {out_path}")
                 return
 
-            if subcommand == "audit-predictions":
-                if config is None or start is None or end is None or not engines:
-                    raise SystemExit(
-                        "Usage: python -m nexus forecast audit-predictions "
-                        "--engines native,baseline,trajectory --start YYYY-MM-DD --end YYYY-MM-DD "
-                        "[--profile signal-rich]"
-                    )
-                audit = await generate_prediction_audit(
-                    store,
-                    config,
-                    start=start,
-                    end=end,
-                    engines=engines,
-                    profile=profile,
-                )
-                out_dir = Path("docs/future-projection")
-                out_dir.mkdir(parents=True, exist_ok=True)
-                json_path = out_dir / f"prediction-audit-{start.isoformat()}-{end.isoformat()}.json"
-                md_path = out_dir / f"prediction-audit-{start.isoformat()}-{end.isoformat()}.md"
-                json_path.write_text(json.dumps(audit, indent=2, default=str))
-                md_path.write_text(render_prediction_audit_markdown(audit))
-                print(render_prediction_audit_markdown(audit))
-                print(f"\nSaved: {json_path}")
-                print(f"Saved: {md_path}")
-                return
-
             if subcommand == "kalshi-loop":
                 if config is None:
                     raise SystemExit(
@@ -1256,7 +1163,7 @@ def run_forecast():
                 from nexus.engine.projection.service import run_kalshi_loop
                 from nexus.engine.synthesis.knowledge import TopicSynthesis
                 kalshi_client = KalshiClient(kalshi_config)
-                loop_llm = _optional_llm(config, "graph")
+                loop_llm = _optional_llm(config, "actor")
                 loop_date = target_date or date.today()
 
                 # Load latest syntheses for each topic

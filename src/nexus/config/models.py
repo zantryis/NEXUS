@@ -105,7 +105,7 @@ class KalshiBenchmarkConfig(BaseModel):
 
 class FutureProjectionConfig(BaseModel):
     enabled: bool = False
-    engine: Literal["native", "graphiti", "mirofish-spike", "graph"] = "native"
+    engine: Literal["actor", "native"] = "actor"
     min_history_days: int = Field(default=7, ge=1)
     min_thread_snapshots: int = Field(default=2, ge=1)
     horizons: list[int] = Field(default_factory=lambda: [3, 7, 14])
