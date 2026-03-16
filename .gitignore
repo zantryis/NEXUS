@@ -1,5 +1,7 @@
 # Secrets
 .env
+.secrets/
+kalshi-cred
 
 # Python
 __pycache__/
@@ -9,6 +11,7 @@ __pycache__/
 dist/
 build/
 .venv/
+.venv-sidecars/
 
 # Testing
 .pytest_cache/

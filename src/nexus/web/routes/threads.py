@@ -43,7 +43,9 @@ async def thread_detail(request: Request, slug: str):
     events = await store.get_events_for_thread(thread["id"])
     convergence = await store.get_convergence_for_thread(thread["id"])
     divergence = await store.get_divergence_for_thread(thread["id"])
+    causal_links = await store.get_causal_links_for_thread(thread["id"])
     topics = await store.get_topics_for_thread(thread["id"])
+    projection_items = await store.get_projection_items_for_thread(thread["id"])
 
     # Build full events with sources for the tracker
     events_with_sources = []
@@ -63,6 +65,8 @@ async def thread_detail(request: Request, slug: str):
         "events": events_with_sources,
         "convergence": convergence,
         "divergence": divergence,
+        "causal_links": causal_links,
         "topics": topics,
         "page": page,
+        "projection_items": projection_items,
     })

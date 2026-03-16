@@ -447,10 +447,20 @@ def run_all_services():
 
 
 def run_benchmark():
-    """Run multi-axis benchmark to evaluate pipeline quality."""
+    """Fast benchmark: Suite A on saved fixtures (~3-5 min).
+
+    Usage:
+        python -m nexus benchmark --capture           # Poll 2 topics, save fixtures
+        python -m nexus benchmark                     # Run Suite A on latest fixtures
+        python -m nexus benchmark --threshold 4.0     # Override filter threshold
+        python -m nexus benchmark --fixtures DIR      # Specific fixture snapshot
+    """
     load_dotenv()
     from nexus.config.loader import load_config
-    from nexus.engine.evaluation.benchmark import run_benchmark as _run_benchmark
+    from nexus.engine.evaluation.fast_bench import (
+        capture_benchmark, find_latest_fixture_dir, run_fast_benchmark,
+    )
+    from nexus.engine.knowledge.store import KnowledgeStore
     from nexus.llm.client import LLMClient
 
     data_dir = Path("data")
@@ -466,6 +476,8 @@ def run_benchmark():
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
     deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
     openai_api_key = os.getenv("OPENAI_API_KEY")
+    litellm_base_url = os.getenv("LITELLM_BASE_URL")
+    litellm_api_key = os.getenv("LITELLM_API_KEY")
 
     llm = LLMClient(
         config.models,
@@ -474,57 +486,68 @@ def run_benchmark():
         deepseek_api_key=deepseek_api_key,
         openai_api_key=openai_api_key,
         budget_config=config.budget,
+        litellm_base_url=litellm_base_url,
+        litellm_api_key=litellm_api_key,
     )
 
     # Parse CLI args
-    topics = None
-    styles = None
-    judge_model = None
+    do_capture = "--capture" in sys.argv
+    threshold = None
+    fixture_path = None
 
     args = sys.argv[2:]
     i = 0
     while i < len(args):
-        if args[i] == "--topics" and i + 1 < len(args):
-            topics = [t.strip() for t in args[i + 1].split(",")]
+        if args[i] == "--threshold" and i + 1 < len(args):
+            threshold = float(args[i + 1])
             i += 2
-        elif args[i] == "--styles" and i + 1 < len(args):
-            styles = [s.strip() for s in args[i + 1].split(",")]
+        elif args[i] == "--fixtures" and i + 1 < len(args):
+            fixture_path = Path(args[i + 1])
             i += 2
-        elif args[i] == "--judge-model" and i + 1 < len(args):
-            judge_model = args[i + 1]
-            i += 2
+        elif args[i] == "--capture":
+            i += 1
         else:
             i += 1
 
-    # Apply judge model override if specified
-    if judge_model:
-        config.models.agent = judge_model
-        print(f"  Judge model override: {judge_model}")
+    async def _run():
+        store = KnowledgeStore(data_dir / "nexus.db")
+        await store.initialize()
 
-    print(f"Running benchmark...")
-    if topics:
-        print(f"  Topics: {', '.join(topics)}")
-    if styles:
-        print(f"  Styles: {', '.join(styles)}")
-    print()
+        if do_capture:
+            print("Capturing benchmark fixtures...")
+            output_dir = await capture_benchmark(config, llm, store, data_dir)
+            print(f"Fixtures saved: {output_dir}")
+            return
 
-    report = asyncio.run(_run_benchmark(
-        config, llm, data_dir,
-        topics=topics,
-        styles=styles,
-        judge_model=judge_model,
-    ))
+        # Determine fixture directory
+        if fixture_path:
+            fdir = fixture_path
+        else:
+            benchmarks_dir = data_dir / "benchmarks"
+            if not benchmarks_dir.exists():
+                print("No benchmark fixtures found. Run: python -m nexus benchmark --capture")
+                sys.exit(1)
+            fdir = find_latest_fixture_dir(benchmarks_dir)
 
-    # Output markdown report
-    md = report.to_markdown()
-    print(md)
+        print(f"Running fast benchmark on fixtures: {fdir}")
+        if threshold:
+            print(f"  Threshold override: {threshold}")
+        print()
 
-    # Save JSON
-    benchmarks_dir = data_dir / "benchmarks"
-    benchmarks_dir.mkdir(parents=True, exist_ok=True)
-    json_path = benchmarks_dir / f"{date.today().isoformat()}.json"
-    json_path.write_text(json.dumps(report.to_json(), indent=2, default=str))
-    print(f"\nJSON saved: {json_path}")
+        report = await run_fast_benchmark(
+            llm=llm,
+            store=store,
+            fixture_dir=fdir,
+            threshold_override=threshold,
+            results_dir=data_dir / "benchmarks" / "results",
+        )
+
+        # Print markdown report
+        md = report.to_markdown()
+        print(md)
+        print(f"\nDuration: {report.duration_s:.0f}s")
+
+    asyncio.run(_run())
 
 
 def run_experiment():
@@ -648,6 +671,689 @@ def run_experiment():
     print(report.to_readme_snippet())
 
 
+def run_projection():
+    """Future projection utilities: generate, backfill, evaluate, compare."""
+    load_dotenv()
+    from nexus.config.loader import load_config
+    from nexus.engine.knowledge.store import KnowledgeStore
+    from nexus.engine.projection.evaluation import (
+        auto_evaluate_projections,
+        compare_projection_engines,
+        cross_topic_bridge_report,
+        trajectory_lift_report,
+    )
+    from nexus.engine.projection.service import (
+        backfill_thread_snapshots,
+        generate_projections_from_store,
+    )
+    from nexus.llm.client import LLMClient
+
+    data_dir = Path("data")
+    db_path = data_dir / "knowledge.db"
+    config_path = data_dir / "config.yaml"
+    subcommand = sys.argv[2] if len(sys.argv) > 2 else ""
+
+    start = None
+    end = None
+    target_date = None
+    engine = None
+    engines = ["native"]
+    min_thread_snapshots = None
+    topic_slug_filter = None
+
+    args = sys.argv[3:]
+    i = 0
+    while i < len(args):
+        if args[i] == "--start" and i + 1 < len(args):
+            start = date.fromisoformat(args[i + 1])
+            i += 2
+        elif args[i] == "--end" and i + 1 < len(args):
+            end = date.fromisoformat(args[i + 1])
+            i += 2
+        elif args[i] == "--date" and i + 1 < len(args):
+            target_date = date.fromisoformat(args[i + 1])
+            i += 2
+        elif args[i] == "--engine" and i + 1 < len(args):
+            engine = args[i + 1]
+            i += 2
+        elif args[i] == "--engines" and i + 1 < len(args):
+            engines = [part.strip() for part in args[i + 1].split(",") if part.strip()]
+            i += 2
+        elif args[i] == "--min-thread-snapshots" and i + 1 < len(args):
+            min_thread_snapshots = int(args[i + 1])
+            i += 2
+        elif args[i] == "--topic" and i + 1 < len(args):
+            topic_slug_filter = args[i + 1]
+            i += 2
+        else:
+            i += 1
+
+    async def _run():
+        store = KnowledgeStore(db_path)
+        await store.initialize()
+        try:
+            config = load_config(config_path) if config_path.exists() else None
+
+            if subcommand == "generate":
+                if config is None:
+                    raise SystemExit(
+                        "Usage: python -m nexus projection generate [--date YYYY-MM-DD] "
+                        "[--engine native|graphiti|mirofish-spike|graph] [--min-thread-snapshots N] [--topic topic-slug]"
+                    )
+
+                if topic_slug_filter:
+                    filtered_topics = [
+                        topic for topic in config.topics
+                        if topic.name.lower().replace(" ", "-").replace("/", "-") == topic_slug_filter
+                    ]
+                    if not filtered_topics:
+                        raise SystemExit(f"Topic '{topic_slug_filter}' not found in config.")
+                    config.topics = filtered_topics
+
+                selected_engine = engine or config.future_projection.engine
+                llm = None
+                if selected_engine == "native":
+                    api_key = os.getenv("GEMINI_API_KEY")
+                    anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+                    deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
+                    openai_api_key = os.getenv("OPENAI_API_KEY")
+                    ollama_base_url = os.getenv("OLLAMA_BASE_URL")
+                    litellm_base_url = os.getenv("LITELLM_BASE_URL") or os.getenv("LITELLM_PROXY_URL")
+                    litellm_api_key = os.getenv("LITELLM_API_KEY") or os.getenv("LITELLM_PROXY_API_KEY")
+                    has_provider = any([
+                        api_key,
+                        anthropic_api_key,
+                        deepseek_api_key,
+                        openai_api_key,
+                        ollama_base_url,
+                        litellm_base_url and litellm_api_key,
+                    ])
+                    if has_provider or config.preset == "free":
+                        llm = LLMClient(
+                            config.models,
+                            api_key=api_key,
+                            anthropic_api_key=anthropic_api_key,
+                            deepseek_api_key=deepseek_api_key,
+                            openai_api_key=openai_api_key,
+                            ollama_base_url=ollama_base_url,
+                            budget_config=config.budget,
+                            litellm_base_url=litellm_base_url,
+                            litellm_api_key=litellm_api_key,
+                        )
+
+                result = await generate_projections_from_store(
+                    store,
+                    llm,
+                    config,
+                    target_date=target_date,
+                    min_thread_snapshots_override=min_thread_snapshots,
+                    engine_override=engine,
+                    experiments_dir=data_dir / "experiments",
+                )
+                print(json.dumps(result, indent=2, default=str))
+                return
+
+            if subcommand == "backfill":
+                result = await backfill_thread_snapshots(store)
+                print(json.dumps(result, indent=2))
+                return
+
+            if subcommand == "evaluate":
+                if start is None or end is None:
+                    raise SystemExit("Usage: python -m nexus projection evaluate --start YYYY-MM-DD --end YYYY-MM-DD [--engine native]")
+                report = {
+                    "projection_hit_rate": await auto_evaluate_projections(store, start=start, end=end, engine=engine),
+                    "trajectory_lift": await trajectory_lift_report(store, start=start, end=end),
+                    "cross_topic_bridge_utility": await cross_topic_bridge_report(store, start=start, end=end),
+                }
+                print(json.dumps(report, indent=2, default=str))
+                return
+
+            if subcommand == "compare":
+                if start is None or end is None:
+                    raise SystemExit(
+                        "Usage: python -m nexus projection compare --engines native,graphiti,mirofish-spike --start YYYY-MM-DD --end YYYY-MM-DD"
+                    )
+                report = await compare_projection_engines(store, start=start, end=end, engines=engines)
+                print(json.dumps(report, indent=2, default=str))
+                return
+
+            raise SystemExit(
+                "Usage: python -m nexus projection <generate|backfill|evaluate|compare> [args...]"
+            )
+        finally:
+            await store.close()
+
+    asyncio.run(_run())
+
+
+def run_forecast():
+    """Quantified forecast utilities: generate, replay, resolve, benchmark, backfill, readiness."""
+    load_dotenv()
+    import shutil
+    import sqlite3
+    import tempfile
+    from nexus.config.models import KalshiBenchmarkConfig
+    from nexus.config.loader import load_config
+    from nexus.engine.knowledge.store import KnowledgeStore
+    from nexus.engine.projection.evaluation import (
+        audit_forecast_leakage,
+        auto_resolve_forecasts,
+        benchmark_forecast_engines,
+        export_graph_bundles,
+        forecast_readiness_report,
+        generate_prediction_audit,
+        render_prediction_audit_markdown,
+    )
+    from nexus.engine.projection.kalshi import (
+        KalshiClient,
+        KalshiLedger,
+        bootstrap_kalshi_credentials,
+        compare_forecasts_to_kalshi,
+        sync_kalshi_tickers,
+    )
+    from nexus.engine.projection.service import backfill_signal_rich_profile, backfill_syntheses, generate_forecasts_from_store, topic_slug_from_name
+    from nexus.llm.client import LLMClient
+
+    data_dir = Path("data")
+    db_path = data_dir / "knowledge.db"
+    config_path = data_dir / "config.yaml"
+    subcommand = sys.argv[2] if len(sys.argv) > 2 else ""
+
+    start = None
+    end = None
+    target_date = None
+    through = None
+    engine = None
+    engines = ["native", "baseline", "trajectory"]
+    min_thread_snapshots = None
+    topic_slug_filter = None
+    profile = "signal-rich"
+    mode = "audit"
+    strict = True
+    tickers: list[str] = []
+    mapping_file = None
+    cred_file = None
+    key_path = None
+
+    args = sys.argv[3:]
+    i = 0
+    while i < len(args):
+        if args[i] == "--start" and i + 1 < len(args):
+            start = date.fromisoformat(args[i + 1])
+            i += 2
+        elif args[i] == "--end" and i + 1 < len(args):
+            end = date.fromisoformat(args[i + 1])
+            i += 2
+        elif args[i] == "--through" and i + 1 < len(args):
+            through = date.fromisoformat(args[i + 1])
+            i += 2
+        elif args[i] == "--date" and i + 1 < len(args):
+            target_date = date.fromisoformat(args[i + 1])
+            i += 2
+        elif args[i] == "--engine" and i + 1 < len(args):
+            engine = args[i + 1]
+            i += 2
+        elif args[i] == "--engines" and i + 1 < len(args):
+            engines = [part.strip() for part in args[i + 1].split(",") if part.strip()]
+            i += 2
+        elif args[i] == "--min-thread-snapshots" and i + 1 < len(args):
+            min_thread_snapshots = int(args[i + 1])
+            i += 2
+        elif args[i] == "--topic" and i + 1 < len(args):
+            topic_slug_filter = args[i + 1]
+            i += 2
+        elif args[i] == "--profile" and i + 1 < len(args):
+            profile = args[i + 1]
+            i += 2
+        elif args[i] == "--mode" and i + 1 < len(args):
+            mode = args[i + 1]
+            i += 2
+        elif args[i] == "--tickers" and i + 1 < len(args):
+            tickers = [part.strip() for part in args[i + 1].split(",") if part.strip()]
+            i += 2
+        elif args[i] == "--mapping-file" and i + 1 < len(args):
+            mapping_file = args[i + 1]
+            i += 2
+        elif args[i] == "--cred-file" and i + 1 < len(args):
+            cred_file = args[i + 1]
+            i += 2
+        elif args[i] == "--key-path" and i + 1 < len(args):
+            key_path = args[i + 1]
+            i += 2
+        elif args[i] == "--strict":
+            strict = True
+            i += 1
+        elif args[i] == "--no-strict":
+            strict = False
+            i += 1
+        else:
+            i += 1
+
+    def _snapshot_sqlite_db(source: Path, target: Path) -> None:
+        src = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
+        dst = sqlite3.connect(str(target))
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+            src.close()
+
+    def _optional_llm(config, selected_engine: str):
+        if selected_engine not in {"native", "swarm", "graph"}:
+            return None
+        api_key = os.getenv("GEMINI_API_KEY")
+        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+        deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        ollama_base_url = os.getenv("OLLAMA_BASE_URL")
+        litellm_base_url = os.getenv("LITELLM_BASE_URL") or os.getenv("LITELLM_PROXY_URL")
+        litellm_api_key = os.getenv("LITELLM_API_KEY") or os.getenv("LITELLM_PROXY_API_KEY")
+        has_provider = any([
+            api_key,
+            anthropic_api_key,
+            deepseek_api_key,
+            openai_api_key,
+            ollama_base_url,
+            litellm_base_url and litellm_api_key,
+        ])
+        if not has_provider and config.preset != "free":
+            return None
+        return LLMClient(
+            config.models,
+            api_key=api_key,
+            anthropic_api_key=anthropic_api_key,
+            deepseek_api_key=deepseek_api_key,
+            openai_api_key=openai_api_key,
+            ollama_base_url=ollama_base_url,
+            budget_config=config.budget,
+            litellm_base_url=litellm_base_url,
+            litellm_api_key=litellm_api_key,
+        )
+
+    async def _run():
+        store = None
+        temp_dir = None
+        kalshi_ledger = None
+        try:
+            config = load_config(config_path) if config_path.exists() else None
+            kalshi_config = config.future_projection.kalshi if config else KalshiBenchmarkConfig()
+            if config and topic_slug_filter:
+                filtered_topics = [
+                    topic for topic in config.topics
+                    if topic.name.lower().replace(" ", "-").replace("/", "-") == topic_slug_filter
+                ]
+                if not filtered_topics:
+                    raise SystemExit(f"Topic '{topic_slug_filter}' not found in config.")
+                config.topics = filtered_topics
+
+            if subcommand in {"kalshi-sync", "kalshi-bootstrap", "kalshi-auth-check"}:
+                store = None
+            elif subcommand in {"benchmark", "replay", "audit-leakage", "export-graph", "readiness", "kalshi-compare"}:
+                temp_dir = Path(tempfile.mkdtemp(prefix="nexus-forecast-benchmark-"))
+                snapshot_path = temp_dir / "knowledge.db"
+                _snapshot_sqlite_db(db_path, snapshot_path)
+                store = KnowledgeStore(snapshot_path)
+            else:
+                store = KnowledgeStore(db_path)
+
+            if store is not None:
+                await store.initialize()
+
+            if subcommand == "generate":
+                if config is None:
+                    raise SystemExit(
+                        "Usage: python -m nexus forecast generate [--date YYYY-MM-DD] "
+                        "[--engine native|baseline|kuzu] [--min-thread-snapshots N] [--topic topic-slug]"
+                    )
+                llm = _optional_llm(config, engine or "native")
+                result = await generate_forecasts_from_store(
+                    store,
+                    llm,
+                    config,
+                    target_date=target_date,
+                    min_thread_snapshots_override=min_thread_snapshots,
+                    engine_override=engine or "native",
+                    experiments_dir=data_dir / "experiments",
+                )
+                print(json.dumps(result, indent=2, default=str))
+                return
+
+            if subcommand == "resolve":
+                if through is None:
+                    raise SystemExit("Usage: python -m nexus forecast resolve --through YYYY-MM-DD [--engine native]")
+                report = await auto_resolve_forecasts(
+                    store,
+                    start=start or date(2000, 1, 1),
+                    end=through,
+                    engine=engine,
+                )
+                print(json.dumps(report, indent=2, default=str))
+                return
+
+            if subcommand in {"replay", "benchmark"}:
+                if config is None or start is None or end is None:
+                    raise SystemExit(
+                        "Usage: python -m nexus forecast benchmark --engines native,baseline,trajectory "
+                        "--start YYYY-MM-DD --end YYYY-MM-DD [--mode audit|replay] [--profile signal-rich]"
+                    )
+                selected_engines = [engine] if subcommand == "replay" and engine else engines
+                report = await benchmark_forecast_engines(
+                    store,
+                    config,
+                    start=start,
+                    end=end,
+                    engines=selected_engines,
+                    llm=_optional_llm(config, "swarm") if {"swarm", "graph"} & set(selected_engines) else (None if strict else _optional_llm(config, "native")),
+                    mode="replay" if subcommand == "replay" else mode,
+                    profile=profile,
+                    strict=strict,
+                    min_thread_snapshots_override=min_thread_snapshots,
+                )
+                out_dir = data_dir / "benchmarks"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                label = "replay" if subcommand == "replay" else "benchmark"
+                out_path = out_dir / f"forecast-{label}-{mode}-{start.isoformat()}-{end.isoformat()}.json"
+                out_path.write_text(json.dumps(report, indent=2, default=str))
+                print(json.dumps(report, indent=2, default=str))
+                print(f"\nSaved: {out_path}")
+                return
+
+            if subcommand == "export-graph":
+                if config is None or start is None or end is None:
+                    raise SystemExit(
+                        "Usage: python -m nexus forecast export-graph --start YYYY-MM-DD --end YYYY-MM-DD "
+                        "[--profile signal-rich]"
+                    )
+                export_dir = Path(config.future_projection.graph_sidecars.export_dir)
+                report = await export_graph_bundles(
+                    store,
+                    config,
+                    start=start,
+                    end=end,
+                    profile=profile,
+                    target_dir=export_dir,
+                )
+                print(json.dumps(report, indent=2, default=str))
+                return
+
+            if subcommand == "readiness":
+                if config is None or start is None or end is None:
+                    raise SystemExit(
+                        "Usage: python -m nexus forecast readiness --start YYYY-MM-DD --end YYYY-MM-DD "
+                        "[--profile signal-rich]"
+                    )
+                report = await forecast_readiness_report(
+                    store,
+                    config,
+                    start=start,
+                    end=end,
+                    profile=profile,
+                    base_dir=data_dir / "benchmarks",
+                )
+                out_dir = data_dir / "benchmarks"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                out_path = out_dir / f"forecast-readiness-{start.isoformat()}-{end.isoformat()}.json"
+                out_path.write_text(json.dumps(report, indent=2, default=str))
+                print(json.dumps(report, indent=2, default=str))
+                print(f"\nSaved: {out_path}")
+                return
+
+            if subcommand == "audit-leakage":
+                if config is None or start is None or end is None:
+                    raise SystemExit(
+                        "Usage: python -m nexus forecast audit-leakage --start YYYY-MM-DD --end YYYY-MM-DD "
+                        "[--profile signal-rich]"
+                    )
+                report = await audit_forecast_leakage(
+                    store,
+                    config,
+                    start=start,
+                    end=end,
+                    profile=profile,
+                )
+                out_dir = data_dir / "benchmarks"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                out_path = out_dir / f"forecast-audit-leakage-{start.isoformat()}-{end.isoformat()}.json"
+                out_path.write_text(json.dumps(report, indent=2, default=str))
+                print(json.dumps(report, indent=2, default=str))
+                print(f"\nSaved: {out_path}")
+                return
+
+            if subcommand == "backfill":
+                if config is None:
+                    raise SystemExit("Usage: python -m nexus forecast backfill --profile signal-rich")
+                if profile != "signal-rich":
+                    raise SystemExit(f"Unsupported backfill profile: {profile}")
+                result = await backfill_signal_rich_profile(
+                    store,
+                    config,
+                    target_dir=data_dir / "benchmarks" / "forecast_signal_rich",
+                )
+                print(json.dumps(result, indent=2, default=str))
+                return
+
+            if subcommand == "backfill-keys":
+                result = await store.backfill_forecast_keys(
+                    start=start,
+                    end=end,
+                    engine=engine,
+                )
+                print(json.dumps(result, indent=2, default=str))
+                return
+
+            if subcommand == "backfill-syntheses":
+                if config is None or not topic_slug_filter:
+                    raise SystemExit(
+                        "Usage: python -m nexus forecast backfill-syntheses --topic SLUG "
+                        "[--start YYYY-MM-DD] [--end YYYY-MM-DD]"
+                    )
+                llm = _optional_llm(config, "native")
+                if llm is None:
+                    raise SystemExit("LLM provider required for synthesis backfill. Set GEMINI_API_KEY or similar.")
+                result = await backfill_syntheses(
+                    store,
+                    llm,
+                    config,
+                    topic_slug=topic_slug_filter,
+                    start=start,
+                    end=end,
+                )
+                print(json.dumps(result, indent=2, default=str))
+                return
+
+            if subcommand == "kalshi-bootstrap":
+                result = bootstrap_kalshi_credentials(
+                    cred_path=Path(cred_file or "kalshi-cred"),
+                    config=kalshi_config,
+                    target_key_path=Path(key_path) if key_path else None,
+                )
+                print(json.dumps(result, indent=2, default=str))
+                return
+
+            if subcommand == "kalshi-auth-check":
+                report = await KalshiClient(kalshi_config).auth_check()
+                out_dir = data_dir / "benchmarks"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                out_path = out_dir / "forecast-kalshi-auth-check.json"
+                out_path.write_text(json.dumps(report, indent=2, default=str))
+                print(json.dumps(report, indent=2, default=str))
+                print(f"\nSaved: {out_path}")
+                return
+
+            if subcommand == "kalshi-sync":
+                if config is None or start is None or end is None or not tickers:
+                    raise SystemExit(
+                        "Usage: python -m nexus forecast kalshi-sync --tickers T1,T2 --start YYYY-MM-DD --end YYYY-MM-DD"
+                    )
+                kalshi_ledger = KalshiLedger(Path(config.future_projection.kalshi.ledger_path))
+                await kalshi_ledger.initialize()
+                result = await sync_kalshi_tickers(
+                    kalshi_ledger,
+                    KalshiClient(config.future_projection.kalshi),
+                    tickers=tickers,
+                    start=start,
+                    end=end,
+                )
+                print(json.dumps(result, indent=2, default=str))
+                return
+
+            if subcommand == "kalshi-compare":
+                if config is None or start is None or end is None:
+                    raise SystemExit(
+                        "Usage: python -m nexus forecast kalshi-compare --start YYYY-MM-DD --end YYYY-MM-DD "
+                        "[--mapping-file PATH]"
+                    )
+                kalshi_ledger = KalshiLedger(Path(config.future_projection.kalshi.ledger_path))
+                await kalshi_ledger.initialize()
+                report = await compare_forecasts_to_kalshi(
+                    store,
+                    kalshi_ledger,
+                    start=start,
+                    end=end,
+                    mapping_path=Path(mapping_file or config.future_projection.kalshi.mapping_file),
+                    engine=engine,
+                )
+                out_dir = data_dir / "benchmarks"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                out_path = out_dir / f"forecast-kalshi-compare-{start.isoformat()}-{end.isoformat()}.json"
+                out_path.write_text(json.dumps(report, indent=2, default=str))
+                print(json.dumps(report, indent=2, default=str))
+                print(f"\nSaved: {out_path}")
+                return
+
+            if subcommand == "audit-predictions":
+                if config is None or start is None or end is None or not engines:
+                    raise SystemExit(
+                        "Usage: python -m nexus forecast audit-predictions "
+                        "--engines native,baseline,trajectory --start YYYY-MM-DD --end YYYY-MM-DD "
+                        "[--profile signal-rich]"
+                    )
+                audit = await generate_prediction_audit(
+                    store,
+                    config,
+                    start=start,
+                    end=end,
+                    engines=engines,
+                    profile=profile,
+                )
+                out_dir = Path("docs/future-projection")
+                out_dir.mkdir(parents=True, exist_ok=True)
+                json_path = out_dir / f"prediction-audit-{start.isoformat()}-{end.isoformat()}.json"
+                md_path = out_dir / f"prediction-audit-{start.isoformat()}-{end.isoformat()}.md"
+                json_path.write_text(json.dumps(audit, indent=2, default=str))
+                md_path.write_text(render_prediction_audit_markdown(audit))
+                print(render_prediction_audit_markdown(audit))
+                print(f"\nSaved: {json_path}")
+                print(f"Saved: {md_path}")
+                return
+
+            if subcommand == "kalshi-loop":
+                if config is None:
+                    raise SystemExit(
+                        "Usage: python -m nexus forecast kalshi-loop [--date YYYY-MM-DD] [--topic topic-slug]"
+                    )
+                from nexus.engine.projection.service import run_kalshi_loop
+                from nexus.engine.synthesis.knowledge import TopicSynthesis
+                kalshi_client = KalshiClient(kalshi_config)
+                loop_llm = _optional_llm(config, "graph")
+                loop_date = target_date or date.today()
+
+                # Load latest syntheses for each topic
+                loop_syntheses = []
+                for topic in config.topics:
+                    slug = topic_slug_from_name(topic.name)
+                    synthesis_dates = [date.fromisoformat(raw) for raw in await store.get_synthesis_dates(slug)]
+                    syn_date = next((d for d in synthesis_dates if d <= loop_date), None) if synthesis_dates else None
+                    if not syn_date:
+                        continue
+                    raw_syn = await store.get_synthesis(slug, syn_date)
+                    if raw_syn:
+                        from nexus.engine.projection.service import hydrate_synthesis_threads
+                        loop_syntheses.append(
+                            await hydrate_synthesis_threads(store, TopicSynthesis(**raw_syn), topic_slug=slug)
+                        )
+
+                result = await run_kalshi_loop(
+                    store,
+                    loop_llm,
+                    loop_syntheses,
+                    run_date=loop_date,
+                    kalshi_client=kalshi_client,
+                    kalshi_config=kalshi_config,
+                )
+                out_dir = data_dir / "benchmarks"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                out_path = out_dir / f"forecast-kalshi-loop-{loop_date.isoformat()}.json"
+                out_path.write_text(json.dumps(result, indent=2, default=str))
+                print(json.dumps(result, indent=2, default=str))
+                print(f"\nSaved: {out_path}")
+                return
+
+            if subcommand == "kalshi-scan":
+                kalshi_client = KalshiClient(kalshi_config)
+                keywords_str = None
+                for i, arg in enumerate(sys.argv):
+                    if arg == "--keywords" and i + 1 < len(sys.argv):
+                        keywords_str = sys.argv[i + 1]
+                keyword_list = [k.strip().lower() for k in keywords_str.split(",")] if keywords_str else []
+                all_events: list[dict] = []
+                cursor = None
+                for _ in range(10):  # max 10 pages
+                    page = await kalshi_client.list_events(status="open", limit=200, cursor=cursor)
+                    events_list = page.get("events", [])
+                    if not events_list:
+                        break
+                    all_events.extend(events_list)
+                    cursor = page.get("cursor")
+                    if not cursor:
+                        break
+
+                # Group by category/series and count markets
+                categories: dict[str, dict] = {}
+                for event in all_events:
+                    cat = event.get("category", "unknown")
+                    title = event.get("title", "")
+                    markets = event.get("markets", [])
+                    market_count = len(markets) if isinstance(markets, list) else 0
+                    if keyword_list:
+                        haystack = (title + " " + event.get("subtitle", "")).lower()
+                        if not any(kw in haystack for kw in keyword_list):
+                            continue
+                    if cat not in categories:
+                        categories[cat] = {"events": 0, "markets": 0, "sample_titles": []}
+                    categories[cat]["events"] += 1
+                    categories[cat]["markets"] += market_count
+                    if len(categories[cat]["sample_titles"]) < 3:
+                        categories[cat]["sample_titles"].append(title[:100])
+
+                ranked = sorted(categories.items(), key=lambda x: x[1]["markets"], reverse=True)
+                report = {
+                    "total_events": len(all_events),
+                    "matched_events": sum(c["events"] for c in categories.values()),
+                    "keywords": keyword_list or "(none)",
+                    "categories": [
+                        {"category": cat, **data}
+                        for cat, data in ranked
+                    ],
+                }
+                print(json.dumps(report, indent=2, default=str))
+                return
+
+            raise SystemExit(
+                "Usage: python -m nexus forecast <generate|replay|resolve|benchmark|audit-leakage|audit-predictions|backfill|backfill-keys|backfill-syntheses|export-graph|readiness|kalshi-bootstrap|kalshi-auth-check|kalshi-sync|kalshi-compare|kalshi-scan|kalshi-loop> [args...]"
+            )
+        finally:
+            if store is not None:
+                await store.close()
+            if kalshi_ledger is not None:
+                await kalshi_ledger.close()
+            if temp_dir is not None:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+    asyncio.run(_run())
+
+
 def run_test():
     """Run E2E smoke test with real APIs."""
     load_dotenv()
@@ -705,6 +1411,75 @@ def run_test():
     sys.exit(0 if result.success else 1)
 
 
+def run_audit_sources():
+    """Audit source quality: score each feed's articles against a topic."""
+    load_dotenv()
+    import yaml
+    from nexus.config.loader import load_config
+    from nexus.engine.sources.audit import audit_registry
+    from nexus.llm.client import LLMClient
+
+    data_dir = Path("data")
+    config_path = data_dir / "config.yaml"
+
+    if not config_path.exists():
+        print(f"Config not found at {config_path}. Run: python -m nexus setup")
+        sys.exit(1)
+
+    if len(sys.argv) < 3:
+        print("Usage: python -m nexus audit-sources <topic-slug>")
+        sys.exit(1)
+
+    slug = sys.argv[2]
+    config = load_config(config_path)
+
+    topic = None
+    for t in config.topics:
+        topic_slug = t.name.lower().replace(" ", "-").replace("/", "-")
+        if topic_slug == slug:
+            topic = t
+            break
+    if not topic:
+        print(f"Topic '{slug}' not found. Available:")
+        for t in config.topics:
+            print(f"  {t.name.lower().replace(' ', '-').replace('/', '-')}")
+        sys.exit(1)
+
+    registry_path = data_dir / "sources" / slug / "registry.yaml"
+    if not registry_path.exists():
+        print(f"No registry at {registry_path}")
+        sys.exit(1)
+
+    reg = yaml.safe_load(registry_path.read_text()) or {}
+    sources = reg.get("sources", [])
+    if not sources:
+        print(f"Empty registry at {registry_path}")
+        sys.exit(1)
+
+    api_key = os.getenv("GEMINI_API_KEY")
+    deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
+    llm = LLMClient(
+        config.models, api_key=api_key, deepseek_api_key=deepseek_api_key,
+    )
+
+    print(f"Auditing {len(sources)} sources for '{slug}'...\n")
+
+    results = asyncio.run(audit_registry(llm, sources, topic))
+
+    # Print results table
+    print(f"\n{'Source':<30s} {'Score':>5s}  {'Articles':>8s}  {'Verdict'}")
+    print("-" * 60)
+    for r in sorted(results, key=lambda x: x["mean_score"], reverse=True):
+        print(f"{r['source_id']:<30s} {r['mean_score']:>5.1f}  {r['n_articles']:>8d}  {r['verdict'].upper()}")
+
+    # Summary
+    keeps = sum(1 for r in results if r["verdict"] == "keep")
+    reviews = sum(1 for r in results if r["verdict"] == "review")
+    drops = sum(1 for r in results if r["verdict"] == "drop")
+    deads = sum(1 for r in results if r["verdict"] == "dead")
+    print(f"\nSummary: {keeps} keep, {reviews} review, {drops} drop, {deads} dead")
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -720,9 +1495,12 @@ def main():
               "  serve      Start dashboard only\n"
               "  sources    Manage feeds (check | list | build | discover)\n"
               "  evaluate   Judge synthesis quality\n"
-              "  benchmark  Multi-axis pipeline quality benchmark\n"
+              "  projection Projection generate/backfill/evaluation/compare utilities\n"
+              "  forecast   Quantified forecast generate/replay/resolve/benchmark utilities\n"
+              "  benchmark  Fast benchmark: Suite A on saved fixtures (~3-5 min)\n"
               "  experiment Controlled experiment suites for README claims\n"
-              "  test       Run E2E smoke test with real APIs\n")
+              "  test       Run E2E smoke test with real APIs\n"
+              "  audit-sources  Score each feed's relevance to a topic\n")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -735,6 +1513,10 @@ def main():
         run_sources()
     elif command == "evaluate":
         run_evaluate()
+    elif command == "projection":
+        run_projection()
+    elif command == "forecast":
+        run_forecast()
     elif command == "serve":
         run_serve()
     elif command == "setup":
@@ -746,6 +1528,8 @@ def main():
         run_experiment()
     elif command == "test":
         run_test()
+    elif command == "audit-sources":
+        run_audit_sources()
     else:
         print(f"Unknown command: {command}")
         sys.exit(1)

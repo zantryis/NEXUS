@@ -171,10 +171,15 @@ async def _build_topics_data(store, max_threads: int = 3, max_events: int = 2):
                 "status": t["status"],
                 "key_entities": t.get("key_entities", [])[:5],
                 "updated_at": t.get("updated_at", ""),
+                "trajectory_label": t.get("trajectory_label"),
+                "momentum_score": t.get("momentum_score"),
                 "events": latest_events,
                 "convergence": convergence[:2] if convergence else [],
                 "divergence": divergence[:1] if divergence else [],
             })
+
+        projection = await store.get_latest_projection(slug)
+        cross_topic = await store.get_cross_topic_signals(slug, limit=3)
 
         topics_data.append({
             "slug": slug,
@@ -182,6 +187,8 @@ async def _build_topics_data(store, max_threads: int = 3, max_events: int = 2):
             "event_count": ts["event_count"],
             "thread_count": ts.get("thread_count", len(threads_raw)),
             "threads": topic_threads,
+            "projection": projection,
+            "cross_topic_signals": cross_topic,
         })
 
     return topics_data

@@ -22,10 +22,13 @@ VALID_TONES = frozenset({
 
 
 class Event(BaseModel):
+    event_id: int | None = None
     date: date
     summary: str
     sources: list[dict] = Field(default_factory=list)
     entities: list[str] = Field(default_factory=list)
+    raw_entities: list[str] = Field(default_factory=list)
+    causal_references: list[dict] = Field(default_factory=list)
     relation_to_prior: str = ""
     significance: int = 5
 
@@ -130,6 +133,7 @@ EXTRACT_SYSTEM_PROMPT = (
     "Given an article and topic context, output JSON with: "
     "date (YYYY-MM-DD), summary (1-2 sentences in the user's language), "
     "entities (key actors/organizations), relation_to_prior (how this connects to recent events), "
+    "causal_references (optional list of objects with summary_hint, relation_type, evidence_text, strength), "
     "significance (1-10), "
     "editorial_tone (ONE word from: neutral, alarmist, supportive, critical, dismissive, "
     "celebratory, cautious, defensive), "
@@ -238,6 +242,8 @@ async def extract_event(
                 "framing": framing,
             }],
             entities=data.get("entities", []),
+            raw_entities=data.get("entities", []),
+            causal_references=data.get("causal_references", []),
             relation_to_prior=data.get("relation_to_prior", ""),
             significance=int(data.get("significance", 5)),
         )

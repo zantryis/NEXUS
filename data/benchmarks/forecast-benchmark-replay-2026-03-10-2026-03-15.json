@@ -1,0 +1,233 @@
+{
+  "meta": {
+    "mode": "replay",
+    "profile": "signal-rich",
+    "strict": true,
+    "start": "2026-03-10",
+    "end": "2026-03-15",
+    "cutoff_count": 16,
+    "domains": [
+      "ai-ml-research",
+      "global-energy-transition",
+      "iran-us-relations"
+    ],
+    "resolved_forecast_count": 20,
+    "validity_label": "infrastructure-valid, statistically-insufficient",
+    "leakage_audit": {
+      "cutoffs_audited": 16,
+      "topics_audited": [
+        "ai-ml-research",
+        "global-energy-transition",
+        "iran-us-relations"
+      ],
+      "thread_state_leak_cutoffs": 13,
+      "future_signal_leak_cutoffs": 13,
+      "passes_strict_gate": false,
+      "examples": [
+        {
+          "type": "thread_state",
+          "topic_slug": "iran-us-relations",
+          "cutoff": "2026-03-10",
+          "thread": "Operation Epic Fury and U.S. Regional Defense Strategy",
+          "latest_snapshot_count": 6,
+          "as_of_snapshot_count": 1,
+          "latest_trajectory": "steady",
+          "as_of_trajectory": "about_to_break"
+        },
+        {
+          "type": "cross_topic_signal",
+          "topic_slug": "iran-us-relations",
+          "cutoff": "2026-03-10",
+          "future_signal_dates": [
+            "2026-03-15",
+            "2026-03-15",
+            "2026-03-15",
+            "2026-03-15",
+            "2026-03-15"
+          ],
+          "entities": [
+            "United States",
+            "United States",
+            "US Department of Defense",
+            "Strait of Hormuz",
+            "Saudi Arabia"
+          ]
+        },
+        {
+          "type": "thread_state",
+          "topic_slug": "iran-us-relations",
+          "cutoff": "2026-03-11",
+          "thread": "Naval Conflict and Blockade of the Strait of Hormuz",
+          "latest_snapshot_count": 6,
+          "as_of_snapshot_count": 2,
+          "latest_trajectory": "about_to_break",
+          "as_of_trajectory": "about_to_break"
+        },
+        {
+          "type": "cross_topic_signal",
+          "topic_slug": "iran-us-relations",
+          "cutoff": "2026-03-11",
+          "future_signal_dates": [
+            "2026-03-15",
+            "2026-03-15",
+            "2026-03-15",
+            "2026-03-15",
+            "2026-03-15"
+          ],
+          "entities": [
+            "United States",
+            "United States",
+            "US Department of Defense",
+            "Strait of Hormuz",
+            "Saudi Arabia"
+          ]
+        },
+        {
+          "type": "thread_state",
+          "topic_slug": "iran-us-relations",
+          "cutoff": "2026-03-13",
+          "thread": "Kinetic Escalation and Attrition on Day 14",
+          "latest_snapshot_count": 3,
+          "as_of_snapshot_count": 1,
+          "latest_trajectory": "steady",
+          "as_of_trajectory": "accelerating"
+        },
+        {
+          "type": "cross_topic_signal",
+          "topic_slug": "iran-us-relations",
+          "cutoff": "2026-03-13",
+          "future_signal_dates": [
+            "2026-03-15",
+            "2026-03-15",
+            "2026-03-15",
+            "2026-03-15",
+            "2026-03-15"
+          ],
+          "entities": [
+            "United States",
+            "United States",
+            "US Department of Defense",
+            "Strait of Hormuz",
+            "Saudi Arabia"
+          ]
+        },
+        {
+          "type": "thread_state",
+          "topic_slug": "ai-ml-research",
+          "cutoff": "2026-03-10",
+          "thread": "Advancements in Physical Grounding and World Models",
+          "latest_snapshot_count": 9,
+          "as_of_snapshot_count": 4,
+          "latest_trajectory": "accelerating",
+          "as_of_trajectory": "about_to_break"
+        },
+        {
+          "type": "cross_topic_signal",
+          "topic_slug": "ai-ml-research",
+          "cutoff": "2026-03-10",
+          "future_signal_dates": [
+            "2026-03-15",
+            "2026-03-15",
+            "2026-03-15",
+            "2026-03-14",
+            "2026-03-14"
+          ],
+          "entities": [
+            "US Department of Defense",
+            "Tesla",
+            "Pentagon",
+            "Uber",
+            "U.S. Department of Defense"
+          ]
+        },
+        {
+          "type": "thread_state",
+          "topic_slug": "ai-ml-research",
+          "cutoff": "2026-03-11",
+          "thread": "Autonomous Engineering Breakthroughs in Hardware and Software",
+          "latest_snapshot_count": 8,
+          "as_of_snapshot_count": 4,
+          "latest_trajectory": "steady",
+          "as_of_trajectory": "steady"
+        },
+        {
+          "type": "cross_topic_signal",
+          "topic_slug": "ai-ml-research",
+          "cutoff": "2026-03-11",
+          "future_signal_dates": [
+            "2026-03-15",
+            "2026-03-15",
+            "2026-03-15",
+            "2026-03-14",
+            "2026-03-14"
+          ],
+          "entities": [
+            "US Department of Defense",
+            "Tesla",
+            "Pentagon",
+            "Uber",
+            "U.S. Department of Defense"
+          ]
+        }
+      ]
+    }
+  },
+  "engines": {
+    "graph": {
+      "total": 20,
+      "accuracy": 0.55,
+      "mean_brier": 0.1726,
+      "mean_log_loss": 0.521,
+      "calibration": {
+        "0.80-0.95": {
+          "total": 4,
+          "resolved_true": 4,
+          "hit_rate": 1.0
+        },
+        "0.40-0.60": {
+          "total": 9,
+          "resolved_true": 2,
+          "hit_rate": 0.222
+        },
+        "0.60-0.80": {
+          "total": 5,
+          "resolved_true": 5,
+          "hit_rate": 1.0
+        },
+        "0.20-0.40": {
+          "total": 2,
+          "resolved_true": 0,
+          "hit_rate": 0.0
+        }
+      }
+    },
+    "trajectory": {
+      "total": 20,
+      "accuracy": 0.55,
+      "mean_brier": 0.1414,
+      "mean_log_loss": 0.4627,
+      "calibration": {
+        "0.80-0.95": {
+          "total": 4,
+          "resolved_true": 4,
+          "hit_rate": 1.0
+        },
+        "0.60-0.80": {
+          "total": 5,
+          "resolved_true": 5,
+          "hit_rate": 1.0
+        },
+        "0.40-0.60": {
+          "total": 9,
+          "resolved_true": 2,
+          "hit_rate": 0.222
+        },
+        "0.20-0.40": {
+          "total": 2,
+          "resolved_true": 0,
+          "hit_rate": 0.0
+        }
+      }
+    }
+  }
+}

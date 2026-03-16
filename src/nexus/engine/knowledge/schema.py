@@ -6,7 +6,7 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 9
+CURRENT_VERSION = 13
 
 DDL = """
 -- Schema version tracking
@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS events (
     summary TEXT NOT NULL,
     significance INTEGER NOT NULL DEFAULT 5,
     relation_to_prior TEXT NOT NULL DEFAULT '',
+    raw_entities TEXT NOT NULL DEFAULT '[]',
     topic_slug TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -54,7 +55,8 @@ CREATE TABLE IF NOT EXISTS event_sources (
     outlet TEXT NOT NULL DEFAULT '',
     affiliation TEXT NOT NULL DEFAULT '',
     country TEXT NOT NULL DEFAULT '',
-    language TEXT NOT NULL DEFAULT 'en'
+    language TEXT NOT NULL DEFAULT 'en',
+    framing TEXT NOT NULL DEFAULT ''
 );
 
 -- Persistent narrative threads
@@ -121,7 +123,7 @@ CREATE TABLE IF NOT EXISTS pages (
     slug TEXT NOT NULL UNIQUE,
     title TEXT NOT NULL,
     page_type TEXT NOT NULL
-        CHECK(page_type IN ('backstory','entity_profile','thread_deepdive','weekly_recap')),
+        CHECK(page_type IN ('backstory','entity_profile','thread_deepdive','weekly_recap','projection')),
     topic_slug TEXT,
     content_md TEXT NOT NULL,
     generated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -136,6 +138,150 @@ CREATE TABLE IF NOT EXISTS syntheses (
     date TEXT NOT NULL,
     data_json TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Projection support (v10)
+CREATE TABLE IF NOT EXISTS thread_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL REFERENCES threads(id),
+    snapshot_date TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'emerging',
+    significance INTEGER NOT NULL DEFAULT 5,
+    event_count INTEGER NOT NULL DEFAULT 0,
+    latest_event_date TEXT,
+    velocity_7d REAL NOT NULL DEFAULT 0.0,
+    acceleration_7d REAL NOT NULL DEFAULT 0.0,
+    significance_trend_7d REAL NOT NULL DEFAULT 0.0,
+    momentum_score REAL NOT NULL DEFAULT 0.0,
+    trajectory_label TEXT NOT NULL DEFAULT 'steady',
+    UNIQUE(thread_id, snapshot_date)
+);
+
+CREATE TABLE IF NOT EXISTS causal_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_event_id INTEGER NOT NULL REFERENCES events(id),
+    target_event_id INTEGER NOT NULL REFERENCES events(id),
+    relation_type TEXT NOT NULL DEFAULT 'follow_on',
+    evidence_text TEXT NOT NULL DEFAULT '',
+    strength REAL NOT NULL DEFAULT 0.5,
+    UNIQUE(source_event_id, target_event_id, relation_type)
+);
+
+CREATE TABLE IF NOT EXISTS cross_topic_signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_slug TEXT NOT NULL,
+    related_topic_slug TEXT NOT NULL,
+    shared_entity TEXT NOT NULL,
+    signal_type TEXT NOT NULL DEFAULT 'entity_bridge',
+    observed_at TEXT NOT NULL,
+    event_ids_json TEXT NOT NULL DEFAULT '[]',
+    related_event_ids_json TEXT NOT NULL DEFAULT '[]',
+    note TEXT NOT NULL DEFAULT '',
+    UNIQUE(topic_slug, related_topic_slug, shared_entity, observed_at)
+);
+
+CREATE TABLE IF NOT EXISTS projections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_slug TEXT NOT NULL,
+    topic_name TEXT NOT NULL,
+    engine TEXT NOT NULL DEFAULT 'native',
+    generated_for TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ready',
+    summary TEXT NOT NULL DEFAULT '',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS projection_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    projection_id INTEGER NOT NULL REFERENCES projections(id),
+    claim TEXT NOT NULL,
+    confidence TEXT NOT NULL DEFAULT 'medium',
+    horizon_days INTEGER NOT NULL DEFAULT 7,
+    signpost TEXT NOT NULL,
+    signals_cited_json TEXT NOT NULL DEFAULT '[]',
+    evidence_event_ids_json TEXT NOT NULL DEFAULT '[]',
+    evidence_thread_ids_json TEXT NOT NULL DEFAULT '[]',
+    review_after TEXT NOT NULL,
+    external_ref TEXT
+);
+
+CREATE TABLE IF NOT EXISTS projection_outcomes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    projection_item_id INTEGER NOT NULL REFERENCES projection_items(id),
+    outcome_status TEXT NOT NULL DEFAULT 'pending',
+    score REAL,
+    notes TEXT NOT NULL DEFAULT '',
+    reviewed_at TEXT,
+    external_ref TEXT
+);
+
+CREATE TABLE IF NOT EXISTS forecast_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_slug TEXT NOT NULL,
+    topic_name TEXT NOT NULL,
+    engine TEXT NOT NULL DEFAULT 'native',
+    generated_for TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS forecast_questions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forecast_run_id INTEGER NOT NULL REFERENCES forecast_runs(id),
+    forecast_key TEXT NOT NULL DEFAULT '',
+    question TEXT NOT NULL,
+    forecast_type TEXT NOT NULL DEFAULT 'binary',
+    target_variable TEXT NOT NULL,
+    target_metadata_json TEXT NOT NULL DEFAULT '{}',
+    probability REAL NOT NULL DEFAULT 0.5,
+    base_rate REAL NOT NULL DEFAULT 0.5,
+    resolution_criteria TEXT NOT NULL,
+    resolution_date TEXT NOT NULL,
+    horizon_days INTEGER NOT NULL DEFAULT 7,
+    signpost TEXT NOT NULL,
+    expected_direction TEXT,
+    signals_cited_json TEXT NOT NULL DEFAULT '[]',
+    evidence_event_ids_json TEXT NOT NULL DEFAULT '[]',
+    evidence_thread_ids_json TEXT NOT NULL DEFAULT '[]',
+    cross_topic_signal_ids_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'open',
+    external_ref TEXT
+);
+
+CREATE TABLE IF NOT EXISTS forecast_scenarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forecast_run_id INTEGER NOT NULL REFERENCES forecast_runs(id),
+    scenario_key TEXT NOT NULL,
+    label TEXT NOT NULL,
+    probability REAL NOT NULL DEFAULT 0.5,
+    description TEXT NOT NULL DEFAULT '',
+    signposts_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'open'
+);
+
+CREATE TABLE IF NOT EXISTS forecast_resolutions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forecast_question_id INTEGER NOT NULL REFERENCES forecast_questions(id),
+    outcome_status TEXT NOT NULL DEFAULT 'pending',
+    resolved_bool INTEGER,
+    realized_direction TEXT,
+    actual_value REAL,
+    brier_score REAL,
+    log_loss REAL,
+    notes TEXT NOT NULL DEFAULT '',
+    resolved_at TEXT,
+    external_ref TEXT
+);
+
+CREATE TABLE IF NOT EXISTS forecast_mappings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forecast_question_id INTEGER NOT NULL REFERENCES forecast_questions(id),
+    forecast_key TEXT NOT NULL DEFAULT '',
+    mapping_type TEXT NOT NULL DEFAULT 'external_ref',
+    external_ref TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
 );
 
 -- Indexes
@@ -153,6 +299,18 @@ CREATE INDEX IF NOT EXISTS idx_pages_slug ON pages(slug);
 CREATE INDEX IF NOT EXISTS idx_pages_stale ON pages(stale_after);
 CREATE INDEX IF NOT EXISTS idx_summaries_topic ON summaries(topic_slug, period_type);
 CREATE INDEX IF NOT EXISTS idx_syntheses_topic_date ON syntheses(topic_slug, date);
+CREATE INDEX IF NOT EXISTS idx_thread_snapshots_thread_date ON thread_snapshots(thread_id, snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_causal_links_source ON causal_links(source_event_id);
+CREATE INDEX IF NOT EXISTS idx_causal_links_target ON causal_links(target_event_id);
+CREATE INDEX IF NOT EXISTS idx_cross_topic_signals_topic_date ON cross_topic_signals(topic_slug, observed_at);
+CREATE INDEX IF NOT EXISTS idx_projections_topic_date ON projections(topic_slug, generated_for);
+CREATE INDEX IF NOT EXISTS idx_projection_items_projection ON projection_items(projection_id);
+CREATE INDEX IF NOT EXISTS idx_projection_outcomes_item ON projection_outcomes(projection_item_id);
+CREATE INDEX IF NOT EXISTS idx_forecast_runs_topic_date ON forecast_runs(topic_slug, generated_for);
+CREATE INDEX IF NOT EXISTS idx_forecast_questions_run ON forecast_questions(forecast_run_id);
+CREATE INDEX IF NOT EXISTS idx_forecast_questions_resolution_date ON forecast_questions(resolution_date);
+CREATE INDEX IF NOT EXISTS idx_forecast_resolutions_question ON forecast_resolutions(forecast_question_id);
+CREATE INDEX IF NOT EXISTS idx_forecast_mappings_question ON forecast_mappings(forecast_question_id);
 """
 
 
@@ -285,6 +443,224 @@ ALTER TABLE event_sources ADD COLUMN framing TEXT NOT NULL DEFAULT '';
 """
 
 
+MIGRATION_V10 = """
+-- Projection substrate (v10)
+ALTER TABLE events ADD COLUMN raw_entities TEXT NOT NULL DEFAULT '[]';
+
+CREATE TABLE IF NOT EXISTS thread_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL REFERENCES threads(id),
+    snapshot_date TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'emerging',
+    significance INTEGER NOT NULL DEFAULT 5,
+    event_count INTEGER NOT NULL DEFAULT 0,
+    latest_event_date TEXT,
+    velocity_7d REAL NOT NULL DEFAULT 0.0,
+    acceleration_7d REAL NOT NULL DEFAULT 0.0,
+    significance_trend_7d REAL NOT NULL DEFAULT 0.0,
+    momentum_score REAL NOT NULL DEFAULT 0.0,
+    trajectory_label TEXT NOT NULL DEFAULT 'steady',
+    UNIQUE(thread_id, snapshot_date)
+);
+
+CREATE TABLE IF NOT EXISTS causal_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_event_id INTEGER NOT NULL REFERENCES events(id),
+    target_event_id INTEGER NOT NULL REFERENCES events(id),
+    relation_type TEXT NOT NULL DEFAULT 'follow_on',
+    evidence_text TEXT NOT NULL DEFAULT '',
+    strength REAL NOT NULL DEFAULT 0.5,
+    UNIQUE(source_event_id, target_event_id, relation_type)
+);
+
+CREATE TABLE IF NOT EXISTS cross_topic_signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_slug TEXT NOT NULL,
+    related_topic_slug TEXT NOT NULL,
+    shared_entity TEXT NOT NULL,
+    signal_type TEXT NOT NULL DEFAULT 'entity_bridge',
+    observed_at TEXT NOT NULL,
+    event_ids_json TEXT NOT NULL DEFAULT '[]',
+    related_event_ids_json TEXT NOT NULL DEFAULT '[]',
+    note TEXT NOT NULL DEFAULT '',
+    UNIQUE(topic_slug, related_topic_slug, shared_entity, observed_at)
+);
+
+CREATE TABLE IF NOT EXISTS projections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_slug TEXT NOT NULL,
+    topic_name TEXT NOT NULL,
+    engine TEXT NOT NULL DEFAULT 'native',
+    generated_for TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ready',
+    summary TEXT NOT NULL DEFAULT '',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS projection_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    projection_id INTEGER NOT NULL REFERENCES projections(id),
+    claim TEXT NOT NULL,
+    confidence TEXT NOT NULL DEFAULT 'medium',
+    horizon_days INTEGER NOT NULL DEFAULT 7,
+    signpost TEXT NOT NULL,
+    signals_cited_json TEXT NOT NULL DEFAULT '[]',
+    evidence_event_ids_json TEXT NOT NULL DEFAULT '[]',
+    evidence_thread_ids_json TEXT NOT NULL DEFAULT '[]',
+    review_after TEXT NOT NULL,
+    external_ref TEXT
+);
+
+CREATE TABLE IF NOT EXISTS projection_outcomes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    projection_item_id INTEGER NOT NULL REFERENCES projection_items(id),
+    outcome_status TEXT NOT NULL DEFAULT 'pending',
+    score REAL,
+    notes TEXT NOT NULL DEFAULT '',
+    reviewed_at TEXT,
+    external_ref TEXT
+);
+
+CREATE TABLE IF NOT EXISTS pages_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    page_type TEXT NOT NULL
+        CHECK(page_type IN ('backstory','entity_profile','thread_deepdive','weekly_recap','projection')),
+    topic_slug TEXT,
+    content_md TEXT NOT NULL,
+    generated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    stale_after TEXT NOT NULL,
+    prompt_hash TEXT NOT NULL DEFAULT ''
+);
+INSERT OR IGNORE INTO pages_new (id, slug, title, page_type, topic_slug, content_md, generated_at, stale_after, prompt_hash)
+    SELECT id, slug, title, page_type, topic_slug, content_md, generated_at, stale_after, prompt_hash FROM pages;
+DROP TABLE IF EXISTS pages;
+ALTER TABLE pages_new RENAME TO pages;
+
+CREATE INDEX IF NOT EXISTS idx_thread_snapshots_thread_date ON thread_snapshots(thread_id, snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_causal_links_source ON causal_links(source_event_id);
+CREATE INDEX IF NOT EXISTS idx_causal_links_target ON causal_links(target_event_id);
+CREATE INDEX IF NOT EXISTS idx_cross_topic_signals_topic_date ON cross_topic_signals(topic_slug, observed_at);
+CREATE INDEX IF NOT EXISTS idx_projections_topic_date ON projections(topic_slug, generated_for);
+CREATE INDEX IF NOT EXISTS idx_projection_items_projection ON projection_items(projection_id);
+CREATE INDEX IF NOT EXISTS idx_projection_outcomes_item ON projection_outcomes(projection_item_id);
+CREATE INDEX IF NOT EXISTS idx_pages_slug ON pages(slug);
+CREATE INDEX IF NOT EXISTS idx_pages_stale ON pages(stale_after);
+"""
+
+
+MIGRATION_V11 = """
+-- Quantified forecast substrate (v11)
+CREATE TABLE IF NOT EXISTS forecast_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_slug TEXT NOT NULL,
+    topic_name TEXT NOT NULL,
+    engine TEXT NOT NULL DEFAULT 'native',
+    generated_for TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS forecast_questions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forecast_run_id INTEGER NOT NULL REFERENCES forecast_runs(id),
+    forecast_key TEXT NOT NULL DEFAULT '',
+    question TEXT NOT NULL,
+    forecast_type TEXT NOT NULL DEFAULT 'binary',
+    target_variable TEXT NOT NULL,
+    target_metadata_json TEXT NOT NULL DEFAULT '{}',
+    probability REAL NOT NULL DEFAULT 0.5,
+    base_rate REAL NOT NULL DEFAULT 0.5,
+    resolution_criteria TEXT NOT NULL,
+    resolution_date TEXT NOT NULL,
+    horizon_days INTEGER NOT NULL DEFAULT 7,
+    signpost TEXT NOT NULL,
+    expected_direction TEXT,
+    signals_cited_json TEXT NOT NULL DEFAULT '[]',
+    evidence_event_ids_json TEXT NOT NULL DEFAULT '[]',
+    evidence_thread_ids_json TEXT NOT NULL DEFAULT '[]',
+    cross_topic_signal_ids_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'open',
+    external_ref TEXT
+);
+
+CREATE TABLE IF NOT EXISTS forecast_scenarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forecast_run_id INTEGER NOT NULL REFERENCES forecast_runs(id),
+    scenario_key TEXT NOT NULL,
+    label TEXT NOT NULL,
+    probability REAL NOT NULL DEFAULT 0.5,
+    description TEXT NOT NULL DEFAULT '',
+    signposts_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'open'
+);
+
+CREATE TABLE IF NOT EXISTS forecast_resolutions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forecast_question_id INTEGER NOT NULL REFERENCES forecast_questions(id),
+    outcome_status TEXT NOT NULL DEFAULT 'pending',
+    resolved_bool INTEGER,
+    realized_direction TEXT,
+    actual_value REAL,
+    brier_score REAL,
+    log_loss REAL,
+    notes TEXT NOT NULL DEFAULT '',
+    resolved_at TEXT,
+    external_ref TEXT
+);
+
+CREATE TABLE IF NOT EXISTS forecast_mappings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forecast_question_id INTEGER NOT NULL REFERENCES forecast_questions(id),
+    forecast_key TEXT NOT NULL DEFAULT '',
+    mapping_type TEXT NOT NULL DEFAULT 'external_ref',
+    external_ref TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_forecast_runs_topic_date ON forecast_runs(topic_slug, generated_for);
+CREATE INDEX IF NOT EXISTS idx_forecast_questions_run ON forecast_questions(forecast_run_id);
+CREATE INDEX IF NOT EXISTS idx_forecast_questions_key ON forecast_questions(forecast_key);
+CREATE INDEX IF NOT EXISTS idx_forecast_questions_resolution_date ON forecast_questions(resolution_date);
+CREATE INDEX IF NOT EXISTS idx_forecast_resolutions_question ON forecast_resolutions(forecast_question_id);
+CREATE INDEX IF NOT EXISTS idx_forecast_mappings_question ON forecast_mappings(forecast_question_id);
+CREATE INDEX IF NOT EXISTS idx_forecast_mappings_key ON forecast_mappings(forecast_key);
+"""
+
+
+MIGRATION_V12 = """
+-- Forecast readiness contract updates (v12)
+ALTER TABLE forecast_questions ADD COLUMN forecast_key TEXT NOT NULL DEFAULT '';
+ALTER TABLE forecast_mappings ADD COLUMN forecast_key TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_forecast_questions_key ON forecast_questions(forecast_key);
+CREATE INDEX IF NOT EXISTS idx_forecast_mappings_key ON forecast_mappings(forecast_key);
+"""
+
+MIGRATION_V13 = """
+-- Entity-entity relationships with bi-temporal validity (v13)
+CREATE TABLE IF NOT EXISTS entity_relationships (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_entity_id INTEGER NOT NULL REFERENCES entities(id),
+    target_entity_id INTEGER NOT NULL REFERENCES entities(id),
+    relation_type TEXT NOT NULL,
+    evidence_text TEXT NOT NULL DEFAULT '',
+    source_event_id INTEGER REFERENCES events(id),
+    strength REAL NOT NULL DEFAULT 0.5,
+    valid_from TEXT NOT NULL,
+    valid_until TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(source_entity_id, target_entity_id, relation_type, source_event_id)
+);
+CREATE INDEX IF NOT EXISTS idx_er_source ON entity_relationships(source_entity_id);
+CREATE INDEX IF NOT EXISTS idx_er_target ON entity_relationships(target_entity_id);
+CREATE INDEX IF NOT EXISTS idx_er_valid ON entity_relationships(valid_from, valid_until);
+CREATE INDEX IF NOT EXISTS idx_er_type ON entity_relationships(relation_type);
+"""
+
+
 async def initialize_schema(db: aiosqlite.Connection) -> None:
     """Create all tables and indexes. Idempotent."""
     await db.executescript(DDL)
@@ -325,18 +701,58 @@ async def initialize_schema(db: aiosqlite.Connection) -> None:
         await db.executescript(MIGRATION_V8)
         logger.info("Applied migration v8: pipeline_runs table")
 
-    if current < 9:
+    if current < 9 and not await _has_column(db, "event_sources", "framing"):
         await db.executescript(MIGRATION_V9)
         logger.info("Applied migration v9: event_sources framing column")
 
+    if current < 10 and (
+        not await _has_column(db, "events", "raw_entities")
+        or not await _has_table(db, "thread_snapshots")
+        or not await _has_table(db, "projections")
+    ):
+        await db.executescript(MIGRATION_V10)
+        logger.info("Applied migration v10: future projection substrate")
+
+    if current < 11 and not await _has_table(db, "forecast_runs"):
+        await db.executescript(MIGRATION_V11)
+        logger.info("Applied migration v11: quantified forecast substrate")
+
+    if current < 12 and (
+        not await _has_column(db, "forecast_questions", "forecast_key")
+        or not await _has_column(db, "forecast_mappings", "forecast_key")
+    ):
+        await db.executescript(MIGRATION_V12)
+        logger.info("Applied migration v12: forecast readiness contract columns")
+
+    if current < 13 and not await _has_table(db, "entity_relationships"):
+        await db.executescript(MIGRATION_V13)
+        logger.info("Applied migration v13: entity-entity relationships")
+
     if current < CURRENT_VERSION:
         await db.execute(
-            "INSERT INTO schema_version (version) VALUES (?)",
+            "INSERT OR IGNORE INTO schema_version (version) VALUES (?)",
             (CURRENT_VERSION,),
         )
+        if await _has_column(db, "forecast_questions", "forecast_key"):
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_forecast_questions_key ON forecast_questions(forecast_key)"
+            )
+        if await _has_column(db, "forecast_mappings", "forecast_key"):
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_forecast_mappings_key ON forecast_mappings(forecast_key)"
+            )
         await db.commit()
         logger.info(f"Knowledge schema initialized at version {CURRENT_VERSION}")
     else:
+        if await _has_column(db, "forecast_questions", "forecast_key"):
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_forecast_questions_key ON forecast_questions(forecast_key)"
+            )
+        if await _has_column(db, "forecast_mappings", "forecast_key"):
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_forecast_mappings_key ON forecast_mappings(forecast_key)"
+            )
+        await db.commit()
         logger.debug(f"Knowledge schema already at version {current}")
 
 
@@ -345,3 +761,16 @@ async def get_schema_version(db: aiosqlite.Connection) -> int:
     cursor = await db.execute("SELECT MAX(version) FROM schema_version")
     row = await cursor.fetchone()
     return row[0] if row[0] is not None else 0
+
+
+async def _has_table(db: aiosqlite.Connection, table_name: str) -> bool:
+    cursor = await db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table_name,),
+    )
+    return (await cursor.fetchone()) is not None
+
+
+async def _has_column(db: aiosqlite.Connection, table_name: str, column_name: str) -> bool:
+    cursor = await db.execute(f"PRAGMA table_info({table_name})")
+    return any(row[1] == column_name for row in await cursor.fetchall())

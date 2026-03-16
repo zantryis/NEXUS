@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from nexus.config.models import TopicConfig
 from nexus.engine.knowledge.compression import Summary
 from nexus.engine.knowledge.events import Event, are_independent
+from nexus.engine.projection.models import CrossTopicSignal, TopicProjection
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.engine.sources.polling import ContentItem
 from nexus.engine.synthesis.threads import (
@@ -45,6 +46,12 @@ class NarrativeThread(BaseModel):
     thread_id: Optional[int] = None
     slug: Optional[str] = None
     status: Optional[str] = None
+    velocity_7d: Optional[float] = None
+    acceleration_7d: Optional[float] = None
+    significance_trend_7d: Optional[float] = None
+    momentum_score: Optional[float] = None
+    trajectory_label: Optional[str] = None
+    snapshot_count: Optional[int] = None
 
 
 class TopicSynthesis(BaseModel):
@@ -54,6 +61,8 @@ class TopicSynthesis(BaseModel):
     background: list[Summary] = Field(default_factory=list)
     source_balance: dict = Field(default_factory=dict)  # {affiliation: count}
     languages_represented: list[str] = Field(default_factory=list)
+    cross_topic_signals: list[CrossTopicSignal] = Field(default_factory=list)
+    projection: TopicProjection | None = None
     metadata: dict = Field(default_factory=dict)
 
 
@@ -540,6 +549,7 @@ async def _persist_threads(
             thread.status = status
 
             # Persist convergence/divergence
+            await store.clear_thread_analysis(tid)
             for c in thread.convergence:
                 if isinstance(c, dict):
                     await store.add_convergence(

@@ -473,6 +473,78 @@ sources:
     affiliation: private
     country: US
 
+  - id: openai-blog
+    name: "OpenAI Blog"
+    url: "https://openai.com/blog/rss.xml"
+    language: en
+    tier: A
+    tags: [ai, research, llm]
+    affiliation: private
+    country: US
+
+  - id: deepmind-blog
+    name: "DeepMind Blog"
+    url: "https://deepmind.google/blog/rss.xml"
+    language: en
+    tier: A
+    tags: [ai, research]
+    affiliation: private
+    country: GB
+
+  - id: google-ai-blog
+    name: "Google AI Blog"
+    url: "https://blog.google/technology/ai/rss/"
+    language: en
+    tier: A
+    tags: [ai, research, llm]
+    affiliation: private
+    country: US
+
+  - id: nvidia-ai-blog
+    name: "NVIDIA AI Blog"
+    url: "https://blogs.nvidia.com/feed/"
+    language: en
+    tier: A
+    tags: [ai, hardware, research]
+    affiliation: private
+    country: US
+
+  - id: huggingface-blog
+    name: "Hugging Face Blog"
+    url: "https://huggingface.co/blog/feed.xml"
+    language: en
+    tier: B
+    tags: [ai, research, llm]
+    affiliation: nonprofit
+    country: US
+
+  - id: ieee-spectrum
+    name: "IEEE Spectrum"
+    url: "https://spectrum.ieee.org/feeds/feed.rss"
+    language: en
+    tier: A
+    tags: [tech, ai, science, engineering]
+    affiliation: academic
+    country: US
+
+  - id: semiengineering
+    name: "Semiconductor Engineering"
+    url: "https://semiengineering.com/feed/"
+    language: en
+    tier: A
+    tags: [semiconductors, hardware, ai]
+    affiliation: private
+    country: US
+
+  - id: the-register
+    name: "The Register"
+    url: "https://www.theregister.com/headlines.atom"
+    language: en
+    tier: B
+    tags: [tech, ai, cybersecurity]
+    affiliation: private
+    country: GB
+
   # ── Energy / Climate ────────────────────────────────
   - id: carbon-brief
     name: "Carbon Brief"
@@ -500,6 +572,33 @@ sources:
     tags: [energy, markets, policy]
     affiliation: private
     country: GB
+
+  - id: utility-dive
+    name: "Utility Dive"
+    url: "https://www.utilitydive.com/feeds/news/"
+    language: en
+    tier: B
+    tags: [energy, utilities, policy]
+    affiliation: private
+    country: US
+
+  - id: pv-magazine
+    name: "PV Magazine"
+    url: "https://www.pv-magazine.com/feed/"
+    language: en
+    tier: B
+    tags: [energy, solar, renewables]
+    affiliation: private
+    country: DE
+
+  - id: doe-news
+    name: "US Department of Energy"
+    url: "https://www.energy.gov/rss.xml"
+    language: en
+    tier: A
+    tags: [energy, policy, nuclear]
+    affiliation: public
+    country: US
 
   # ══════════════════════════════════════════════════════
   # SPACE / AEROSPACE

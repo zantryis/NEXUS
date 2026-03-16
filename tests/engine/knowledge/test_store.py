@@ -5,6 +5,14 @@ from datetime import date
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.engine.knowledge.events import Event
 from nexus.engine.knowledge.compression import Summary
+from nexus.engine.projection.models import (
+    ForecastQuestion,
+    ForecastResolution,
+    ForecastRun,
+    ProjectionItem,
+    ThreadSnapshot,
+    TopicProjection,
+)
 
 
 @pytest.fixture
@@ -364,6 +372,190 @@ async def test_convergence_divergence(store):
     assert did > 0
 
 
+async def test_add_events_preserves_raw_entities_without_auto_linking(store):
+    event = Event(
+        date=date(2026, 3, 9),
+        summary="Canonicalized event",
+        significance=7,
+        entities=["International Atomic Energy Agency", "Iran"],
+        raw_entities=["IAEA", "Iran"],
+        sources=[{"url": "https://reuters.com/1", "outlet": "reuters"}],
+    )
+    ids = await store.add_events([event], "iran-us")
+    loaded = await store.get_events("iran-us")
+    assert ids[0] == loaded[0].event_id
+    assert loaded[0].raw_entities == ["IAEA", "Iran"]
+    assert loaded[0].entities == ["IAEA", "Iran"]  # no canonical links yet
+
+
+async def test_thread_snapshots_roundtrip(store):
+    tid = await store.upsert_thread("snap-thread", "Snapshot Thread", 8, "active")
+    s1 = ThreadSnapshot(
+        thread_id=tid,
+        snapshot_date=date(2026, 3, 8),
+        status="active",
+        significance=7,
+        event_count=1,
+        latest_event_date=date(2026, 3, 8),
+    )
+    s2 = ThreadSnapshot(
+        thread_id=tid,
+        snapshot_date=date(2026, 3, 10),
+        status="active",
+        significance=8,
+        event_count=4,
+        latest_event_date=date(2026, 3, 10),
+    )
+    await store.upsert_thread_snapshot(s1)
+    await store.upsert_thread_snapshot(s2)
+
+    latest = await store.get_latest_thread_snapshot(tid)
+    assert latest is not None
+    assert latest.trajectory_label in {"accelerating", "about_to_break", "steady"}
+    assert latest.event_count == 4
+
+
+async def test_save_and_get_latest_projection(store):
+    projection = TopicProjection(
+        topic_slug="iran-us",
+        topic_name="Iran-US",
+        generated_for=date(2026, 3, 10),
+        summary="Forward look summary",
+        items=[ProjectionItem(
+            claim="Sanctions pressure is likely to continue.",
+            confidence="medium",
+            horizon_days=7,
+            signpost="Watch for Treasury action",
+            signals_cited=["trajectory:accelerating"],
+            evidence_thread_ids=[1],
+            review_after=date(2026, 3, 17),
+        )],
+    )
+    await store.save_projection(projection)
+    loaded = await store.get_latest_projection("iran-us")
+    assert loaded is not None
+    assert loaded.summary == "Forward look summary"
+    assert loaded.items[0].claim.startswith("Sanctions pressure")
+
+
+async def test_save_and_get_latest_forecast_run(store):
+    forecast_run = ForecastRun(
+        topic_slug="iran-us",
+        topic_name="Iran-US",
+        generated_for=date(2026, 3, 10),
+        summary="Quantified forecast summary",
+        questions=[ForecastQuestion(
+            question="Will sanctions coverage add a new event by 2026-03-17?",
+            forecast_type="binary",
+            target_variable="thread_new_event_count",
+            target_metadata={"thread_id": 1, "threshold": 1, "topic_slug": "iran-us"},
+            probability=0.68,
+            base_rate=0.55,
+            resolution_criteria="Resolves true if thread 1 gains at least 1 new linked event by the resolution date.",
+            resolution_date=date(2026, 3, 17),
+            horizon_days=7,
+            signpost="Watch for Treasury action",
+            evidence_thread_ids=[1],
+        )],
+    )
+    await store.save_forecast_run(forecast_run)
+
+    loaded = await store.get_latest_forecast_run("iran-us")
+    assert loaded is not None
+    assert loaded.summary == "Quantified forecast summary"
+    assert loaded.questions[0].target_variable == "thread_new_event_count"
+    assert loaded.questions[0].question_id is not None
+
+
+async def test_set_forecast_resolution(store):
+    forecast_run = ForecastRun(
+        topic_slug="iran-us",
+        topic_name="Iran-US",
+        generated_for=date(2026, 3, 10),
+        questions=[ForecastQuestion(
+            question="Will sanctions coverage add a new event by 2026-03-17?",
+            forecast_type="binary",
+            target_variable="thread_new_event_count",
+            target_metadata={"thread_id": 1, "threshold": 1, "topic_slug": "iran-us"},
+            probability=0.68,
+            base_rate=0.55,
+            resolution_criteria="Resolves true if thread 1 gains at least 1 new linked event by the resolution date.",
+            resolution_date=date(2026, 3, 17),
+            horizon_days=7,
+            signpost="Watch for Treasury action",
+            evidence_thread_ids=[1],
+        )],
+    )
+    await store.save_forecast_run(forecast_run)
+    question_id = forecast_run.questions[0].question_id
+    assert question_id is not None
+
+    await store.set_forecast_resolution(ForecastResolution(
+        forecast_question_id=question_id,
+        outcome_status="resolved",
+        resolved_bool=True,
+        actual_value=1.0,
+        brier_score=0.1024,
+        log_loss=0.3857,
+        notes="Observed one new event.",
+        resolved_at=date(2026, 3, 17),
+    ))
+
+    pending = await store.get_pending_forecast_questions(until=date(2026, 3, 17))
+    assert pending == []
+
+
+async def test_backfill_forecast_keys_persists_missing_keys(store):
+    forecast_run = ForecastRun(
+        topic_slug="iran-us",
+        topic_name="Iran-US",
+        generated_for=date(2026, 3, 10),
+        questions=[ForecastQuestion(
+            question="Will sanctions coverage add a new event by 2026-03-17?",
+            forecast_type="binary",
+            target_variable="thread_new_event_count",
+            target_metadata={"thread_id": 1, "threshold": 1, "topic_slug": "iran-us"},
+            probability=0.68,
+            base_rate=0.55,
+            resolution_criteria="Resolves true if thread 1 gains at least 1 new linked event by the resolution date.",
+            resolution_date=date(2026, 3, 17),
+            horizon_days=7,
+            signpost="Watch for Treasury action",
+            evidence_thread_ids=[1],
+        )],
+    )
+    await store.save_forecast_run(forecast_run)
+    question_id = forecast_run.questions[0].question_id
+    assert question_id is not None
+
+    await store.db.execute("UPDATE forecast_questions SET forecast_key = '' WHERE id = ?", (question_id,))
+    await store.db.commit()
+
+    report = await store.backfill_forecast_keys(
+        start=date(2026, 3, 10),
+        end=date(2026, 3, 10),
+        engine="native",
+    )
+
+    assert report["questions_backfilled"] == 1
+    cursor = await store.db.execute("SELECT forecast_key FROM forecast_questions WHERE id = ?", (question_id,))
+    row = await cursor.fetchone()
+    assert row[0].startswith("iran-us:2026-03-10:")
+
+
+async def test_detect_and_save_cross_topic_signals(store):
+    event_a = _make_event(d="2026-03-09", summary="Iran event", entities=["Iran"])
+    event_b = _make_event(d="2026-03-10", summary="Energy event", entities=["Iran", "OPEC"])
+    await store.add_events([event_a], "iran-us")
+    await store.add_events([event_b], "energy")
+
+    signals = await store.detect_and_save_cross_topic_signals(reference_date=date(2026, 3, 10))
+    assert signals
+    iran_signals = await store.get_cross_topic_signals("iran-us")
+    assert iran_signals
+    assert iran_signals[0].shared_entity == "Iran"
+
+
 # ── Syntheses ─────────────────────────────────────────────────────
 
 
@@ -638,6 +830,13 @@ async def test_get_events_for_thread(seeded_store):
     assert "Iran" in events[1].entities
 
 
+async def test_get_events_for_thread_as_of(seeded_store):
+    s = seeded_store["store"]
+    events = await s.get_events_for_thread_as_of(seeded_store["sanctions_thread_id"], date(2026, 3, 8))
+    assert len(events) == 1
+    assert events[0].summary == "Iran sanctions announced"
+
+
 async def test_get_convergence_for_thread(seeded_store):
     s = seeded_store["store"]
     conv = await s.get_convergence_for_thread(seeded_store["sanctions_thread_id"])
@@ -682,6 +881,51 @@ async def test_get_thread(seeded_store):
 
     # Missing slug returns None
     assert await s.get_thread("nonexistent") is None
+
+
+async def test_get_all_threads_as_of_uses_historical_snapshot(store):
+    event = _make_event(d="2026-03-01", summary="Sanctions statement", entities=["Iran"])
+    event_id = (await store.add_events([event], "iran-us"))[0]
+    tid = await store.upsert_thread("iran-thread", "Iran Thread", 8, "active")
+    await store.link_thread_topic(tid, "iran-us")
+    await store.link_thread_events(tid, [event_id])
+    await store.upsert_thread_snapshot(ThreadSnapshot(
+        thread_id=tid,
+        snapshot_date=date(2026, 3, 1),
+        status="active",
+        significance=8,
+        event_count=1,
+        latest_event_date=date(2026, 3, 1),
+    ))
+    await store.upsert_thread_snapshot(ThreadSnapshot(
+        thread_id=tid,
+        snapshot_date=date(2026, 3, 10),
+        status="active",
+        significance=8,
+        event_count=3,
+        latest_event_date=date(2026, 3, 10),
+    ))
+
+    historical = await store.get_all_threads_as_of("iran-us", date(2026, 3, 1))
+    latest = await store.get_all_threads("iran-us")
+
+    assert historical[0]["snapshot_count"] == 1
+    assert latest[0]["snapshot_count"] == 2
+
+
+async def test_get_cross_topic_signals_as_of_ignores_future_rows(store):
+    iran = _make_event(d="2026-03-01", summary="Sanctions statement", entities=["Iran"])
+    energy = _make_event(d="2026-03-12", summary="Energy price statement", entities=["Iran"])
+    iran_id = (await store.add_events([iran], "iran-us"))[0]
+    energy_id = (await store.add_events([energy], "global-energy-transition"))[0]
+
+    iran_entity_id = await store.upsert_entity("Iran", "country", ["iran"])
+    await store.link_event_entities(iran_id, [iran_entity_id])
+    await store.link_event_entities(energy_id, [iran_entity_id])
+    await store.detect_and_save_cross_topic_signals(reference_date=date(2026, 3, 12))
+
+    signals = await store.get_cross_topic_signals_as_of("iran-us", date(2026, 3, 1))
+    assert signals == []
 
 
 async def test_get_all_threads(seeded_store):
@@ -846,3 +1090,117 @@ async def test_get_related_events(seeded_store):
     assert seeded_store["iran_event_ids"][1] in related_ids
     # Should NOT include the event itself
     assert eid not in related_ids
+
+
+# ── get_historical_calibration ────────────────────────────────────
+
+
+async def test_get_historical_calibration_returns_resolved_rows(store):
+    """Should return only resolved forecast questions with their outcomes."""
+    # Create two runs — one resolved, one pending
+    run1 = ForecastRun(
+        topic_slug="iran-us",
+        topic_name="Iran-US",
+        engine="native",
+        generated_for=date(2026, 3, 10),
+        questions=[ForecastQuestion(
+            question="Will sanctions add a new event by 2026-03-17?",
+            forecast_type="binary",
+            target_variable="thread_new_event_count",
+            target_metadata={"thread_id": 1, "threshold": 1, "topic_slug": "iran-us"},
+            probability=0.60,
+            base_rate=0.50,
+            resolution_criteria="Resolves true if thread 1 gains 1+ event.",
+            resolution_date=date(2026, 3, 17),
+            horizon_days=7,
+            signpost="Watch for Treasury action",
+            evidence_thread_ids=[1],
+        )],
+    )
+    await store.save_forecast_run(run1)
+    qid1 = run1.questions[0].question_id
+
+    run2 = ForecastRun(
+        topic_slug="iran-us",
+        topic_name="Iran-US",
+        engine="native",
+        generated_for=date(2026, 3, 12),
+        questions=[ForecastQuestion(
+            question="Will sanctions add a new event by 2026-03-19?",
+            forecast_type="binary",
+            target_variable="thread_new_event_count",
+            target_metadata={"thread_id": 2, "threshold": 1, "topic_slug": "iran-us"},
+            probability=0.45,
+            base_rate=0.40,
+            resolution_criteria="Resolves true if thread 2 gains 1+ event.",
+            resolution_date=date(2026, 3, 19),
+            horizon_days=7,
+            signpost="Watch for escalation",
+            evidence_thread_ids=[2],
+        )],
+    )
+    await store.save_forecast_run(run2)
+
+    # Resolve only the first one
+    await store.set_forecast_resolution(ForecastResolution(
+        forecast_question_id=qid1,
+        outcome_status="resolved",
+        resolved_bool=True,
+        actual_value=1.0,
+        brier_score=0.16,
+        log_loss=0.51,
+        notes="One new event observed.",
+        resolved_at=date(2026, 3, 17),
+    ))
+
+    rows = await store.get_historical_calibration()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["target_variable"] == "thread_new_event_count"
+    assert row["probability"] == 0.60
+    assert row["resolved_bool"] is True
+    assert row["base_rate"] == 0.50
+
+
+async def test_get_historical_calibration_respects_as_of_cutoff(store):
+    """as_of should exclude forecast runs generated after the cutoff date."""
+    for day, prob in [(10, 0.55), (13, 0.65)]:
+        run = ForecastRun(
+            topic_slug="iran-us",
+            topic_name="Iran-US",
+            engine="native",
+            generated_for=date(2026, 3, day),
+            questions=[ForecastQuestion(
+                question=f"Q for day {day}",
+                forecast_type="binary",
+                target_variable="thread_new_event_count",
+                target_metadata={"thread_id": day, "threshold": 1, "topic_slug": "iran-us"},
+                probability=prob,
+                base_rate=0.40,
+                resolution_criteria="Test.",
+                resolution_date=date(2026, 3, day + 7),
+                horizon_days=7,
+                signpost="Test",
+                evidence_thread_ids=[day],
+            )],
+        )
+        await store.save_forecast_run(run)
+        await store.set_forecast_resolution(ForecastResolution(
+            forecast_question_id=run.questions[0].question_id,
+            outcome_status="resolved",
+            resolved_bool=False,
+            actual_value=0.0,
+            brier_score=round(prob ** 2, 4),
+            log_loss=0.5,
+            notes="No event.",
+            resolved_at=date(2026, 3, day + 7),
+        ))
+
+    # Both resolved
+    all_rows = await store.get_historical_calibration()
+    assert len(all_rows) == 2
+
+    # With cutoff at March 12, only the day-10 run should appear
+    scoped = await store.get_historical_calibration(as_of=date(2026, 3, 12))
+    assert len(scoped) == 1
+    assert scoped[0]["probability"] == 0.55

@@ -28,7 +28,7 @@ All others are code constants — modify in source or wait for future config sup
 | Parameter | Value | Location | Notes |
 |-----------|-------|----------|-------|
 | `BATCH_SIZE` | 10 | `filter.py:38` | Articles per LLM call |
-| `filter_threshold` | 5.0 (default) | `models.py:29` | **Configurable** per-topic. Scale: 1–10, lower = more pass. Benchmark: 5.0 optimal (6.5/10), 6.0 drops source balance |
+| `filter_threshold` | 4.0 (default) | `models.py:29` | **Configurable** per-topic. Scale: 1–10, lower = more pass. Benchmark: 4.0 optimal (6.4/10), 5.0 slightly lower (6.1), ≥7.0 collapses quality |
 | Snippet cap | 1000 chars | `filter.py:90` | Max article text per batch item |
 
 **Rubric** (system prompt at `filter.py:23-29`):

@@ -62,3 +62,69 @@ sources:
   tier: B
   type: rss
   url: https://www.wired.com/feed/rss
+# Lab blogs — primary research sources
+- affiliation: private
+  country: US
+  id: openai-blog
+  language: en
+  name: OpenAI Blog
+  tier: A
+  type: rss
+  url: https://openai.com/blog/rss.xml
+- affiliation: private
+  country: GB
+  id: deepmind-blog
+  language: en
+  name: DeepMind Blog
+  tier: A
+  type: rss
+  url: https://deepmind.google/blog/rss.xml
+- affiliation: private
+  country: US
+  id: google-ai-blog
+  language: en
+  name: Google AI Blog
+  tier: A
+  type: rss
+  url: https://blog.google/technology/ai/rss/
+- affiliation: private
+  country: US
+  id: nvidia-ai-blog
+  language: en
+  name: NVIDIA AI Blog
+  tier: A
+  type: rss
+  url: https://blogs.nvidia.com/feed/
+- affiliation: nonprofit
+  country: US
+  id: huggingface-blog
+  language: en
+  name: Hugging Face Blog
+  tier: B
+  type: rss
+  url: https://huggingface.co/blog/feed.xml
+# Trade press — specialist AI coverage
+- affiliation: academic
+  country: US
+  id: ieee-spectrum
+  language: en
+  name: IEEE Spectrum
+  tier: A
+  type: rss
+  url: https://spectrum.ieee.org/feeds/feed.rss
+- affiliation: private
+  country: US
+  id: semiengineering
+  language: en
+  name: Semiconductor Engineering
+  tier: A
+  type: rss
+  url: https://semiengineering.com/feed/
+- affiliation: private
+  country: GB
+  id: the-register
+  language: en
+  name: The Register
+  tier: B
+  type: rss
+  url: https://www.theregister.com/headlines.atom

@@ -7,6 +7,7 @@ from datetime import date
 from nexus.config.models import NexusConfig, UserConfig
 from nexus.agent.qa import answer_question, _analyze_question, _gather_context
 from nexus.engine.knowledge.events import Event
+from nexus.engine.projection.models import ProjectionItem, TopicProjection
 
 
 @pytest.fixture
@@ -31,6 +32,8 @@ def mock_store():
     store.search_entities = AsyncMock(return_value=[])
     store.get_page = AsyncMock(return_value=None)
     store.get_summaries = AsyncMock(return_value=[])
+    store.get_latest_projection = AsyncMock(return_value=None)
+    store.get_cross_topic_signals = AsyncMock(return_value=[])
     return store
 
 
@@ -102,6 +105,25 @@ async def test_gather_context_background_pulls_summaries(mock_store):
     analysis = {"entities": [], "intent": "background", "language": "en"}
     context = await _gather_context(mock_store, analysis)
     assert "Weekly summary" in context
+
+
+async def test_gather_context_includes_projection(mock_store):
+    mock_store.get_latest_projection = AsyncMock(return_value=TopicProjection(
+        topic_slug="iran-us",
+        topic_name="Iran-US",
+        generated_for=date(2026, 3, 10),
+        items=[ProjectionItem(
+            claim="Sanctions pressure is likely to persist.",
+            confidence="medium",
+            horizon_days=7,
+            signpost="Watch for Treasury follow-through",
+            review_after=date(2026, 3, 17),
+        )],
+    ))
+    analysis = {"entities": [], "intent": "recent", "language": "en"}
+    context = await _gather_context(mock_store, analysis)
+    assert "forward look" in context.lower()
+    assert "Sanctions pressure" in context
 
 
 async def test_gather_context_empty_store():

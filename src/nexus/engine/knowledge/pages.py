@@ -20,6 +20,7 @@ PAGE_CONFIGS = {
     "entity_profile": {"ttl_days": 3},
     "thread_deepdive": {"ttl_days": 1},
     "weekly_recap": {"ttl_days": 365},  # Effectively immutable
+    "projection": {"ttl_days": 1},
 }
 
 

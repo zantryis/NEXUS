@@ -98,6 +98,22 @@ def _build_synthesis_context(syntheses: list[TopicSynthesis]) -> str:
             parts.append(f"\nSource balance: {syn.source_balance}")
         if syn.languages_represented:
             parts.append(f"Languages: {', '.join(syn.languages_represented)}")
+        if syn.cross_topic_signals:
+            parts.append("\nCross-topic signals:")
+            for signal in syn.cross_topic_signals[:3]:
+                parts.append(
+                    f"- {signal.shared_entity}: linked to {signal.related_topic_slug} "
+                    f"on {signal.observed_at}"
+                )
+        if syn.projection:
+            parts.append(f"\nForward Look status: {syn.projection.status}")
+            if syn.projection.items:
+                for item in syn.projection.items:
+                    parts.append(
+                        f"- Projection: {item.claim} "
+                        f"(confidence: {item.confidence}, horizon: {item.horizon_days}d, "
+                        f"signpost: {item.signpost})"
+                    )
 
         sections.append("\n".join(parts))
 
@@ -108,9 +124,19 @@ async def render_text_briefing(
     llm: LLMClient,
     config: NexusConfig,
     syntheses: list[TopicSynthesis],
+    *,
+    market_divergences: list[dict] | None = None,
 ) -> str:
     """Render a markdown text briefing from TopicSynthesis objects."""
     context = _build_synthesis_context(syntheses)
+
+    # Append market divergence signals if available
+    if market_divergences:
+        from nexus.engine.projection.kalshi_matcher import render_divergence_section
+        divergence_section = render_divergence_section(market_divergences)
+        if divergence_section:
+            context += f"\n\n---\n\n{divergence_section}"
+
     system_prompt = BRIEFING_SYSTEM_PROMPT.format(
         output_language=config.user.output_language,
         style=config.briefing.style,

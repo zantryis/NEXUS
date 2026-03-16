@@ -60,6 +60,7 @@ def test_page_configs_defined():
     assert "entity_profile" in PAGE_CONFIGS
     assert "thread_deepdive" in PAGE_CONFIGS
     assert "weekly_recap" in PAGE_CONFIGS
+    assert "projection" in PAGE_CONFIGS
 
 
 def test_page_configs_have_ttl():

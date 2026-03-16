@@ -105,6 +105,50 @@
                 </div>
             </div>
 
+            {% if topic.projection %}
+            <div class="analysis-panel" style="margin-bottom: 1rem;">
+                <div class="analysis-card convergence">
+                    <div class="analysis-card-header">Forward Look</div>
+                    <div class="analysis-card-body">
+                        {% if topic.projection.items %}
+                        {% for item in topic.projection.items %}
+                        <div class="analysis-item">
+                            <div class="analysis-fact">{{ item.claim }}</div>
+                            <div class="analysis-sources">
+                                <span class="source-badge">{{ item.confidence }}</span>
+                                <span class="source-badge">{{ item.horizon_days }}d</span>
+                                <span class="source-badge">watch: {{ item.signpost }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        {% else %}
+                        <div class="analysis-item">
+                            <div class="analysis-fact">{{ topic.projection.summary or 'History not sufficient yet.' }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if topic.cross_topic_signals %}
+            <div class="analysis-panel" style="margin-bottom: 1rem;">
+                <div class="analysis-card divergence">
+                    <div class="analysis-card-header">Cross-Topic Bridges</div>
+                    <div class="analysis-card-body">
+                        {% for signal in topic.cross_topic_signals %}
+                        <div class="analysis-item">
+                            <div class="analysis-fact">{{ signal.shared_entity }} linked to {{ signal.related_topic_slug | replace('-', ' ') }}</div>
+                            <div class="analysis-sources">
+                                <span class="source-badge">{{ signal.observed_at }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
             {% for thread in topic.threads %}
             <div class="briefing-thread-card">
                 <div class="briefing-thread-header">
@@ -119,6 +163,12 @@
                     {% for ent in thread.key_entities %}
                     <a href="/explore/entities/?q={{ ent }}" class="entity-tag">{{ ent }}</a>
                     {% endfor %}
+                </div>
+                {% endif %}
+                {% if thread.trajectory_label %}
+                <div class="briefing-thread-entities" style="margin-bottom: 0.5rem;">
+                    <span class="entity-tag">{{ thread.trajectory_label | replace('_', ' ') }}</span>
+                    <span class="entity-tag">momentum {{ '%.1f'|format(thread.momentum_score or 0) }}</span>
                 </div>
                 {% endif %}
 

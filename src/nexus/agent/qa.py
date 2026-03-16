@@ -180,6 +180,20 @@ async def _gather_context(
             for e in events:
                 sources_str = ", ".join(s.get("outlet", "?") for s in e.sources)
                 parts.append(f"- [{e.date}] {e.summary} (sources: {sources_str})")
+        projection = await store.get_latest_projection(slug)
+        if projection and projection.items:
+            parts.append(f"## {slug} (forward look)")
+            for item in projection.items[:3]:
+                parts.append(
+                    f"- {item.claim} [confidence={item.confidence}, horizon={item.horizon_days}d, signpost={item.signpost}]"
+                )
+        signals = await store.get_cross_topic_signals(slug, limit=3)
+        if signals:
+            parts.append(f"## {slug} (cross-topic)")
+            for signal in signals:
+                parts.append(
+                    f"- {signal.shared_entity} linked to {signal.related_topic_slug} on {signal.observed_at}"
+                )
 
     threads = await store.get_active_threads()
     if threads:
