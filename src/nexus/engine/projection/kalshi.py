@@ -170,6 +170,24 @@ class KalshiLedger:
             "status": row[10],
         }
 
+    async def get_market_metadata(self, ticker: str) -> dict | None:
+        """Return raw market metadata for a ticker, or None."""
+        cursor = await self.db.execute(
+            "SELECT raw_json FROM kalshi_markets WHERE ticker = ?", (ticker,)
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return json.loads(row[0])
+
+    async def get_finalized_markets(self) -> list[dict]:
+        """Return all finalized markets with their metadata."""
+        cursor = await self.db.execute(
+            "SELECT ticker, raw_json FROM kalshi_markets WHERE status IN ('settled', 'finalized')"
+        )
+        rows = await cursor.fetchall()
+        return [{"ticker": row[0], **json.loads(row[1])} for row in rows]
+
     async def counts(self) -> dict:
         cursor = await self.db.execute("SELECT COUNT(*) FROM kalshi_markets")
         market_count = (await cursor.fetchone())[0]
