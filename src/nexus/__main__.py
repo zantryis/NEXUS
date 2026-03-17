@@ -752,7 +752,7 @@ def run_projection():
 
                 selected_engine = engine or config.future_projection.engine
                 llm = None
-                if selected_engine == "native":
+                if selected_engine in ("native", "actor"):
                     api_key = os.getenv("GEMINI_API_KEY")
                     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
                     deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
@@ -909,8 +909,18 @@ def run_projection():
                 print(f"\nConsolidated {len(pairs)} thread pairs.")
                 return
 
+            if subcommand == "purge-templates":
+                confirm = "--confirm" in sys.argv
+                result = await store.purge_template_projections(dry_run=not confirm)
+                print(f"Template projection items found: {result['items_found']}")
+                if result.get("dry_run"):
+                    print("Dry run — no changes made. Use --confirm to delete.")
+                else:
+                    print(f"Deleted: {result['items_deleted']} items, {result['projections_deleted']} empty projections")
+                return
+
             raise SystemExit(
-                "Usage: python -m nexus projection <generate|backfill|evaluate|compare|consolidate> [args...]"
+                "Usage: python -m nexus projection <generate|backfill|evaluate|compare|consolidate|purge-templates> [args...]"
             )
         finally:
             await store.close()

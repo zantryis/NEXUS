@@ -82,7 +82,7 @@ async def _generate_forecast_artifacts(
     engine = get_forecast_engine(engine_name)
     calibration_data = await store.get_historical_calibration()
     forecast_run = await engine.generate(
-        llm if engine_name == "native" else None,
+        llm,
         payload,
         critic_pass=critic_pass,
         max_questions=max_items,

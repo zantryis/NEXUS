@@ -1390,3 +1390,135 @@ async def test_merge_threads_duplicate_events_deduplicated(store):
         (keep_id, ids[0]),
     )
     assert (await cursor.fetchone())[0] == 1
+
+
+# ── get_interesting_kalshi_markets ─────────────────────────────────────
+
+
+async def _insert_kalshi_question(store, question, prob, market_prob, resolution_date, ticker, status="open"):
+    """Helper: insert a kalshi-aligned forecast question."""
+    import json
+    await store.db.execute(
+        "INSERT INTO forecast_runs (topic_slug, topic_name, engine, generated_for, summary) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("kalshi-aligned", "Kalshi", "structural", "2026-03-01", "test"),
+    )
+    run_id = (await store.db.execute("SELECT last_insert_rowid()")).fetchone()
+    run_id = (await run_id)[0] if hasattr(run_id, "__await__") else run_id[0]
+    meta = json.dumps({"kalshi_ticker": ticker, "kalshi_implied": market_prob})
+    await store.db.execute(
+        "INSERT INTO forecast_questions "
+        "(forecast_run_id, question, target_variable, target_metadata_json, "
+        "probability, base_rate, resolution_criteria, resolution_date, "
+        "horizon_days, signpost, status, external_ref) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (run_id, question, "kalshi_aligned", meta,
+         prob, market_prob, "test", resolution_date,
+         14, "test", status, ticker),
+    )
+    await store.db.commit()
+
+
+async def test_get_interesting_kalshi_markets_ranked(store):
+    """Markets should be ranked by interestingness (gap + proximity)."""
+    # Moderate gap, far out
+    await _insert_kalshi_question(store, "Mod gap far", 0.60, 0.40, "2026-06-15", "MOD-FAR")
+    # Small gap, close
+    await _insert_kalshi_question(store, "Small gap close", 0.55, 0.50, "2026-03-20", "SMALL-CLOSE")
+    # High gap, close — should rank highest
+    await _insert_kalshi_question(store, "High gap close", 0.80, 0.30, "2026-03-20", "HIGH-CLOSE")
+
+    results = await store.get_interesting_kalshi_markets(limit=5)
+
+    assert len(results) == 3
+    # High-close has both high gap AND close date — should be first
+    assert results[0]["ticker"] == "HIGH-CLOSE"
+    # Verify all returned with expected fields
+    assert "question" in results[0]
+    assert "gap_pp" in results[0]
+    assert results[0]["gap_pp"] == 50
+
+
+async def test_get_interesting_kalshi_markets_excludes_resolved(store):
+    """Resolved markets should not appear."""
+    await _insert_kalshi_question(store, "Open market", 0.70, 0.30, "2026-04-01", "OPEN")
+    await _insert_kalshi_question(store, "Resolved market", 0.60, 0.40, "2026-04-01", "RESOLVED", status="resolved")
+
+    results = await store.get_interesting_kalshi_markets(limit=5)
+    tickers = [r["ticker"] for r in results]
+    assert "OPEN" in tickers
+    assert "RESOLVED" not in tickers
+
+
+async def test_get_interesting_kalshi_markets_excludes_expired(store):
+    """Markets with past resolution dates should not appear."""
+    await _insert_kalshi_question(store, "Future market", 0.70, 0.30, "2026-04-01", "FUTURE")
+    await _insert_kalshi_question(store, "Past market", 0.60, 0.40, "2026-01-01", "PAST")
+
+    results = await store.get_interesting_kalshi_markets(limit=5)
+    tickers = [r["ticker"] for r in results]
+    assert "FUTURE" in tickers
+    assert "PAST" not in tickers
+
+
+async def test_get_interesting_kalshi_markets_empty(store):
+    """Should return empty list when no Kalshi data exists."""
+    results = await store.get_interesting_kalshi_markets(limit=5)
+    assert results == []
+
+
+# ── purge_template_projections ────────────────────────────────────────
+
+
+async def _insert_projection_with_item(store, claim):
+    """Helper: insert a projection with one item."""
+    await store.db.execute(
+        "INSERT INTO projections (topic_slug, topic_name, generated_for) "
+        "VALUES (?, ?, ?)",
+        ("test-topic", "Test", "2026-03-01"),
+    )
+    cursor = await store.db.execute("SELECT last_insert_rowid()")
+    proj_id = (await cursor.fetchone() if hasattr(cursor, "fetchone") else cursor)[0]
+    await store.db.execute(
+        "INSERT INTO projection_items (projection_id, claim, signpost, review_after) "
+        "VALUES (?, ?, ?, ?)",
+        (proj_id, claim, "test signpost", "2026-03-15"),
+    )
+    await store.db.commit()
+    return proj_id
+
+
+async def test_purge_template_projections_dry_run(store):
+    """Dry run should identify but not delete template items."""
+    await _insert_projection_with_item(
+        store,
+        "Will Iran be involved in significant new developments related to geopolitics within 7 days?",
+    )
+    result = await store.purge_template_projections(dry_run=True)
+
+    assert result["items_found"] >= 1
+    # Items still exist
+    cursor = await store.db.execute("SELECT COUNT(*) FROM projection_items")
+    assert (await cursor.fetchone())[0] >= 1
+
+
+async def test_purge_template_projections_deletes_templates(store):
+    """Should delete template items but preserve good ones."""
+    await _insert_projection_with_item(
+        store,
+        "Will Iran produce significant new developments within 7 days?",
+    )
+    await _insert_projection_with_item(
+        store,
+        "Iran will impose new transit fees on non-allied vessels in the Strait of Hormuz",
+    )
+
+    result = await store.purge_template_projections(dry_run=False)
+
+    assert result["items_deleted"] == 1
+    # Good item still exists
+    cursor = await store.db.execute("SELECT claim FROM projection_items")
+    rows = await cursor.fetchall()
+    claims = [r[0] for r in rows]
+    assert "Iran will impose new transit fees on non-allied vessels in the Strait of Hormuz" in claims
+    assert not any("significant new developments" in c for c in claims)

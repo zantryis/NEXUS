@@ -203,10 +203,20 @@
                 {% if topic.projection.items %}
                 {% for item in topic.projection.items[:3] %}
                 <div class="sidebar-insight">
-                    <div class="sidebar-insight-claim">{{ item.signpost }}</div>
+                    <div class="sidebar-insight-claim">{{ item.claim }}</div>
+                    {% if item.signals_cited %}
+                        {% for sig in item.signals_cited %}
+                            {% if sig.startswith('reasoning:') %}
+                    <div class="sidebar-insight-reasoning">{{ sig[10:] }}</div>
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
                     <div style="display:flex;gap:0.3rem;flex-wrap:wrap;margin-top:0.25rem;">
-                        <span class="source-badge">{{ item.confidence }} confidence</span>
-                        <span class="source-badge">{{ item.horizon_days }}d horizon</span>
+                        <span class="source-badge source-badge-{{ item.confidence }}">{{ item.confidence }}</span>
+                        <span class="source-badge">{{ item.horizon_days }}d</span>
+                        {% if item.evidence_thread_ids %}
+                        <span class="source-badge">{{ item.evidence_thread_ids | length }} thread{{ 's' if item.evidence_thread_ids | length > 1 }}</span>
+                        {% endif %}
                     </div>
                 </div>
                 {% endfor %}
@@ -256,6 +266,28 @@
                 {% endfor %}
                 <div style="margin-top: 0.5rem;">
                     <a href="/threads/" class="section-link">View all threads &rarr;</a>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if kalshi_sidebar %}
+            <div class="sidebar-section">
+                <div class="sidebar-title">Kalshi Markets</div>
+                {% for m in kalshi_sidebar %}
+                <div class="sidebar-kalshi">
+                    <div class="sidebar-kalshi-question">{{ m.question[:100] }}{% if m.question|length > 100 %}...{% endif %}</div>
+                    <div class="sidebar-kalshi-probs">
+                        <span class="sidebar-kalshi-us">Us {{ "%.0f"|format(m.probability * 100) }}%</span>
+                        <span class="sidebar-kalshi-mkt">Mkt {{ "%.0f"|format(m.market_prob * 100) }}%</span>
+                        {% if m.gap_pp >= 10 %}
+                        <span class="sidebar-kalshi-gap">{{ m.gap_pp }}pp gap</span>
+                        {% endif %}
+                        <span class="sidebar-time">{{ m.days_until_resolution }}d</span>
+                    </div>
+                </div>
+                {% endfor %}
+                <div style="margin-top: 0.5rem;">
+                    <a href="/predictions" class="section-link">All predictions &rarr;</a>
                 </div>
             </div>
             {% endif %}

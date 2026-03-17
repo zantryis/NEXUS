@@ -1,92 +1,101 @@
 # Kalshi Benchmark Results
 
 **Dataset**: 500 settled markets from Kalshi
-**Date**: 2026-03-16
-**Primary engine**: structural (reasoning-first, 3 LLM calls)
+**Engines**: market, naked, structural, actor, graphrag, perspective, debate
 
-## Known Limitations
+## Overall Results
 
-1. **Market baseline confound**: `market_prob_at_cutoff` is the settlement price (near 0/1),
-   NOT a pre-resolution snapshot. All "vs market" comparisons in this document are therefore
-   meaningless. A proper forward-looking benchmark with daily price snapshots is needed.
-2. **Hindsight bias**: LLM engines may "remember" outcomes from training data. Absolute
-   accuracy numbers may be inflated. Engine-vs-engine comparisons are still fair (same LLM).
-3. **Empty knowledge graph**: The KG had 0 events/entities/relationships at benchmark time.
-   All predictions used pure LLM world knowledge. Evidence assembly ran but found nothing.
-4. **Extreme skew**: 81% of outcomes were NO. Naive "always NO" gets 78.4% accuracy.
+| Engine | Mean Brier | Questions |
+|--------|-----------|-----------|
+| market | 0.1575 | 114 |
+| naked | 0.2059 | 114 |
+| structural | 0.2354 | 114 |
+| actor | 0.2301 | 114 |
+| graphrag | 0.2374 | 114 |
+| perspective | 0.2555 | 114 |
+| debate | 0.2617 | 114 |
 
-## Structural Engine (Primary — Reasoning-First)
+## By Probability Bracket
 
-**Architecture**: 3 LLM calls (base rate analyst -> contrarian -> supervisor reconciliation).
-Outputs verdict (yes/no/uncertain) + confidence (high/medium/low), NOT raw probability floats.
-Runs **independent** — no market anchor, no market probability passed to the engine.
+### Mid-range (0.10-0.90) (114 questions)
 
-### Fact-Based Evaluation (500 questions, full dataset)
+| Engine | Mean Brier |
+|--------|-----------|
+| market | 0.1575 |
+| naked | 0.2059 |
+| structural | 0.2354 |
+| actor | 0.2301 |
+| graphrag | 0.2374 |
+| perspective | 0.2555 |
+| debate | 0.2617 |
 
-| Metric | Value |
-|--------|-------|
-| **Coverage** | 80.6% (403/500 called, 60 uncertain, 37 JSON parse fallback) |
-| **Accuracy** | 80.9% (326/403) |
-| "Always NO" naive baseline | 78.4% |
-| Value-add vs naive | +2.5pp |
-| Mean Brier (backward compat) | 0.1576 |
+## By Knowledge Coverage
 
-### Confidence Calibration
+### ai-ml-research (25 questions)
 
-| Confidence | Accuracy | Count |
-|------------|----------|-------|
-| High | 86.4% | 59 |
-| Medium | 81.6% | 310 |
-| Low | 64.7% | 34 |
+| Engine | Mean Brier |
+|--------|-----------|
+| market | 0.1543 |
+| naked | 0.1895 |
+| structural | 0.1562 |
+| actor | 0.2605 |
+| graphrag | 0.2315 |
+| perspective | 0.2014 |
+| debate | 0.1808 |
 
-Calibration is **correct direction**: high > medium > low.
+### global-energy-transition (3 questions)
 
-### YES Signal Quality
+| Engine | Mean Brier |
+|--------|-----------|
+| market | 0.3359 |
+| naked | 0.2466 |
+| structural | 0.2771 |
+| actor | 0.2502 |
+| graphrag | 0.2403 |
+| perspective | 0.2583 |
+| debate | 0.2417 |
 
-| Metric | Value |
-|--------|-------|
-| YES predictions | 72 |
-| YES hit rate | 56.9% (41/72) |
-| Dataset YES base rate | 18.8% |
-| **Lift over base** | **3.03x** |
+### iran-us-relations (9 questions)
 
-When the engine says YES, p(YES)=0.57 vs base p(YES)=0.19 — a genuine signal.
+| Engine | Mean Brier |
+|--------|-----------|
+| market | 0.2105 |
+| naked | 0.0530 |
+| structural | 0.0729 |
+| actor | 0.0447 |
+| graphrag | 0.0092 |
+| perspective | 0.1456 |
+| debate | 0.1467 |
 
-### Error Analysis
+### uncovered (77 questions)
 
-| Market Prob Range | Error Rate | Notes |
-|-------------------|------------|-------|
-| 0.00-0.10 | 10% (29/305) | Easy NOs — handles well |
-| 0.10-0.30 | 0% (0/5) | |
-| 0.30-0.50 | 50% (1/2) | Genuine toss-ups |
-| 0.70-0.90 | 25% (2/8) | |
-| 0.90-1.00 | 54% (45/83) | LLM training cutoff disagrees with market reality |
+| Engine | Mean Brier |
+|--------|-----------|
+| market | 0.1454 |
+| naked | 0.2275 |
+| structural | 0.2785 |
+| actor | 0.2411 |
+| graphrag | 0.2658 |
+| perspective | 0.2857 |
+| debate | 0.3022 |
 
-Main weakness: near-certain markets (>0.90) where market participants have real-time
-information the LLM's training data doesn't cover.
+## Statistical Significance (vs Market Baseline)
 
-### Key Findings
+**naked vs market**: t=1.95, p=0.0514, significant=no, n=114
+**structural vs market**: t=3.39, p=0.0007, significant=YES, n=114
+**actor vs market**: t=3.19, p=0.0014, significant=YES, n=114
+**graphrag vs market**: t=3.25, p=0.0012, significant=YES, n=114
+**perspective vs market**: t=3.95, p=0.0001, significant=YES, n=114
+**debate vs market**: t=3.91, p=0.0001, significant=YES, n=114
 
-1. **Confidence calibration works**: High-confidence predictions are more accurate than
-   medium, which are more accurate than low. This is the fundamental goal.
-2. **YES signal has real value**: 3x lift over base rate means the engine can identify
-   positive outcomes against the heavy NO skew (81% NO base rate).
-3. **Abstention is calibrated**: Uncertain questions have only 5% YES rate (vs 18.8% base),
-   meaning the engine correctly abstains when it genuinely doesn't know.
-4. **37 JSON parse failures** (7.4%): Gemini occasionally returns arrays instead of objects.
-   Fixed in code, would improve on rerun.
+### Mid-range subset only (0.10-0.90)
 
-## Engine Comparison (Brier — relative only)
-
-These Brier scores used the confounded market baseline. The **relative ordering between
-engines** is still valid (same LLM, same confound), but absolute values and "vs market"
-numbers should be disregarded.
-
-**Qualitative findings** (n=38 mid-range + near-extreme questions):
-- Knowledge-augmented engines (actor, graphrag) performed best
-- Naked LLM (zero context) performed worst
-- Multi-persona debate added no value over independent reasoning (+0.0005 Brier, 5 extra LLM calls)
-- Structured knowledge retrieval outperforms unstructured multi-persona approaches
+**naked vs market**: t=1.95, p=0.0514, significant=no, n=114
+**structural vs market**: t=3.39, p=0.0007, significant=YES, n=114
+**actor vs market**: t=3.19, p=0.0014, significant=YES, n=114
+**graphrag vs market**: t=3.25, p=0.0012, significant=YES, n=114
+**perspective vs market**: t=3.95, p=0.0001, significant=YES, n=114
+**debate vs market**: t=3.91, p=0.0001, significant=YES, n=114
 
 ## Dataset Characteristics
 
@@ -98,10 +107,139 @@ numbers should be disregarded.
   - iran-us-relations: 17
   - global-energy-transition: 13
 
-## Next Steps
+## Gamma Sweep (post-hoc recalibration)
 
-1. **Forward-looking benchmark**: Daily Kalshi price snapshots + structural engine predictions
-   on open markets. Score when they settle. Eliminates both hindsight bias and market confound.
-2. **Populate knowledge graph**: Run pipeline to get events/entities/relationships flowing,
-   then test whether evidence assembly actually improves predictions.
-3. **More knowledge coverage**: Most Kalshi categories don't overlap with existing Nexus topics.
+For each engine, undo the production gamma (0.8) and reapply with candidate gammas.
+
+### naked (production gamma=0.8)
+
+| Gamma | Mean Brier | vs Market |
+|-------|-----------|-----------|
+| 0.50 | 0.2015 | +0.0440 |
+| 0.60 | 0.2014 | +0.0439 |
+| 0.70 | 0.2031 | +0.0456 |
+| 0.80 | 0.2059 | +0.0484 |
+| 0.90 | 0.2094 | +0.0519 |
+| 1.00 | 0.2132 | +0.0557 |
+| 1.20 | 0.2202 | +0.0627 |
+| 1.50 | 0.2286 | +0.0711 |
+| 1.73 | 0.2315 | +0.0740 |
+| 2.00 | 0.2342 | +0.0767 |
+| 2.50 | 0.2383 | +0.0808 |
+
+### structural (no production gamma — sweep applied raw)
+
+| Gamma | Mean Brier | vs Market |
+|-------|-----------|-----------|
+| 0.50 | 0.2241 | +0.0666 |
+| 0.60 | 0.2245 | +0.0670 |
+| 0.70 | 0.2261 | +0.0686 |
+| 0.80 | 0.2286 | +0.0711 |
+| 0.90 | 0.2318 | +0.0743 |
+| 1.00 | 0.2354 | +0.0779 |
+| 1.20 | 0.2433 | +0.0858 |
+| 1.50 | 0.2540 | +0.0965 |
+| 1.73 | 0.2613 | +0.1038 |
+| 2.00 | 0.2688 | +0.1113 |
+| 2.50 | 0.2794 | +0.1219 |
+
+### actor (production gamma=0.8)
+
+| Gamma | Mean Brier | vs Market |
+|-------|-----------|-----------|
+| 0.50 | 0.2314 | +0.0739 |
+| 0.60 | 0.2306 | +0.0731 |
+| 0.70 | 0.2302 | +0.0727 |
+| 0.80 | 0.2301 | +0.0726 |
+| 0.90 | 0.2302 | +0.0727 |
+| 1.00 | 0.2304 | +0.0729 |
+| 1.20 | 0.2303 | +0.0728 |
+| 1.50 | 0.2299 | +0.0724 |
+| 1.73 | 0.2300 | +0.0725 |
+| 2.00 | 0.2302 | +0.0727 |
+| 2.50 | 0.2307 | +0.0732 |
+
+### graphrag (production gamma=0.8)
+
+| Gamma | Mean Brier | vs Market |
+|-------|-----------|-----------|
+| 0.50 | 0.2246 | +0.0671 |
+| 0.60 | 0.2277 | +0.0702 |
+| 0.70 | 0.2321 | +0.0746 |
+| 0.80 | 0.2374 | +0.0799 |
+| 0.90 | 0.2430 | +0.0855 |
+| 1.00 | 0.2487 | +0.0912 |
+| 1.20 | 0.2594 | +0.1019 |
+| 1.50 | 0.2702 | +0.1127 |
+| 1.73 | 0.2752 | +0.1177 |
+| 2.00 | 0.2785 | +0.1210 |
+| 2.50 | 0.2832 | +0.1257 |
+
+### perspective (production gamma=0.8)
+
+| Gamma | Mean Brier | vs Market |
+|-------|-----------|-----------|
+| 0.50 | 0.2429 | +0.0854 |
+| 0.60 | 0.2463 | +0.0888 |
+| 0.70 | 0.2506 | +0.0931 |
+| 0.80 | 0.2555 | +0.0980 |
+| 0.90 | 0.2608 | +0.1033 |
+| 1.00 | 0.2663 | +0.1088 |
+| 1.20 | 0.2769 | +0.1194 |
+| 1.50 | 0.2922 | +0.1347 |
+| 1.73 | 0.3023 | +0.1448 |
+| 2.00 | 0.3123 | +0.1548 |
+| 2.50 | 0.3263 | +0.1688 |
+
+### debate (production gamma=0.8)
+
+| Gamma | Mean Brier | vs Market |
+|-------|-----------|-----------|
+| 0.50 | 0.2446 | +0.0871 |
+| 0.60 | 0.2495 | +0.0920 |
+| 0.70 | 0.2553 | +0.0978 |
+| 0.80 | 0.2617 | +0.1042 |
+| 0.90 | 0.2684 | +0.1109 |
+| 1.00 | 0.2752 | +0.1177 |
+| 1.20 | 0.2874 | +0.1299 |
+| 1.50 | 0.3030 | +0.1455 |
+| 1.73 | 0.3133 | +0.1558 |
+| 2.00 | 0.3232 | +0.1657 |
+| 2.50 | 0.3360 | +0.1785 |
+
+
+## Reproducing / Re-running
+
+The benchmark dataset is a frozen fixture at `data/fixtures/kalshi_benchmark_midrange.json` (114 questions with ground-truth outcomes and market probabilities). After changing engine code, re-run engines against the same dataset:
+
+```bash
+python scripts/build_kalshi_fixture.py --engines-only
+```
+
+This skips market discovery and candlestick sync (~6 min), loading the saved fixture directly. Engine runs take ~1.5-3 hours depending on concurrency and LLM provider.
+
+To rebuild the full dataset from scratch (e.g. with more markets or different cutoffs):
+
+```bash
+python scripts/build_kalshi_fixture.py              # full pipeline
+python scripts/build_kalshi_fixture.py --skip-engines  # data only, no engine runs
+python scripts/build_kalshi_fixture.py --discover-only  # just discover markets
+```
+
+After engine runs complete, generate this report and ingest into the forecast DB:
+
+```bash
+python scripts/analyze_kalshi_benchmark.py     # generate markdown report
+python scripts/build_kalshi_fixture.py --ingest  # store in forecast DB
+```
+
+Ingested results appear on the `/predictions` dashboard tagged as **benchmark** (source type `kalshi_benchmark`). These are backtested predictions — the engines were given questions from already-settled Kalshi markets and scored against known outcomes. They are NOT live predictions.
+
+**Note**: The fixture files (`data/fixtures/`) are not committed to git — they contain Kalshi market data specific to this instance. Other users would need to run the full pipeline first to build their own fixture, which requires a Kalshi API key.
+
+## Caveats
+
+1. **Hindsight bias**: LLM engines may "remember" outcomes of older markets from training data. The engine-vs-engine comparison is still fair (same LLM), but absolute Brier scores may be artificially low.
+2. **Single snapshot**: No historical candlestick data available from Kalshi API for settled markets. Market probability is the last traded price (close to 0/1 for most settled markets).
+3. **Extreme skew**: 90%+ of markets have extreme probabilities (≤0.05 or ≥0.95), making the mid-range subset the most meaningful comparison.
+4. **Knowledge coverage**: Most Kalshi categories don't overlap with existing Nexus topics. Knowledge-augmented engines (GraphRAG, perspective) have limited context to work with.

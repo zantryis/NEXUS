@@ -1678,6 +1678,118 @@ class KnowledgeStore:
             for row in rows
         ]
 
+    async def get_interesting_kalshi_markets(self, limit: int = 5) -> list[dict]:
+        """Return open Kalshi-aligned markets ranked by interestingness.
+
+        Score = 0.6 * |our_prob - market_prob| + 0.4 * (1 / days_until_resolution).
+        """
+        today = date.today().isoformat()
+        cursor = await self.db.execute(
+            "SELECT fq.question, fq.probability, fq.target_metadata_json, "
+            "fq.resolution_date, fq.external_ref "
+            "FROM forecast_questions fq "
+            "JOIN forecast_runs fr ON fq.forecast_run_id = fr.id "
+            "WHERE fq.target_variable = 'kalshi_aligned' "
+            "AND fq.status = 'open' "
+            "AND fq.resolution_date >= ? "
+            "ORDER BY fq.resolution_date ASC",
+            (today,),
+        )
+        rows = await cursor.fetchall()
+
+        results = []
+        for row in rows:
+            meta = json.loads(row[2]) if row[2] else {}
+            market_prob = meta.get("kalshi_implied", row[1])
+            if market_prob is None:
+                continue
+            resolution_date = row[3]
+            days_until = max(
+                1,
+                (date.fromisoformat(resolution_date) - date.today()).days,
+            )
+            gap = abs(row[1] - market_prob)
+            score = 0.6 * gap + 0.4 * (1.0 / days_until)
+            gap_pp = round(gap * 100)
+            ticker = meta.get("kalshi_ticker", row[4] or "")
+            results.append({
+                "question": row[0],
+                "probability": row[1],
+                "market_prob": market_prob,
+                "resolution_date": resolution_date,
+                "days_until_resolution": days_until,
+                "gap_pp": gap_pp,
+                "ticker": ticker,
+                "score": score,
+            })
+
+        # Deduplicate by ticker — keep highest-scoring entry per market
+        seen: dict[str, dict] = {}
+        for r in results:
+            key = r["ticker"] or r["question"][:60]
+            if key not in seen or r["score"] > seen[key]["score"]:
+                seen[key] = r
+        deduped = sorted(seen.values(), key=lambda r: r["score"], reverse=True)
+        return deduped[:limit]
+
+    async def purge_template_projections(self, dry_run: bool = True) -> dict:
+        """Delete projection items containing template-mush questions.
+
+        Identifies items matching patterns like:
+        - "Will % be involved in significant % developments%"
+        - "Will % produce significant new developments%"
+        """
+        cursor = await self.db.execute(
+            "SELECT id, projection_id FROM projection_items "
+            "WHERE claim LIKE 'Will % be involved in significant%developments%' "
+            "OR claim LIKE 'Will % produce significant new developments%' "
+            "OR claim LIKE 'Will a new event be recorded in the%thread by%' "
+            "OR claim LIKE 'Will the total number of%events recorded%' "
+            "OR claim LIKE 'Will the volume of%reports increase%'"
+        )
+        items = await cursor.fetchall()
+        item_ids = [row[0] for row in items]
+        projection_ids = list({row[1] for row in items})
+
+        result = {
+            "items_found": len(item_ids),
+            "items_deleted": 0,
+            "projections_deleted": 0,
+            "dry_run": dry_run,
+        }
+
+        if dry_run or not item_ids:
+            return result
+
+        # Delete outcomes for matched items
+        placeholders = ",".join("?" * len(item_ids))
+        await self.db.execute(
+            f"DELETE FROM projection_outcomes WHERE projection_item_id IN ({placeholders})",
+            item_ids,
+        )
+        # Delete the template items
+        await self.db.execute(
+            f"DELETE FROM projection_items WHERE id IN ({placeholders})",
+            item_ids,
+        )
+        result["items_deleted"] = len(item_ids)
+
+        # Delete projections left with zero items
+        for proj_id in projection_ids:
+            cursor = await self.db.execute(
+                "SELECT COUNT(*) FROM projection_items WHERE projection_id = ?",
+                (proj_id,),
+            )
+            count = (await cursor.fetchone())[0]
+            if count == 0:
+                await self.db.execute(
+                    "DELETE FROM projections WHERE id = ?", (proj_id,),
+                )
+                result["projections_deleted"] += 1
+
+        await self.db.commit()
+        return result
+
     async def get_filter_log_dates(self, topic_slug: str | None = None) -> list[str]:
         """Get all dates with filter log entries, most recent first."""
         if topic_slug:

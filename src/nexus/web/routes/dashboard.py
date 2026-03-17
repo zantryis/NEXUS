@@ -308,6 +308,9 @@ async def homepage(request: Request):
         else:
             health_snapshot = _config_error_health("Config validation failed. Re-run setup or fix data/config.yaml.")
 
+    # Kalshi sidebar markets
+    kalshi_sidebar = await store.get_interesting_kalshi_markets(limit=5)
+
     # Pipeline run info
     last_run = await store.get_last_pipeline_run()
     pipeline_running = await store.is_pipeline_running()
@@ -337,6 +340,7 @@ async def homepage(request: Request):
         "total_events": total_events,
         "total_sources": len(source_stats),
         "breaking_alerts": breaking_alerts,
+        "kalshi_sidebar": kalshi_sidebar,
         "audio": audio_info,
         "setup_complete": request.query_params.get("setup") == "complete",
         "pipeline_status": getattr(request.app.state, "pipeline_status", None),

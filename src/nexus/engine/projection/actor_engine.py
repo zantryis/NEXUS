@@ -524,11 +524,124 @@ async def predict(
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# LLM claim generation
+# ---------------------------------------------------------------------------
+
+_CLAIM_SYSTEM = (
+    "You are an intelligence analyst generating specific, falsifiable predictions "
+    "about what will happen next in a topic you monitor. Your predictions must be "
+    "concrete enough that someone can look back in 3-14 days and say definitively "
+    "whether they came true."
+)
+
+_CLAIM_PROMPT = """\
+Topic: {topic_name}
+
+Active threads (story arcs you're tracking):
+{threads_section}
+
+Recent events (last 14 days):
+{events_section}
+
+{cross_topic_section}\
+Based on trajectory, momentum, and recent developments, generate {max_claims} \
+specific, falsifiable predictions about what happens next. Each prediction must:
+- Name specific actors, dates, or measurable outcomes
+- Be resolvable as true/false within 3-14 days
+- NOT be vague ("significant developments") or tautological
+
+Return a JSON array only:
+[{{"claim": "...", "reasoning": "1-2 sentences grounding this in evidence", \
+"signpost": "observable indicator to watch for", "confidence": "low|medium|high", \
+"horizon_days": 3|7|14, "source_thread_headline": "headline of the thread this derives from"}}]
+"""
+
+_CONFIDENCE_TO_PROB = {"high": 0.80, "medium": 0.60, "low": 0.40}
+
+
+def _format_threads_section(threads) -> str:
+    lines = []
+    for t in threads[:6]:
+        label = t.trajectory_label or "steady"
+        momentum = t.momentum_score or 0.0
+        entities = ", ".join(t.key_entities[:5]) if t.key_entities else "—"
+        lines.append(f"- {t.headline}  [trajectory: {label}, momentum: {momentum:.1f}, entities: {entities}]")
+        for ev in t.events[-2:]:
+            lines.append(f"  • {ev.date}: {ev.summary[:120]}")
+    return "\n".join(lines) if lines else "(no active threads)"
+
+
+def _format_events_section(events) -> str:
+    lines = []
+    for ev in events[:15]:
+        ents = ", ".join(ev.entities[:3]) if ev.entities else ""
+        lines.append(f"- {ev.date}: {ev.summary[:120]}  [{ents}]")
+    return "\n".join(lines) if lines else "(no recent events)"
+
+
+def _format_cross_topic_section(signals) -> str:
+    if not signals:
+        return ""
+    lines = ["Cross-topic signals:"]
+    for s in signals[:3]:
+        lines.append(f"- {s.shared_entity}: bridges {s.topic_slug} ↔ {s.related_topic_slug}")
+    return "\n".join(lines) + "\n\n"
+
+
+async def generate_claims_from_context(
+    llm: LLMClient,
+    payload: ForecastEngineInput,
+    *,
+    max_claims: int = 3,
+) -> list[dict]:
+    """Generate specific falsifiable claims from topic context. 1 LLM call."""
+    prompt = _CLAIM_PROMPT.format(
+        topic_name=payload.topic_name,
+        threads_section=_format_threads_section(payload.threads),
+        events_section=_format_events_section(payload.recent_events),
+        cross_topic_section=_format_cross_topic_section(payload.cross_topic_signals),
+        max_claims=max_claims,
+    )
+    try:
+        raw = await llm.complete(
+            config_key="filtering",
+            system_prompt=_CLAIM_SYSTEM,
+            user_prompt=prompt,
+            json_response=True,
+        )
+    except Exception:
+        logger.warning("Claim generation LLM call failed for %s", payload.topic_slug, exc_info=True)
+        return []
+
+    # Strip markdown fences if present
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+
+    try:
+        claims = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Claim generation returned invalid JSON for %s", payload.topic_slug)
+        return []
+
+    if not isinstance(claims, list):
+        return []
+
+    return claims[:max_claims]
+
+
+# ---------------------------------------------------------------------------
+# ActorForecastEngine
+# ---------------------------------------------------------------------------
+
+
 class ActorForecastEngine:
     """Actor-based forecast engine implementing the ForecastEngine protocol.
 
-    When called with a store, uses the full actor pipeline.
-    When called without store (legacy path), generates from thread heuristics.
+    When called with LLM, generates specific falsifiable claims from thread context.
+    When called without LLM, falls back to deterministic thread heuristics.
     """
 
     engine_name = "actor"
@@ -545,62 +658,67 @@ class ActorForecastEngine:
     ) -> ForecastRun:
         questions: list[ForecastQuestion] = []
 
-        # If we have a store, use the actor pipeline to generate questions
-        # from entity-based analysis. Otherwise fall back to thread heuristics.
-        if store is not None and payload.recent_events:
-            # Build questions from the most significant recent events/entities
-            entity_counts: dict[str, int] = {}
-            for event in payload.recent_events:
-                for entity in event.entities:
-                    entity_counts[entity] = entity_counts.get(entity, 0) + 1
-
-            # Top entities as question subjects
-            top_entities = sorted(entity_counts.items(), key=lambda x: x[1], reverse=True)[:3]
-
-            for entity_name, count in top_entities:
-                q_text = (
-                    f"Will {entity_name} be involved in significant new developments "
-                    f"related to {payload.topic_name} within 7 days?"
-                )
+        # Primary path: LLM generates specific claims from thread context
+        if llm is not None and (payload.threads or payload.recent_events):
+            claims = await generate_claims_from_context(
+                llm, payload, max_claims=max_questions,
+            )
+            for claim in claims:
                 try:
-                    prediction = await predict(
-                        store, llm, q_text,
-                        run_date=payload.run_date,
-                        max_actors=3,
+                    confidence = claim.get("confidence", "medium")
+                    horizon = claim.get("horizon_days", 7)
+                    if horizon not in (3, 7, 14):
+                        horizon = 7
+                    probability = _clip_probability(
+                        _CONFIDENCE_TO_PROB.get(confidence, 0.60)
                     )
+
+                    # Match source thread for linking
+                    source_headline = claim.get("source_thread_headline", "")
+                    thread_ids = []
+                    event_ids = []
+                    for t in payload.threads:
+                        if source_headline and source_headline.lower() in t.headline.lower():
+                            if t.thread_id:
+                                thread_ids.append(t.thread_id)
+                            event_ids.extend(
+                                e.event_id for e in t.events if e.event_id
+                            )
+                            break
+
+                    # Build signals from matched thread context
+                    signals = [f"reasoning:{claim.get('reasoning', '')}"]
+                    matched_thread = next(
+                        (t for t in payload.threads
+                         if source_headline and source_headline.lower() in t.headline.lower()),
+                        None,
+                    )
+                    if matched_thread:
+                        signals.append(f"trajectory:{matched_thread.trajectory_label or 'steady'}")
+                        signals.append(f"momentum:{matched_thread.momentum_score or 0.0}")
+
                     questions.append(ForecastQuestion(
-                        question=q_text,
+                        question=claim["claim"],
                         forecast_type="binary",
-                        target_variable="actor_development",
-                        probability=prediction.calibrated_probability,
-                        base_rate=prediction.raw_probability,
-                        resolution_criteria=(
-                            f"Resolves true if significant events involving "
-                            f"{entity_name} occur within 7 days."
-                        ),
-                        resolution_date=payload.run_date + timedelta(days=7),
-                        horizon_days=7,
-                        signpost=prediction.signposts[0] if prediction.signposts else f"Activity involving {entity_name}",
-                        signals_cited=[
-                            f"actor:{a.actor}:{a.direction}" for a in prediction.actors
-                        ],
-                        evidence_event_ids=[
-                            e.event_id for e in payload.recent_events
-                            if e.event_id and entity_name in e.entities
-                        ][:8],
-                        evidence_thread_ids=[],
+                        target_variable="topic_claim",
+                        probability=probability,
+                        base_rate=probability,
+                        resolution_criteria=claim.get("reasoning", claim["claim"]),
+                        resolution_date=payload.run_date + timedelta(days=horizon),
+                        horizon_days=horizon,
+                        signpost=claim.get("signpost", ""),
+                        signals_cited=signals,
+                        evidence_event_ids=event_ids[:8],
+                        evidence_thread_ids=thread_ids,
                         target_metadata={
                             "topic_slug": payload.topic_slug,
-                            "actor_analysis": True,
+                            "claim_based": True,
                         },
                     ))
-                except Exception as exc:
-                    logger.warning("Actor forecast failed for %s: %s", entity_name, exc)
+                except Exception:
+                    logger.warning("Failed to build question from claim: %s", claim, exc_info=True)
 
-                if len(questions) >= max_questions:
-                    break
-
-        # Fallback: thread-based heuristic questions (same as stub)
+        # Fallback: deterministic thread-based heuristic questions
         if not questions:
             questions = self._thread_heuristic_questions(payload, max_questions)
 
@@ -611,7 +729,7 @@ class ActorForecastEngine:
             generated_for=payload.run_date,
             summary=f"{payload.topic_name} forecast generated by actor engine.",
             questions=questions,
-            metadata={"actor_based": bool(store)},
+            metadata={"claim_based": bool(questions and questions[0].target_variable == "topic_claim")},
         )
     def _thread_heuristic_questions(
         self, payload: ForecastEngineInput, max_questions: int,
