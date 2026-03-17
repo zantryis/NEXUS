@@ -32,7 +32,10 @@
 </div>
 {% endfor %}
 {% else %}
-<div class="empty-state"><p>No events found.</p></div>
+<div class="empty-state">
+    <p>No events found.</p>
+    <p style="margin-top: 0.5rem; font-size: 0.82rem; color: var(--nx-text-dim);">Events are extracted from news sources during pipeline runs. <a href="/">Run the pipeline</a> to get started.</p>
+</div>
 {% endif %}
 
 {% endblock %}

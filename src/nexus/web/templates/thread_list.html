@@ -40,7 +40,7 @@
 </div>
 
 {% macro thread_card(t) %}
-<a href="/threads/{{ t.slug }}" class="thread-card">
+<a href="/threads/{{ t.slug }}" class="thread-card {{ 'thread-card-stale' if t.status == 'stale' }}">
     <div class="thread-card-header">
         <span class="thread-headline">{{ t.headline }}</span>
         <span class="sig-indicator sig-{{ 'high' if t.significance >= 7 else ('med' if t.significance >= 4 else 'low') }}">
@@ -87,6 +87,7 @@
 {% else %}
 <div class="empty-state">
     <p>No threads found{% if filter_status %} with status "{{ filter_status }}"{% endif %}{% if filter_topic %} in topic "{{ filter_topic | replace('-', ' ') | title }}"{% endif %}.</p>
+    <p style="margin-top: 0.5rem; font-size: 0.82rem; color: var(--nx-text-dim);">Threads are created during pipeline runs as the system identifies evolving narratives. <a href="/">Run the pipeline</a> to get started.</p>
 </div>
 {% endif %}
 

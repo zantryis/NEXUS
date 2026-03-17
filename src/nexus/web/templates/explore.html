@@ -48,6 +48,9 @@
 {% else %}
 <div class="empty-state">
     <p>{% if search_query %}No entities matching "{{ search_query }}".{% else %}No entities found.{% endif %}</p>
+    {% if not search_query %}
+    <p style="margin-top: 0.5rem; font-size: 0.82rem; color: var(--nx-text-dim);">Entities are extracted during pipeline runs. <a href="/">Run the pipeline</a> to populate this page.</p>
+    {% endif %}
 </div>
 {% endif %}
 
