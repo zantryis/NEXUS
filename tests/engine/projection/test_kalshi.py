@@ -200,7 +200,9 @@ def test_bootstrap_kalshi_credentials_writes_local_key_file(tmp_path):
     assert result["env"]["KALSHI_PRIVATE_KEY_PATH"] == str(target_key_path)
 
 
-async def test_kalshi_auth_check_reports_missing_creds():
+async def test_kalshi_auth_check_reports_missing_creds(monkeypatch):
+    monkeypatch.delenv("KALSHI_API_KEY_ID", raising=False)
+    monkeypatch.delenv("KALSHI_PRIVATE_KEY_PATH", raising=False)
     client = KalshiClient(KalshiBenchmarkConfig())
 
     status = await client.auth_check()
