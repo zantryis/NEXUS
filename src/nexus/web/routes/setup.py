@@ -1,11 +1,18 @@
-"""Web-based setup wizard — multi-step form for first-run configuration."""
+"""Web-based setup wizard — streamlined 3-step form for first-run configuration.
+
+Steps:
+  1. Provider + API key (combined)
+  2. Topics
+  3. Review → auto-launches pipeline on submit
+"""
 
 import asyncio
 import logging
+import time
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Request, Form
+from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse, HTMLResponse
 
 from nexus.cli.setup import PROVIDER_INFO, PROVIDER_TIERS, TOPIC_CHOICES
@@ -16,8 +23,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# In-memory session storage for wizard state (keyed by cookie UUID)
-# Each session: {"step": int, "preset": str, "keys": {}, "topics": [], ...}
+TOTAL_STEPS = 3
 
 
 def _get_session(request: Request) -> tuple[str, dict]:
@@ -47,9 +53,12 @@ def _data_dir(request: Request) -> Path:
     return getattr(request.app.state, "data_dir", Path("data"))
 
 
+# ── Step 1: Provider + API Key (combined) ──
+
+
 @router.get("/setup")
 async def setup_start(request: Request):
-    """Step 1: Welcome + provider selection."""
+    """Step 1: Provider selection + API key input (combined)."""
     import json
     templates = get_templates(request)
     session_id, session = _get_session(request)
@@ -60,19 +69,20 @@ async def setup_start(request: Request):
         "selected_preset": session.get("preset"),
         "error": None,
         "step": 1,
-        "total_steps": 6,
+        "total_steps": TOTAL_STEPS,
     })
     return _set_cookie(response, session_id)
 
 
 @router.post("/setup/step/1")
 async def setup_step1(request: Request):
-    """Save provider + preset, advance to step 2."""
+    """Save provider + preset + API key, advance to step 2 (topics)."""
     import json
     session_id, session = _get_session(request)
     form = await request.form()
     provider = (form.get("provider") or "").strip()
     preset = (form.get("preset") or "").strip()
+    api_key = (form.get("api_key") or "").strip()
 
     valid_providers = {p[0] for p in PROVIDER_INFO}
     if provider not in valid_providers:
@@ -87,7 +97,7 @@ async def setup_step1(request: Request):
                 "selected_preset": session.get("preset"),
                 "error": "Please choose a provider.",
                 "step": 1,
-                "total_steps": 6,
+                "total_steps": TOTAL_STEPS,
             },
             status_code=400,
         )
@@ -110,208 +120,58 @@ async def setup_step1(request: Request):
             break
     session["required_key"] = required_key
 
-    # If no API key needed (ollama), skip key step
-    if not required_key:
-        session["keys"] = {}
-        response = RedirectResponse(url="/setup/step/3", status_code=303)
+    # Handle API key
+    if required_key:
+        # If key is empty but already set in session, keep it
+        if not api_key and required_key in session.get("keys", {}):
+            pass  # keep existing key
+        elif not api_key:
+            templates = get_templates(request)
+            response = templates.TemplateResponse(
+                request,
+                "setup/step1_welcome.html",
+                {
+                    "providers": PROVIDER_INFO,
+                    "tiers_json": json.dumps(PROVIDER_TIERS),
+                    "selected_provider": provider,
+                    "selected_preset": preset,
+                    "error": "API key is required for this provider.",
+                    "step": 1,
+                    "total_steps": TOTAL_STEPS,
+                },
+                status_code=400,
+            )
+            return _set_cookie(response, session_id)
+        else:
+            session.setdefault("keys", {})[required_key] = api_key
     else:
-        response = RedirectResponse(url="/setup/step/2", status_code=303)
+        session["keys"] = {}
+
+    # Skip straight to topics (step 2)
+    response = RedirectResponse(url="/setup/step/2", status_code=303)
     return _set_cookie(response, session_id)
+
+
+# ── Step 2: Topics ──
 
 
 @router.get("/setup/step/2")
 async def setup_step2_get(request: Request):
-    """Step 2: Required API key."""
+    """Step 2: Topic selection."""
     templates = get_templates(request)
     session_id, session = _get_session(request)
-    required_key = session.get("required_key", "")
-    key_already_set = required_key and required_key in session.get("keys", {})
-
-    response = templates.TemplateResponse(request, "setup/step2_keys.html", {
-        "required_key": required_key,
-        "provider": session.get("provider", ""),
-        "key_already_set": key_already_set,
-        "error": None,
+    response = templates.TemplateResponse(request, "setup/step2_topics.html", {
+        "topic_choices": TOPIC_CHOICES,
+        "selected_topics": session.get("topics", []),
         "step": 2,
-        "total_steps": 6,
+        "total_steps": TOTAL_STEPS,
     })
     return _set_cookie(response, session_id)
 
 
 @router.post("/setup/step/2")
 async def setup_step2_post(request: Request):
-    """Validate and save required API key."""
-    session_id, session = _get_session(request)
-    form = await request.form()
-    api_key = (form.get("api_key") or "").strip()
-    required_key = session.get("required_key", "")
-
-    # If key is empty but already set in session, keep it and proceed
-    if not api_key and required_key in session.get("keys", {}):
-        response = RedirectResponse(url="/setup/step/3", status_code=303)
-        return _set_cookie(response, session_id)
-
-    if not api_key:
-        templates = get_templates(request)
-        response = templates.TemplateResponse(request, "setup/step2_keys.html", {
-            "required_key": required_key,
-            "provider": session.get("provider", ""),
-            "key_already_set": False,
-            "error": "API key cannot be empty.",
-            "step": 2,
-            "total_steps": 6,
-        })
-        return _set_cookie(response, session_id)
-
-    session.setdefault("keys", {})[required_key] = api_key
-    response = RedirectResponse(url="/setup/step/3", status_code=303)
-    return _set_cookie(response, session_id)
-
-
-@router.get("/setup/step/3")
-async def setup_step3_get(request: Request):
-    """Step 3: Optional keys (Telegram, TTS)."""
-    templates = get_templates(request)
-    session_id, session = _get_session(request)
-    keys = session.get("keys", {})
-    response = templates.TemplateResponse(request, "setup/step3_optional.html", {
-        "preset": session.get("preset", ""),
-        "telegram_set": "TELEGRAM_BOT_TOKEN" in keys,
-        "elevenlabs_set": "ELEVENLABS_API_KEY" in keys,
-        "has_key_step": bool(session.get("required_key")),
-        "telegram_chat_id": session.get("telegram_chat_id"),
-        "step": 3,
-        "total_steps": 6,
-    })
-    return _set_cookie(response, session_id)
-
-
-@router.post("/setup/step/3")
-async def setup_step3_post(request: Request):
-    """Save optional keys."""
-    session_id, session = _get_session(request)
-    form = await request.form()
-
-    telegram_token = (form.get("telegram_token") or "").strip()
-    elevenlabs_key = (form.get("elevenlabs_key") or "").strip()
-
-    keys = session.get("keys", {})
-    if telegram_token:
-        keys["TELEGRAM_BOT_TOKEN"] = telegram_token
-    if elevenlabs_key:
-        keys["ELEVENLABS_API_KEY"] = elevenlabs_key
-    session["keys"] = keys
-
-    session["telegram_enabled"] = bool(telegram_token) or "TELEGRAM_BOT_TOKEN" in keys
-    session["elevenlabs_enabled"] = bool(elevenlabs_key) or "ELEVENLABS_API_KEY" in keys
-
-    response = RedirectResponse(url="/setup/step/4", status_code=303)
-    return _set_cookie(response, session_id)
-
-
-@router.post("/setup/telegram/validate")
-async def setup_telegram_validate(request: Request):
-    """Validate Telegram bot token and show bot info (HTMX fragment)."""
-    from nexus.agent.telegram_utils import validate_token
-    from html import escape
-
-    session_id, session = _get_session(request)
-    form = await request.form()
-    token = (form.get("telegram_token") or "").strip()
-
-    if not token:
-        # Try token already stored in session
-        token = session.get("keys", {}).get("TELEGRAM_BOT_TOKEN", "")
-
-    if not token:
-        resp = HTMLResponse(
-            '<div id="telegram-status" class="form-hint" style="color:var(--danger)">'
-            'Enter a bot token first.</div>'
-        )
-        return _set_cookie(resp, session_id)
-
-    bot_info = await validate_token(token)
-    if bot_info:
-        username = escape(bot_info.get("username", ""))
-        session.setdefault("keys", {})["TELEGRAM_BOT_TOKEN"] = token
-        session["telegram_enabled"] = True
-        session["telegram_bot_username"] = username
-        resp = HTMLResponse(
-            f'<div id="telegram-status">'
-            f'<div class="form-hint" style="color:var(--success)">Token valid! Bot: @{username}</div>'
-            f'<div style="margin-top:0.5rem">'
-            f'<span class="form-hint">Now open Telegram and send <code>/start</code> to '
-            f'<a href="https://t.me/{username}" target="_blank">@{username}</a></span>'
-            f'</div>'
-            f'<div id="telegram-poll" hx-get="/setup/telegram/poll" hx-trigger="every 3s" '
-            f'hx-swap="outerHTML" style="margin-top:0.5rem">'
-            f'<span class="form-hint">Waiting for /start...</span>'
-            f'</div></div>'
-        )
-    else:
-        resp = HTMLResponse(
-            '<div id="telegram-status" class="form-hint" style="color:var(--danger)">'
-            'Invalid token. Check with <a href="https://t.me/BotFather" target="_blank">@BotFather</a>.'
-            '</div>'
-        )
-    return _set_cookie(resp, session_id)
-
-
-@router.get("/setup/telegram/poll")
-async def setup_telegram_poll(request: Request):
-    """Poll for /start message to capture chat_id (HTMX fragment)."""
-    from nexus.agent.telegram_utils import poll_for_chat_id
-
-    session_id, session = _get_session(request)
-    token = session.get("keys", {}).get("TELEGRAM_BOT_TOKEN", "")
-
-    if not token:
-        resp = HTMLResponse('<div id="telegram-poll"></div>')
-        return _set_cookie(resp, session_id)
-
-    # Already captured?
-    if session.get("telegram_chat_id"):
-        chat_id = session["telegram_chat_id"]
-        resp = HTMLResponse(
-            f'<div id="telegram-poll" class="form-hint" style="color:var(--success)">'
-            f'Connected! Chat ID: {chat_id}</div>'
-        )
-        return _set_cookie(resp, session_id)
-
-    chat_id = await poll_for_chat_id(token, timeout=3.0)
-    if chat_id:
-        session["telegram_chat_id"] = chat_id
-        resp = HTMLResponse(
-            f'<div id="telegram-poll" class="form-hint" style="color:var(--success)">'
-            f'Connected! Chat ID: {chat_id}</div>'
-        )
-    else:
-        resp = HTMLResponse(
-            '<div id="telegram-poll" hx-get="/setup/telegram/poll" hx-trigger="every 3s" '
-            'hx-swap="outerHTML">'
-            '<span class="form-hint">Waiting for /start...</span>'
-            '</div>'
-        )
-    return _set_cookie(resp, session_id)
-
-
-@router.get("/setup/step/4")
-async def setup_step4_get(request: Request):
-    """Step 4: Topic selection."""
-    templates = get_templates(request)
-    session_id, session = _get_session(request)
-    response = templates.TemplateResponse(request, "setup/step4_topics.html", {
-        "topic_choices": TOPIC_CHOICES,
-        "selected_topics": session.get("topics", []),
-        "step": 4,
-        "total_steps": 6,
-    })
-    return _set_cookie(response, session_id)
-
-
-@router.post("/setup/step/4")
-async def setup_step4_post(request: Request):
-    """Save selected topics."""
+    """Save selected topics, advance to review."""
     session_id, session = _get_session(request)
     form = await request.form()
 
@@ -334,48 +194,16 @@ async def setup_step4_post(request: Request):
 
     session["topics"] = topics
 
-    response = RedirectResponse(url="/setup/step/5", status_code=303)
+    response = RedirectResponse(url="/setup/step/3", status_code=303)
     return _set_cookie(response, session_id)
 
 
-@router.get("/setup/step/5")
-async def setup_step5_get(request: Request):
-    """Step 5: User preferences."""
-    templates = get_templates(request)
-    session_id, session = _get_session(request)
-    response = templates.TemplateResponse(request, "setup/step5_preferences.html", {
-        "user_name": session.get("user_name", ""),
-        "timezone": session.get("timezone", ""),
-        "schedule": session.get("schedule", "06:00"),
-        "style": session.get("style", "analytical"),
-        "step": 5,
-        "total_steps": 6,
-    })
-    return _set_cookie(response, session_id)
+# ── Step 3: Review + auto-launch ──
 
 
-@router.post("/setup/step/5")
-async def setup_step5_post(
-    request: Request,
-    user_name: str = Form(""),
-    timezone: str = Form("UTC"),
-    schedule: str = Form("06:00"),
-    style: str = Form("analytical"),
-):
-    """Save user preferences."""
-    session_id, session = _get_session(request)
-    session["user_name"] = user_name.strip() or "User"
-    session["timezone"] = timezone.strip() or "UTC"
-    session["schedule"] = schedule.strip() or "06:00"
-    session["style"] = style.strip()
-
-    response = RedirectResponse(url="/setup/step/6", status_code=303)
-    return _set_cookie(response, session_id)
-
-
-@router.get("/setup/step/6")
-async def setup_step6_get(request: Request):
-    """Step 6: Review all choices."""
+@router.get("/setup/step/3")
+async def setup_step3_get(request: Request):
+    """Step 3: Review all choices."""
     templates = get_templates(request)
     session_id, session = _get_session(request)
 
@@ -394,19 +222,19 @@ async def setup_step6_get(request: Request):
             tier_label = f"{tier_lbl} ({tier_cost})"
             break
 
-    response = templates.TemplateResponse(request, "setup/step6_review.html", {
+    response = templates.TemplateResponse(request, "setup/step3_review.html", {
         "session": session,
         "provider_label": provider_label,
         "tier_label": tier_label,
-        "step": 6,
-        "total_steps": 6,
+        "step": 3,
+        "total_steps": TOTAL_STEPS,
     })
     return _set_cookie(response, session_id)
 
 
 @router.post("/setup/complete")
 async def setup_complete(request: Request):
-    """Write config.yaml + .env, redirect to dashboard with restart guidance."""
+    """Write config + .env, auto-launch pipeline, redirect to dashboard."""
     session_id, session = _get_session(request)
     data_dir = _data_dir(request)
 
@@ -415,28 +243,22 @@ async def setup_complete(request: Request):
 
     # Determine audio config
     audio_config = {"enabled": not is_free}
-    if session.get("elevenlabs_enabled"):
-        audio_config["tts_backend"] = "elevenlabs"
-        audio_config["enabled"] = True
 
     config_dict = {
         "preset": preset,
         "user": {
-            "name": session.get("user_name", "User"),
-            "timezone": session.get("timezone", "UTC"),
+            "name": "User",
+            "timezone": "UTC",
             "output_language": "en",
         },
         "topics": session.get("topics", [{"name": "AI/ML Research", "priority": "high"}]),
         "briefing": {
-            "schedule": session.get("schedule", "06:00"),
-            "style": session.get("style", "analytical"),
+            "schedule": "06:00",
+            "style": "analytical",
         },
         "audio": audio_config,
         "breaking_news": {"enabled": True, "threshold": 7},
-        "telegram": {
-            "enabled": session.get("telegram_enabled", False),
-            "chat_id": session.get("telegram_chat_id"),
-        },
+        "telegram": {"enabled": False},
     }
 
     write_config(data_dir, config_dict)
@@ -450,14 +272,153 @@ async def setup_complete(request: Request):
     sessions = getattr(request.app.state, "setup_sessions", {})
     sessions.pop(session_id, None)
 
+    # Auto-launch pipeline in background
+    _auto_launch_pipeline(request, data_dir)
+
     response = RedirectResponse(url="/?setup=complete", status_code=303)
     response.delete_cookie("nexus_setup")
     return response
 
 
+def _auto_launch_pipeline(request: Request, data_dir: Path):
+    """Kick off the pipeline immediately after setup completes."""
+    import os
+    from dotenv import load_dotenv
+
+    existing = getattr(request.app.state, "pipeline_status", None)
+    if existing and not existing.get("done", True):
+        return  # already running
+
+    config_path = data_dir / "config.yaml"
+    if not config_path.exists():
+        return
+
+    load_dotenv(data_dir.parent / ".env")
+
+    # Set status with start time for elapsed display
+    request.app.state.pipeline_status = {
+        "stage": "starting",
+        "done": False,
+        "started_at": time.time(),
+        "topic_index": 0,
+        "topic_count": 0,
+    }
+
+    async def _run_pipeline():
+        try:
+            from nexus.config.loader import load_config
+            from nexus.llm.client import LLMClient
+            from nexus.engine.pipeline import run_pipeline
+
+            status = request.app.state.pipeline_status
+
+            config = load_config(config_path)
+            status["topic_count"] = len(config.topics)
+
+            api_key = os.getenv("GEMINI_API_KEY")
+            anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+            deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+
+            llm = LLMClient(
+                config.models,
+                api_key=api_key,
+                anthropic_api_key=anthropic_api_key,
+                deepseek_api_key=deepseek_api_key,
+                openai_api_key=openai_api_key,
+                budget_config=config.budget,
+            )
+
+            # Auto-discover sources for topics without registries
+            import yaml as _yaml
+            from nexus.engine.sources.discovery import discover_sources
+            for i, topic_cfg in enumerate(config.topics):
+                slug = topic_cfg.name.lower().replace(" ", "-").replace("/", "-")
+                registry_path = data_dir / "sources" / slug / "registry.yaml"
+                if not registry_path.exists():
+                    status["stage"] = f"discovering:{topic_cfg.name}"
+                    status["topic_index"] = i + 1
+                    try:
+                        result = await discover_sources(
+                            llm, topic_cfg.name,
+                            subtopics=topic_cfg.subtopics,
+                            data_dir=data_dir,
+                        )
+                        if result.feeds:
+                            registry_path.parent.mkdir(parents=True, exist_ok=True)
+                            registry_path.write_text(
+                                _yaml.dump({"sources": result.feeds}, default_flow_style=False)
+                            )
+                            logger.info(f"Discovered {len(result.feeds)} sources for {topic_cfg.name}")
+                    except Exception as disc_err:
+                        logger.warning(f"Source discovery failed for {topic_cfg.name}: {disc_err}")
+
+            status["stage"] = "running"
+            # Pass status dict so pipeline can update per-topic progress
+            smoke_cap = int(os.getenv("NEXUS_SMOKE_MODE", "0"))
+            briefing_path = await run_pipeline(
+                config, llm, data_dir,
+                gemini_api_key=api_key,
+                openai_api_key=openai_api_key,
+                elevenlabs_api_key=elevenlabs_api_key,
+                max_ingest=smoke_cap or None,
+                trigger="setup",
+                progress_status=status,
+            )
+            status["stage"] = "complete"
+            status["done"] = True
+            request.app.state.has_data = True
+
+            # Deliver via Telegram if configured
+            telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+            if (
+                config.telegram.enabled
+                and telegram_token
+                and config.telegram.chat_id
+                and briefing_path
+                and briefing_path.exists()
+            ):
+                try:
+                    from telegram import Bot
+                    from nexus.agent.delivery import deliver_briefing
+                    from datetime import date as _date
+
+                    tg_bot = Bot(token=telegram_token)
+                    today_str = _date.today().isoformat()
+                    text = briefing_path.read_text()
+                    audio_path = data_dir / "artifacts" / "audio" / f"{today_str}.mp3"
+                    audio = audio_path if audio_path.exists() else None
+
+                    async with tg_bot:
+                        await deliver_briefing(tg_bot, config.telegram.chat_id, text, audio)
+                    logger.info("Briefing delivered via Telegram")
+                    status["telegram_delivered"] = True
+                except Exception as tg_err:
+                    logger.warning(f"Telegram delivery failed (non-blocking): {tg_err}")
+                    status["telegram_delivered"] = False
+                    status["telegram_error"] = str(tg_err)
+            elif config.telegram.enabled and not config.telegram.chat_id:
+                status["telegram_delivered"] = False
+                status["telegram_error"] = "No chat_id — send /start to your bot"
+        except Exception as e:
+            logger.error(f"Background pipeline failed: {e}", exc_info=True)
+            request.app.state.pipeline_status = {
+                "stage": "error",
+                "done": True,
+                "error": str(e),
+                "started_at": status.get("started_at"),
+            }
+
+    asyncio.create_task(_run_pipeline())
+
+
+# ── Pipeline launch (manual trigger from dashboard empty state) ──
+
+
 @router.post("/setup/launch")
 async def setup_launch(request: Request):
-    """Start the pipeline in a background task."""
+    """Start the pipeline in a background task (manual trigger)."""
     import os
     from dotenv import load_dotenv
 
@@ -512,118 +473,16 @@ async def setup_launch(request: Request):
             f'"{preset_name}" preset. Set it in Settings or your .env file, then try again.</div>'
         )
 
-    # Set status
-    request.app.state.pipeline_status = {"stage": "starting", "done": False}
+    _auto_launch_pipeline(request, data_dir)
 
-    async def _run_pipeline():
-        try:
-            from nexus.config.loader import load_config
-            from nexus.llm.client import LLMClient
-            from nexus.engine.pipeline import run_pipeline
-
-            status = request.app.state.pipeline_status
-
-            config = load_config(config_path)
-
-            api_key = os.getenv("GEMINI_API_KEY")
-            anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-            deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
-            openai_api_key = os.getenv("OPENAI_API_KEY")
-            elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
-
-            llm = LLMClient(
-                config.models,
-                api_key=api_key,
-                anthropic_api_key=anthropic_api_key,
-                deepseek_api_key=deepseek_api_key,
-                openai_api_key=openai_api_key,
-                budget_config=config.budget,
-            )
-
-            # Auto-discover sources for topics without registries
-            import yaml as _yaml
-            from nexus.engine.sources.discovery import discover_sources
-            for topic_cfg in config.topics:
-                slug = topic_cfg.name.lower().replace(" ", "-").replace("/", "-")
-                registry_path = data_dir / "sources" / slug / "registry.yaml"
-                if not registry_path.exists():
-                    status["stage"] = f"discovering:{topic_cfg.name}"
-                    try:
-                        result = await discover_sources(
-                            llm, topic_cfg.name,
-                            subtopics=topic_cfg.subtopics,
-                            data_dir=data_dir,
-                        )
-                        if result.feeds:
-                            registry_path.parent.mkdir(parents=True, exist_ok=True)
-                            registry_path.write_text(
-                                _yaml.dump({"sources": result.feeds}, default_flow_style=False)
-                            )
-                            logger.info(f"Discovered {len(result.feeds)} sources for {topic_cfg.name}")
-                    except Exception as disc_err:
-                        logger.warning(f"Source discovery failed for {topic_cfg.name}: {disc_err}")
-
-            status["stage"] = "running"
-            # NEXUS_SMOKE_MODE caps ingestion for fast testing
-            smoke_cap = int(os.getenv("NEXUS_SMOKE_MODE", "0"))
-            briefing_path = await run_pipeline(
-                config, llm, data_dir,
-                gemini_api_key=api_key,
-                openai_api_key=openai_api_key,
-                elevenlabs_api_key=elevenlabs_api_key,
-                max_ingest=smoke_cap or None,
-                trigger="manual",
-            )
-            status["stage"] = "complete"
-            status["done"] = True
-            # Mark that data now exists
-            request.app.state.has_data = True
-
-            # Deliver via Telegram if token and chat_id are available
-            telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
-            if (
-                config.telegram.enabled
-                and telegram_token
-                and config.telegram.chat_id
-                and briefing_path
-                and briefing_path.exists()
-            ):
-                try:
-                    from telegram import Bot
-                    from nexus.agent.delivery import deliver_briefing
-                    from datetime import date as _date
-
-                    tg_bot = Bot(token=telegram_token)
-                    today_str = _date.today().isoformat()
-                    text = briefing_path.read_text()
-                    audio_path = data_dir / "artifacts" / "audio" / f"{today_str}.mp3"
-                    audio = audio_path if audio_path.exists() else None
-
-                    async with tg_bot:
-                        await deliver_briefing(tg_bot, config.telegram.chat_id, text, audio)
-                    logger.info("Briefing delivered via Telegram")
-                    status["telegram_delivered"] = True
-                except Exception as tg_err:
-                    logger.warning(f"Telegram delivery failed (non-blocking): {tg_err}")
-                    status["telegram_delivered"] = False
-                    status["telegram_error"] = str(tg_err)
-            elif config.telegram.enabled and not config.telegram.chat_id:
-                status["telegram_delivered"] = False
-                status["telegram_error"] = "No chat_id — send /start to your bot"
-        except Exception as e:
-            logger.error(f"Background pipeline failed: {e}", exc_info=True)
-            request.app.state.pipeline_status = {
-                "stage": "error",
-                "done": True,
-                "error": str(e),
-            }
-
-    asyncio.create_task(_run_pipeline())
     return HTMLResponse(
         '<div class="pipeline-status pipeline-running" id="pipeline-bar" '
         'hx-get="/setup/status" hx-trigger="every 3s" hx-swap="outerHTML">'
         '<div class="pipeline-spinner"></div> Pipeline started...</div>'
     )
+
+
+# ── Pipeline status (HTMX polling) ──
 
 
 @router.get("/setup/status")
@@ -637,11 +496,20 @@ async def setup_status(request: Request):
     done = status.get("done", False)
     error = status.get("error")
 
+    # Elapsed time
+    started_at = status.get("started_at")
+    elapsed_html = ""
+    if started_at:
+        elapsed_s = int(time.time() - started_at)
+        mins, secs = divmod(elapsed_s, 60)
+        elapsed_html = f' <span class="pipeline-elapsed">{mins}:{secs:02d}</span>'
+
     if error:
         from html import escape
         return HTMLResponse(
             f'<div class="pipeline-status pipeline-error" id="pipeline-bar">'
-            f'Pipeline error: {escape(str(error))}</div>'
+            f'Pipeline error: {escape(str(error))}'
+            f'{elapsed_html}</div>'
         )
     if done:
         tg_note = ""
@@ -652,24 +520,135 @@ async def setup_status(request: Request):
             tg_note = f' <span style="color:var(--warning)">Telegram: {_esc(status["telegram_error"])}</span>'
         return HTMLResponse(
             f'<div class="pipeline-status pipeline-done" id="pipeline-bar">'
-            f'Pipeline complete!{tg_note} <a href="/" onclick="location.reload()">View your first briefing</a>'
+            f'Pipeline complete!{tg_note}{elapsed_html} '
+            f'<a href="/" onclick="location.reload()">View your first briefing</a>'
             f'</div>'
         )
 
-    # Build label from stage
+    # Build label from stage with per-topic granularity
+    topic_index = status.get("topic_index", 0)
+    topic_count = status.get("topic_count", 0)
+    topic_progress = f" ({topic_index}/{topic_count})" if topic_count else ""
+
     if stage.startswith("discovering:"):
         topic_name = stage.split(":", 1)[1]
-        label = f"Discovering sources for {topic_name}..."
+        label = f"Discovering sources for {topic_name}{topic_progress}..."
+    elif stage.startswith("topic:"):
+        # Per-topic pipeline stage: "topic:TopicName:stage_name"
+        parts = stage.split(":", 2)
+        topic_name = parts[1] if len(parts) > 1 else "?"
+        sub_stage = parts[2] if len(parts) > 2 else "processing"
+        sub_labels = {
+            "polling": "Polling feeds",
+            "filtering": "Filtering articles",
+            "events": "Extracting events",
+            "entities": "Resolving entities",
+            "synthesis": "Synthesizing intelligence",
+        }
+        sub_label = sub_labels.get(sub_stage, sub_stage.title())
+        label = f"{sub_label} &mdash; {topic_name}{topic_progress}..."
+    elif stage == "rendering":
+        label = "Rendering briefing..."
+    elif stage == "audio":
+        label = "Generating audio podcast..."
     else:
         stage_labels = {
             "starting": "Initializing pipeline...",
             "discovering": "Discovering sources for new topics...",
-            "running": "Running pipeline (this may take a few minutes)...",
+            "running": "Running pipeline...",
+            "projections": "Computing predictions...",
         }
         label = stage_labels.get(stage, f"Pipeline: {stage}...")
 
     return HTMLResponse(
         f'<div class="pipeline-status pipeline-running" id="pipeline-bar" '
         f'hx-get="/setup/status" hx-trigger="every 3s" hx-swap="outerHTML">'
-        f'<div class="pipeline-spinner"></div> {label}</div>'
+        f'<div class="pipeline-spinner"></div> {label}{elapsed_html}</div>'
     )
+
+
+# ── Telegram validation (still available but moved out of setup flow) ──
+
+
+@router.post("/setup/telegram/validate")
+async def setup_telegram_validate(request: Request):
+    """Validate Telegram bot token and show bot info (HTMX fragment)."""
+    from nexus.agent.telegram_utils import validate_token
+    from html import escape
+
+    session_id, session = _get_session(request)
+    form = await request.form()
+    token = (form.get("telegram_token") or "").strip()
+
+    if not token:
+        token = session.get("keys", {}).get("TELEGRAM_BOT_TOKEN", "")
+
+    if not token:
+        resp = HTMLResponse(
+            '<div id="telegram-status" class="form-hint" style="color:var(--danger)">'
+            'Enter a bot token first.</div>'
+        )
+        return _set_cookie(resp, session_id)
+
+    bot_info = await validate_token(token)
+    if bot_info:
+        username = escape(bot_info.get("username", ""))
+        session.setdefault("keys", {})["TELEGRAM_BOT_TOKEN"] = token
+        session["telegram_enabled"] = True
+        session["telegram_bot_username"] = username
+        resp = HTMLResponse(
+            f'<div id="telegram-status">'
+            f'<div class="form-hint" style="color:var(--success)">Token valid! Bot: @{username}</div>'
+            f'<div style="margin-top:0.5rem">'
+            f'<span class="form-hint">Now open Telegram and send <code>/start</code> to '
+            f'<a href="https://t.me/{username}" target="_blank">@{username}</a></span>'
+            f'</div>'
+            f'<div id="telegram-poll" hx-get="/setup/telegram/poll" hx-trigger="every 3s" '
+            f'hx-swap="outerHTML" style="margin-top:0.5rem">'
+            f'<span class="form-hint">Waiting for /start...</span>'
+            f'</div></div>'
+        )
+    else:
+        resp = HTMLResponse(
+            '<div id="telegram-status" class="form-hint" style="color:var(--danger)">'
+            'Invalid token. Check with <a href="https://t.me/BotFather" target="_blank">@BotFather</a>.'
+            '</div>'
+        )
+    return _set_cookie(resp, session_id)
+
+
+@router.get("/setup/telegram/poll")
+async def setup_telegram_poll(request: Request):
+    """Poll for /start message to capture chat_id (HTMX fragment)."""
+    from nexus.agent.telegram_utils import poll_for_chat_id
+
+    session_id, session = _get_session(request)
+    token = session.get("keys", {}).get("TELEGRAM_BOT_TOKEN", "")
+
+    if not token:
+        resp = HTMLResponse('<div id="telegram-poll"></div>')
+        return _set_cookie(resp, session_id)
+
+    if session.get("telegram_chat_id"):
+        chat_id = session["telegram_chat_id"]
+        resp = HTMLResponse(
+            f'<div id="telegram-poll" class="form-hint" style="color:var(--success)">'
+            f'Connected! Chat ID: {chat_id}</div>'
+        )
+        return _set_cookie(resp, session_id)
+
+    chat_id = await poll_for_chat_id(token, timeout=3.0)
+    if chat_id:
+        session["telegram_chat_id"] = chat_id
+        resp = HTMLResponse(
+            f'<div id="telegram-poll" class="form-hint" style="color:var(--success)">'
+            f'Connected! Chat ID: {chat_id}</div>'
+        )
+    else:
+        resp = HTMLResponse(
+            '<div id="telegram-poll" hx-get="/setup/telegram/poll" hx-trigger="every 3s" '
+            'hx-swap="outerHTML">'
+            '<span class="form-hint">Waiting for /start...</span>'
+            '</div>'
+        )
+    return _set_cookie(resp, session_id)

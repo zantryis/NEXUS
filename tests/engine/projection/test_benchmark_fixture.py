@@ -1,9 +1,7 @@
 """Tests for benchmark fixture additions: derive_series_ticker, ActorBenchmarkEngine,
 StructuralAssessment.numeric_probability, MultiSampleWrapper."""
 
-import asyncio
 from datetime import date
-from unittest.mock import AsyncMock
 
 import pytest
 

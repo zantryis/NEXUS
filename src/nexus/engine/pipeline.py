@@ -103,11 +103,16 @@ async def run_topic_pipeline(
     capture: FixtureCapture | None = None,
     max_ingest: int | None = None,
     bg_tasks: list | None = None,
+    progress_status: dict | None = None,
 ) -> TopicSynthesis:
     """Run the pipeline for a single topic: poll → ingest → filter → events → synthesize."""
     slug = topic.name.lower().replace(" ", "-").replace("/", "-")
     processing_date = run_date or date.today()
     timings: dict[str, float] = {}
+
+    def _stage(name: str):
+        if progress_status is not None:
+            progress_status["stage"] = f"topic:{topic.name}:{name}"
 
     # Poll, dedup, and ingest
     t0 = time.monotonic()
@@ -162,6 +167,7 @@ async def run_topic_pipeline(
     recent_events = [e for e in existing_events if e.date >= cutoff][-30:]
 
     # Filter (two-pass: relevance → significance+novelty)
+    _stage("filtering")
     t0 = time.monotonic()
     filter_result = await filter_items(llm, ingested, topic, recent_events=recent_events)
     relevant = filter_result.accepted
@@ -176,6 +182,7 @@ async def run_topic_pipeline(
         capture.save_filtered(relevant)
 
     # Extract events — cap by topic scope
+    _stage("events")
     event_cap = _event_cap_for_topic(topic)
     top_relevant = sorted(
         relevant, key=lambda x: x.relevance_score or 0, reverse=True
@@ -216,6 +223,7 @@ async def run_topic_pipeline(
         capture.save_events(extracted_events)
 
     # Entity resolution: canonicalize entity strings into graph nodes
+    _stage("entities")
     resolve_map: dict[str, tuple[int, str]] = {}
     if new_events:
         t0 = time.monotonic()
@@ -339,6 +347,7 @@ async def run_topic_pipeline(
     monthly = await store.get_summaries(slug, "monthly")
 
     # Knowledge synthesis: build TopicSynthesis (X)
+    _stage("synthesis")
     # Fallback to recent events only (last 3 days) — older context lives in summaries
     recent_fallback = [e for e in all_events if e.date >= processing_date - timedelta(days=3)][-10:]
     t0 = time.monotonic()
@@ -371,6 +380,7 @@ async def run_pipeline(
     elevenlabs_api_key: str | None = None,
     max_ingest: int | None = None,
     trigger: str = "manual",
+    progress_status: dict | None = None,
 ) -> Path:
     """Run the full daily engine pipeline. Returns path to generated briefing."""
     pipeline_start = time.monotonic()
@@ -379,6 +389,13 @@ async def run_pipeline(
     all_articles: list[ContentItem] = []
     all_events: list[Event] = []
     extracted_event_count = 0
+
+    def _progress(stage: str, topic_index: int = 0):
+        """Update progress_status dict if provided."""
+        if progress_status is not None:
+            progress_status["stage"] = stage
+            progress_status["topic_index"] = topic_index
+            progress_status["topic_count"] = len(config.topics)
 
     if capture and fixture_dir is None:
         fixture_dir = Path("tests/fixtures")
@@ -396,7 +413,8 @@ async def run_pipeline(
 
     bg_tasks: list[asyncio.Task] = []
     try:
-        for topic in config.topics:
+        for topic_i, topic in enumerate(config.topics):
+            _progress(f"topic:{topic.name}:polling", topic_i + 1)
             sources = load_source_registry(data_dir, topic)
 
             # Auto-discover sources if registry is empty and discovery is enabled
@@ -433,7 +451,8 @@ async def run_pipeline(
                                                run_date=date.today(),
                                                store=store, capture=cap,
                                                max_ingest=max_ingest,
-                                               bg_tasks=bg_tasks)
+                                               bg_tasks=bg_tasks,
+                                               progress_status=progress_status)
                 syntheses.append(syn)
             except Exception:
                 logger.exception(f"[{topic.name}] Topic pipeline failed — skipping")
@@ -441,6 +460,7 @@ async def run_pipeline(
 
         today_date = date.today()
         if syntheses:
+            _progress("projections")
             await run_projection_pass(
                 store,
                 llm,
@@ -482,6 +502,7 @@ async def run_pipeline(
             logger.info(f"Refreshed {refreshed} stale narrative pages")
 
         # Render briefing from TopicSynthesis objects
+        _progress("rendering")
         t0 = time.monotonic()
         briefing_text = await render_text_briefing(llm, config, syntheses)
         render_time = time.monotonic() - t0
@@ -496,6 +517,7 @@ async def run_pipeline(
         # Audio pipeline (if enabled)
         audio_path = None
         if config.audio.enabled:
+            _progress("audio")
             try:
                 audio_path = await run_audio_pipeline(
                     llm, config, syntheses, data_dir,

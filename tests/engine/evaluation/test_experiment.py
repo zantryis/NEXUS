@@ -1,12 +1,9 @@
 """Tests for experiment infrastructure — statistics, reporting, overrides."""
 
-import math
 import pytest
-from dataclasses import asdict
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
-from nexus.config.models import ModelsConfig, NexusConfig, TopicConfig, UserConfig
-from nexus.engine.evaluation.benchmark import StyleResult
+from nexus.config.models import ModelsConfig, TopicConfig
 
 
 # ── Statistics ───────────────────────────────────────────────────────────────
@@ -86,7 +83,7 @@ def test_variant_result_structure():
 
 
 def test_suite_report_structure():
-    from nexus.engine.evaluation.experiment import SuiteReport, VariantResult
+    from nexus.engine.evaluation.experiment import SuiteReport
     sr = SuiteReport(
         suite_id="A",
         description="Pipeline vs Baselines",

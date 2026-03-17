@@ -2624,6 +2624,75 @@ a.entity-tag:hover {
     to { transform: rotate(360deg); }
 }
 
+.pipeline-elapsed {
+    margin-left: auto;
+    font-size: 0.8rem;
+    opacity: 0.7;
+    font-family: var(--nx-font-mono, 'Share Tech Mono', monospace);
+}
+
+.setup-note {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--nx-accent-soft, rgba(99, 102, 241, 0.08));
+    border-radius: 6px;
+    font-size: 0.82rem;
+    color: var(--nx-text-dim);
+}
+
+/* Sample briefing preview (shown during pipeline wait) */
+
+.sample-preview-label {
+    font-size: 0.82rem;
+    color: var(--nx-text-dim);
+    margin-bottom: 0.75rem;
+}
+
+.sample-preview-card {
+    background: var(--nx-bg-card, rgba(255,255,255,0.03));
+    border: 1px solid var(--nx-border, rgba(255,255,255,0.08));
+    border-radius: 8px;
+    padding: 1.25rem;
+    max-width: 600px;
+}
+
+.sample-thread {
+    margin-bottom: 1rem;
+}
+
+.sample-thread:last-child { margin-bottom: 0; }
+
+.sample-headline {
+    font-weight: 600;
+    font-size: 0.92rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+}
+
+.sample-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--nx-accent);
+    flex-shrink: 0;
+}
+
+.sample-event {
+    font-size: 0.82rem;
+    color: var(--nx-text-dim);
+    margin-bottom: 0.4rem;
+    padding-left: 1rem;
+}
+
+.sample-sources {
+    display: flex;
+    gap: 0.3rem;
+    padding-left: 1rem;
+    font-size: 0.72rem;
+}
+
 /* Settings sections (accordion) */
 
 .settings-section {

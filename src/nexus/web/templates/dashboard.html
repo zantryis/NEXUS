@@ -4,8 +4,8 @@
 {% block content %}
 
 {% if setup_complete %}
-<div class="flash-banner flash-warning">
-    Setup is saved. Restart Nexus once to enable scheduled jobs, Telegram delivery, and other always-on services.
+<div class="flash-banner flash-success">
+    Setup complete! Your first intelligence briefing is being prepared now.
 </div>
 {% endif %}
 
@@ -364,26 +364,45 @@
 {% else %}
 <div class="empty-state">
     <h3>Welcome to Nexus</h3>
-    <p>No intelligence data yet. Run the pipeline to populate your dashboard.</p>
-    <div style="margin-top: 1.5rem;">
+    <div style="margin-top: 1rem;">
         {% if pipeline_status and not pipeline_status.get("done", True) %}
-        {# Pipeline is currently running — show status, hide button #}
+        {# Pipeline is currently running — show live status via HTMX #}
+        <p>Building your first intelligence briefing...</p>
         <div class="pipeline-status pipeline-running" id="pipeline-bar"
              hx-get="/setup/status" hx-trigger="every 3s" hx-swap="outerHTML">
-            <div class="pipeline-spinner"></div>
-            {% set stage = pipeline_status.get("stage", "running") %}
-            {% if stage.startswith("discovering:") %}
-            Discovering sources for {{ stage.split(":", 1)[1] }}...
-            {% elif stage == "starting" %}
-            Initializing pipeline...
-            {% elif stage == "running" %}
-            Running pipeline (this may take a few minutes)...
-            {% else %}
-            Pipeline: {{ stage }}...
-            {% endif %}
+            <div class="pipeline-spinner"></div> Initializing pipeline...
+        </div>
+
+        {# Sample preview — show what the briefing will look like #}
+        <div class="sample-preview" style="margin-top: 2rem;">
+            <div class="sample-preview-label">Here's what your briefing will look like:</div>
+            <div class="sample-preview-card">
+                <div class="sample-thread">
+                    <div class="sample-headline">
+                        <span class="sample-dot"></span>
+                        Major policy shift announced amid diplomatic tensions
+                        <span class="sig-indicator sig-high" style="font-size:0.7rem;">8</span>
+                    </div>
+                    <div class="sample-event">Senior officials confirmed the change following weeks of closed-door negotiations, marking a significant departure from previous positions.</div>
+                    <div class="sample-sources">
+                        <span class="source-badge">Reuters</span>
+                        <span class="source-badge">AP News</span>
+                        <span class="source-badge">Al Jazeera</span>
+                    </div>
+                </div>
+                <div class="sample-thread" style="opacity: 0.5;">
+                    <div class="sample-headline">
+                        <span class="sample-dot"></span>
+                        New research breakthrough draws industry attention
+                        <span class="sig-indicator sig-med" style="font-size:0.7rem;">6</span>
+                    </div>
+                    <div class="sample-event">Researchers published findings that could reshape current approaches...</div>
+                </div>
+            </div>
         </div>
         {% elif pipeline_status and pipeline_status.get("error") %}
-        {# Pipeline errored — show error #}
+        {# Pipeline errored — show error + retry #}
+        <p>Something went wrong during pipeline execution.</p>
         <div class="pipeline-status pipeline-error" id="pipeline-bar">
             Pipeline error: {{ pipeline_status.get("error") }}
         </div>
@@ -399,15 +418,16 @@
         </div>
         {% else %}
         {# No pipeline run yet — show button #}
+        <p>No intelligence data yet. Run the pipeline to get your first briefing.</p>
         <button class="btn-primary btn-lg" id="launch-pipeline-btn"
                 hx-post="/setup/launch" hx-target="#pipeline-bar" hx-swap="outerHTML"
                 hx-disabled-elt="this">
             Run Initial Pipeline
         </button>
         <div id="pipeline-bar" style="margin-top: 1rem;"></div>
+        <p style="margin-top: 1rem; font-size: 0.82rem;">Or run from terminal: <code>python -m nexus engine</code></p>
         {% endif %}
     </div>
-    <p style="margin-top: 1.5rem; font-size: 0.82rem;">Or run from terminal: <code>python -m nexus engine</code></p>
 </div>
 {% endif %}
 

@@ -1,8 +1,6 @@
 """Tests for projection analytics — convergence detection (Block E)."""
 
 from datetime import date
-import json
-from unittest.mock import AsyncMock
 
 import pytest
 

@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import date
+from unittest.mock import AsyncMock
 
-import pytest
 
 from nexus.engine.projection.evidence import (
     EvidencePackage,

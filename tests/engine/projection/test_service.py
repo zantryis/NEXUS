@@ -364,7 +364,7 @@ class TestKalshiLoopKeywordFallback:
 
     async def test_extracts_keywords_from_topic_config(self):
         """run_kalshi_loop with topic_configs should match markets using topic keywords."""
-        from unittest.mock import AsyncMock, patch
+        from unittest.mock import AsyncMock
         from nexus.engine.projection.service import run_kalshi_loop
 
         mock_store = AsyncMock()

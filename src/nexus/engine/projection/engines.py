@@ -6,7 +6,6 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from pathlib import Path
 from typing import Protocol
 
 from nexus.engine.knowledge.events import Event

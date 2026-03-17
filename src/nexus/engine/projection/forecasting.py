@@ -10,7 +10,6 @@ from typing import Protocol
 from nexus.engine.knowledge.events import Event
 from nexus.engine.projection.models import (
     CrossTopicSignal,
-    ForecastQuestion,
     ForecastRun,
     GraphSnapshot,
     TopicProjection,

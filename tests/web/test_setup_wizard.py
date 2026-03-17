@@ -1,4 +1,4 @@
-"""Tests for the web setup wizard."""
+"""Tests for the web setup wizard (3-step flow)."""
 
 import pytest
 from unittest.mock import patch, AsyncMock
@@ -72,38 +72,61 @@ async def test_static_files_not_redirected(app_no_config):
 
 @pytest.mark.asyncio
 async def test_setup_page_renders(app_no_config):
-    """GET /setup should render step 1 with presets."""
+    """GET /setup should render step 1 with providers and API key field."""
     transport = ASGITransport(app=app_no_config)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/setup")
         assert resp.status_code == 200
         assert "Nexus" in resp.text
-        assert "preset" in resp.text.lower()
+        # Step 1 now has provider selection and inline API key
+        assert "provider" in resp.text.lower()
+        assert "api_key" in resp.text
 
 
 @pytest.mark.asyncio
-async def test_setup_step1_post_redirects_to_step2(app_no_config):
-    """POST /setup/step/1 with preset should redirect to step 2."""
+async def test_setup_step1_with_key_redirects_to_step2(app_no_config):
+    """POST /setup/step/1 with provider + API key should redirect to step 2 (topics)."""
     transport = ASGITransport(app=app_no_config)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/setup/step/1", data={"provider": "gemini", "preset": "balanced"}, follow_redirects=False)
+        resp = await client.post(
+            "/setup/step/1",
+            data={"provider": "gemini", "preset": "balanced", "api_key": "test-key"},
+            follow_redirects=False,
+        )
         assert resp.status_code == 303
         assert "/setup/step/2" in resp.headers["location"]
 
 
 @pytest.mark.asyncio
-async def test_setup_step1_free_skips_to_step3(app_no_config):
-    """POST /setup/step/1 with free preset should skip to step 3."""
+async def test_setup_step1_free_skips_key(app_no_config):
+    """POST /setup/step/1 with free preset (no key needed) goes to step 2."""
     transport = ASGITransport(app=app_no_config)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/setup/step/1", data={"provider": "ollama", "preset": "free"}, follow_redirects=False)
+        resp = await client.post(
+            "/setup/step/1",
+            data={"provider": "ollama", "preset": "free"},
+            follow_redirects=False,
+        )
         assert resp.status_code == 303
-        assert "/setup/step/3" in resp.headers["location"]
+        assert "/setup/step/2" in resp.headers["location"]
 
 
 @pytest.mark.asyncio
-async def test_setup_step1_invalid_preset_rejected(app_no_config):
-    """Invalid presets should not be accepted by the web wizard."""
+async def test_setup_step1_missing_key_shows_error(app_no_config):
+    """POST /setup/step/1 with provider that needs key but no key → error."""
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/setup/step/1",
+            data={"provider": "gemini", "preset": "balanced", "api_key": ""},
+        )
+        assert resp.status_code == 400
+        assert "API key" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_setup_step1_invalid_provider_rejected(app_no_config):
+    """Invalid provider should not be accepted."""
     transport = ASGITransport(app=app_no_config)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/setup/step/1", data={"provider": "", "preset": "evil"})
@@ -112,37 +135,97 @@ async def test_setup_step1_invalid_preset_rejected(app_no_config):
 
 
 @pytest.mark.asyncio
-async def test_setup_step2_empty_key_shows_error(app_no_config):
-    """POST /setup/step/2 with empty key should show error."""
+async def test_setup_step2_topics_page_renders(app_no_config):
+    """GET /setup/step/2 should show topic selection."""
     transport = ASGITransport(app=app_no_config)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # First set up session with preset
-        await client.post("/setup/step/1", data={"preset": "balanced"})
-        resp = await client.post("/setup/step/2", data={"api_key": ""}, follow_redirects=False)
-        # FastAPI will return 422 for empty required field
-        assert resp.status_code in (303, 422, 200)
+        # First complete step 1
+        await client.post("/setup/step/1", data={"provider": "ollama", "preset": "free"})
+        resp = await client.get("/setup/step/2")
+        assert resp.status_code == 200
+        assert "topic" in resp.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_setup_step2_saves_topics(app_no_config):
+    """POST /setup/step/2 with topics should redirect to step 3 (review)."""
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post("/setup/step/1", data={"provider": "ollama", "preset": "free"})
+        resp = await client.post(
+            "/setup/step/2",
+            data={"topics": "ai-ml-research"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "/setup/step/3" in resp.headers["location"]
+
+
+@pytest.mark.asyncio
+async def test_setup_step3_review_page_renders(app_no_config):
+    """GET /setup/step/3 should show review page."""
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post("/setup/step/1", data={"provider": "ollama", "preset": "free"})
+        await client.post("/setup/step/2", data={"topics": "ai-ml-research"})
+        resp = await client.get("/setup/step/3")
+        assert resp.status_code == 200
+        assert "Ready to Go" in resp.text
+        assert "Start Nexus" in resp.text
 
 
 @pytest.mark.asyncio
 async def test_setup_complete_writes_config(app_no_config, tmp_path):
-    """POST /setup/complete should write config.yaml and .env."""
+    """POST /setup/complete should write config.yaml and auto-launch pipeline."""
     data_dir = tmp_path / "data"
     transport = ASGITransport(app=app_no_config)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # Walk through the wizard
-        await client.post("/setup/step/1", data={"preset": "balanced"})
-        await client.post("/setup/step/2", data={"api_key": "test-gemini-key"})
-        await client.post("/setup/step/3", data={})
-        await client.post("/setup/step/4", data={"topics": "ai-ml-research"})
-        await client.post("/setup/step/5", data={
-            "user_name": "TestUser", "timezone": "UTC",
-            "schedule": "07:00", "style": "analytical",
-        })
-        resp = await client.post("/setup/complete", follow_redirects=False)
+        # Walk through the 3-step wizard
+        await client.post(
+            "/setup/step/1",
+            data={"provider": "gemini", "preset": "balanced", "api_key": "test-gemini-key"},
+        )
+        await client.post("/setup/step/2", data={"topics": "ai-ml-research"})
+
+        with patch("nexus.web.routes.setup._auto_launch_pipeline"):
+            resp = await client.post("/setup/complete", follow_redirects=False)
 
         assert resp.status_code == 303
         assert resp.headers["location"] == "/?setup=complete"
         assert (data_dir / "config.yaml").exists()
+
+
+@pytest.mark.asyncio
+async def test_setup_complete_uses_sensible_defaults(app_no_config, tmp_path):
+    """Setup complete should use default timezone, schedule, style."""
+    import yaml
+    data_dir = tmp_path / "data"
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post("/setup/step/1", data={"provider": "ollama", "preset": "free"})
+        await client.post("/setup/step/2", data={"topics": "ai-ml-research"})
+
+        with patch("nexus.web.routes.setup._auto_launch_pipeline"):
+            await client.post("/setup/complete", follow_redirects=False)
+
+    config_path = data_dir / "config.yaml"
+    raw = yaml.safe_load(config_path.read_text())
+    assert raw["user"]["timezone"] == "UTC"
+    assert raw["briefing"]["schedule"] == "06:00"
+    assert raw["briefing"]["style"] == "analytical"
+
+
+@pytest.mark.asyncio
+async def test_setup_complete_auto_launches_pipeline(app_no_config, tmp_path):
+    """POST /setup/complete should call _auto_launch_pipeline."""
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post("/setup/step/1", data={"provider": "ollama", "preset": "free"})
+        await client.post("/setup/step/2", data={"topics": "ai-ml-research"})
+
+        with patch("nexus.web.routes.setup._auto_launch_pipeline") as mock_launch:
+            await client.post("/setup/complete", follow_redirects=False)
+            mock_launch.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -152,6 +235,45 @@ async def test_setup_status_returns_html(app_no_config):
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/setup/status")
         assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_setup_status_shows_elapsed_time(app_no_config):
+    """GET /setup/status should show elapsed time when pipeline is running."""
+    import time
+    app_no_config.state.pipeline_status = {
+        "stage": "running",
+        "done": False,
+        "started_at": time.time() - 65,  # 1 min 5 sec ago
+        "topic_index": 1,
+        "topic_count": 2,
+    }
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/setup/status")
+        assert resp.status_code == 200
+        assert "pipeline-elapsed" in resp.text
+        assert "1:0" in resp.text  # 1:05
+
+
+@pytest.mark.asyncio
+async def test_setup_status_shows_topic_progress(app_no_config):
+    """GET /setup/status should show per-topic progress."""
+    import time
+    app_no_config.state.pipeline_status = {
+        "stage": "topic:AI/ML Research:filtering",
+        "done": False,
+        "started_at": time.time(),
+        "topic_index": 1,
+        "topic_count": 3,
+    }
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/setup/status")
+        assert resp.status_code == 200
+        assert "Filtering articles" in resp.text
+        assert "AI/ML Research" in resp.text
+        assert "(1/3)" in resp.text
 
 
 @pytest.mark.asyncio
@@ -185,7 +307,7 @@ async def test_remote_setup_accepts_admin_token(app_no_config):
         assert "nexus_admin=" in resp.headers["set-cookie"]
 
 
-# ── Telegram validation tests ──
+# ── Telegram validation tests (still on /setup/telegram/* endpoints) ──
 
 
 @pytest.mark.asyncio
@@ -252,35 +374,15 @@ async def test_telegram_poll_finds_chat_id(mock_poll, app_no_config):
             assert "987654" in resp.text
 
 
-@pytest.mark.asyncio
-async def test_setup_complete_persists_chat_id(app_no_config, tmp_path):
-    """POST /setup/complete with telegram chat_id in session writes it to config."""
-    import yaml
-    data_dir = tmp_path / "data"
+# ── 3-step wizard total_steps validation ──
 
+
+@pytest.mark.asyncio
+async def test_setup_shows_3_steps(app_no_config):
+    """Setup wizard should show 3 step indicators (not 6)."""
     transport = ASGITransport(app=app_no_config)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # Walk the wizard to set up session
-        await client.post("/setup/step/1", data={"provider": "gemini", "preset": "balanced"})
-        await client.post("/setup/step/2", data={"api_key": "test-key"})
-        await client.post("/setup/step/3", data={"telegram_token": "123:ABC"})
-        await client.post("/setup/step/4", data={"topics": "ai-ml-research"})
-        await client.post("/setup/step/5", data={
-            "user_name": "Tester", "timezone": "UTC",
-            "schedule": "07:00", "style": "analytical",
-        })
-
-        # Manually inject chat_id into session (simulating what poll would do)
-        sessions = app_no_config.state.setup_sessions
-        for sid, sess in sessions.items():
-            sess["telegram_chat_id"] = 12345678
-
-        resp = await client.post("/setup/complete", follow_redirects=False)
-        assert resp.status_code == 303
-
-    # Verify config.yaml has chat_id
-    config_path = data_dir / "config.yaml"
-    if config_path.exists():
-        raw = yaml.safe_load(config_path.read_text())
-        tg = raw.get("telegram", {})
-        assert tg.get("chat_id") == 12345678
+        resp = await client.get("/setup")
+        assert resp.status_code == 200
+        # Count step dots — should be exactly 3
+        assert resp.text.count("setup-step-dot") == 3

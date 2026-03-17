@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from datetime import date, datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
-from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.engine.projection.kalshi_benchmark import (
     BenchmarkQuestion,
-    BenchmarkReport,
     SettledMarket,
     build_benchmark_dataset,
     build_benchmark_from_metadata,

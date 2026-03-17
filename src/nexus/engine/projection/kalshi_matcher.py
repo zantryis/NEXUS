@@ -164,7 +164,7 @@ async def generate_aligned_forecasts(
         ticker = market["ticker"]
         event_title = market.get("event_title", "")
         contract_title = market.get("title", "")
-        subtitle = market.get("subtitle", "")
+        _subtitle = market.get("subtitle", "")  # noqa: F841
         # Build a descriptive question: prefer "Event: Contract" for multi-option markets
         if contract_title and event_title and contract_title.lower() != event_title.lower():
             contract_clean = contract_title.rstrip("?")
@@ -334,7 +334,7 @@ def render_divergence_section(divergences: list[dict]) -> str:
 
     for d in divergences:
         gap = d["gap_pp"]
-        ticker = d["ticker"]
+        _ticker = d["ticker"]  # noqa: F841
         our = d["our_probability"]
         market = d["kalshi_probability"]
         question = d["question"]

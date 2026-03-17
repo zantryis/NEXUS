@@ -328,7 +328,7 @@ async def test_persistence(store):
 
     llm = _MockLLM()
 
-    report = await backtest_forecasts(
+    await backtest_forecasts(
         store, llm, topics=[("test-topic", "Test Topic")],
         start=date(2026, 1, 1), end=date(2026, 3, 1),
         engines=["structural"],

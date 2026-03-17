@@ -8,16 +8,13 @@ Usage:
     python -m nexus experiment --suite A,B,G --topics iran,ai --budget 15
 """
 
-import copy
 import json
 import logging
 import math
-import random
-import statistics
 import time
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 
 import yaml

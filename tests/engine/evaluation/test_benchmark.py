@@ -1,6 +1,5 @@
 """Tests for the benchmark module — report structure, naive baseline, style comparison."""
 
-import pytest
 from datetime import date
 
 from nexus.engine.evaluation.benchmark import (
@@ -13,7 +12,6 @@ from nexus.engine.evaluation.benchmark import (
 )
 from nexus.engine.knowledge.events import Event
 from nexus.engine.sources.polling import ContentItem
-from nexus.engine.synthesis.knowledge import TopicSynthesis
 
 
 def _make_events(n: int = 10) -> list[Event]:

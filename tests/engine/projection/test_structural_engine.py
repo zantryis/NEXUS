@@ -4,16 +4,12 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
-import pytest
 
 from nexus.engine.projection.evidence import EvidencePackage
 from nexus.engine.projection.models import (
-    ConfidenceLevel,
-    EvidenceFactor,
     StructuralAssessment,
-    Verdict,
 )
 from nexus.engine.projection.structural_engine import (
     StructuralBenchmarkEngine,
@@ -152,7 +148,7 @@ class TestPredictStructural:
         ])
         evidence = _rich_evidence()
 
-        result = await predict_structural(llm, evidence)
+        await predict_structural(llm, evidence)
 
         assert llm.complete.call_count == 3
 

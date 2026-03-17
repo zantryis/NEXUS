@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import date
+from unittest.mock import AsyncMock
 
 import pytest
 

@@ -130,7 +130,7 @@ async def test_dashboard_sets_security_headers(client):
 async def test_dashboard_setup_complete_banner(client):
     resp = await client.get("/?setup=complete")
     assert resp.status_code == 200
-    assert "Restart Nexus once" in resp.text
+    assert "Setup complete" in resp.text
 
 
 async def test_dashboard_shows_topics(client):
