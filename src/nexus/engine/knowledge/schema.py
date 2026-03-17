@@ -6,7 +6,7 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 14
+CURRENT_VERSION = 15
 
 DDL = """
 -- Schema version tracking
@@ -673,6 +673,23 @@ CREATE TABLE IF NOT EXISTS breaking_feedback (
 CREATE INDEX IF NOT EXISTS idx_breaking_feedback_hash ON breaking_feedback(headline_hash);
 """
 
+MIGRATION_V15 = """
+-- Feed health tracking (v15)
+CREATE TABLE IF NOT EXISTS feed_health (
+    source_url TEXT PRIMARY KEY,
+    topic_slug TEXT NOT NULL,
+    last_poll_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_success_at TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    total_polls INTEGER NOT NULL DEFAULT 0,
+    total_successes INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    status TEXT NOT NULL DEFAULT 'healthy'
+        CHECK(status IN ('healthy','degraded','dead'))
+);
+CREATE INDEX IF NOT EXISTS idx_feed_health_status ON feed_health(status);
+"""
+
 
 async def initialize_schema(db: aiosqlite.Connection) -> None:
     """Create all tables and indexes. Idempotent."""
@@ -744,6 +761,10 @@ async def initialize_schema(db: aiosqlite.Connection) -> None:
     if current < 14 and not await _has_table(db, "breaking_feedback"):
         await db.executescript(MIGRATION_V14)
         logger.info("Applied migration v14: breaking_feedback table")
+
+    if current < 15 and not await _has_table(db, "feed_health"):
+        await db.executescript(MIGRATION_V15)
+        logger.info("Applied migration v15: feed_health table")
 
     if current < CURRENT_VERSION:
         await db.execute(

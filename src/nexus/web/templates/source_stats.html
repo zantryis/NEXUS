@@ -6,7 +6,45 @@
     <h2>Source Analytics{% if filter_topic %} <span class="page-subtitle">in {{ filter_topic }}</span>{% endif %}</h2>
 </div>
 
+{% if dead_feeds %}
+<div class="feed-health-warning">
+    <strong>&#9888;&#65039; {{ dead_feeds | length }} dead feed{{ 's' if dead_feeds | length > 1 else '' }}</strong> — these feeds have failed 5+ consecutive polls and are being skipped.
+    <ul>
+        {% for f in dead_feeds %}
+        <li>{{ f.source_url }} <span class="feed-health-error">({{ f.last_error or 'unknown error' }})</span></li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if feed_health %}
+<div class="page-header" style="margin-top:1.5rem;">
+    <h3>Feed Health</h3>
+</div>
+<table class="data-table">
+    <thead>
+        <tr><th>Feed URL</th><th>Topic</th><th>Status</th><th class="num">Polls</th><th class="num">Success</th><th>Last Success</th><th>Last Error</th></tr>
+    </thead>
+    <tbody>
+        {% for h in feed_health %}
+        <tr class="{% if h.status == 'dead' %}feed-row-dead{% elif h.status == 'degraded' %}feed-row-degraded{% endif %}">
+            <td class="feed-url">{{ h.source_url[:60] }}{% if h.source_url|length > 60 %}...{% endif %}</td>
+            <td>{{ h.topic_slug }}</td>
+            <td><span class="feed-status feed-status-{{ h.status }}">{{ h.status }}</span></td>
+            <td class="num">{{ h.total_polls }}</td>
+            <td class="num">{{ h.total_successes }}</td>
+            <td>{{ h.last_success_at or '—' }}</td>
+            <td class="feed-health-error">{{ (h.last_error or '—')[:50] }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
 {% if stats %}
+<div class="page-header" style="margin-top:1.5rem;">
+    <h3>Source Coverage</h3>
+</div>
 <table class="data-table">
     <thead>
         <tr><th>Outlet</th><th>Affiliation</th><th>Country</th><th>Language</th><th class="num">Events</th></tr>

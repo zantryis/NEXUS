@@ -2759,6 +2759,118 @@ class KnowledgeStore:
         not_breaking = (await cursor.fetchone())[0]
         return not_breaking / total
 
+    # ── Feed Health ───────────────────────────────────────────────────
+
+    async def record_feed_poll(
+        self, source_url: str, topic_slug: str, *, success: bool, error: str | None = None,
+    ) -> None:
+        """Record the result of a feed poll for health tracking."""
+        existing = await self.get_feed_health(source_url)
+        if existing is None:
+            consecutive = 0 if success else 1
+            status = "healthy"
+            await self.db.execute(
+                "INSERT INTO feed_health "
+                "(source_url, topic_slug, last_poll_at, last_success_at, "
+                "consecutive_failures, total_polls, total_successes, last_error, status) "
+                "VALUES (?, ?, datetime('now'), ?, ?, 1, ?, ?, ?)",
+                (
+                    source_url, topic_slug,
+                    "datetime('now')" if success else None,
+                    consecutive, 1 if success else 0,
+                    error, status,
+                ),
+            )
+            # Fix last_success_at for successful first poll
+            if success:
+                await self.db.execute(
+                    "UPDATE feed_health SET last_success_at = datetime('now') WHERE source_url = ?",
+                    (source_url,),
+                )
+        else:
+            total_polls = existing["total_polls"] + 1
+            total_successes = existing["total_successes"] + (1 if success else 0)
+            if success:
+                consecutive = 0
+            else:
+                consecutive = existing["consecutive_failures"] + 1
+
+            if consecutive >= 5:
+                status = "dead"
+            elif consecutive >= 3:
+                status = "degraded"
+            else:
+                status = "healthy"
+
+            if success:
+                await self.db.execute(
+                    "UPDATE feed_health SET last_poll_at = datetime('now'), "
+                    "last_success_at = datetime('now'), consecutive_failures = 0, "
+                    "total_polls = ?, total_successes = ?, last_error = NULL, status = ? "
+                    "WHERE source_url = ?",
+                    (total_polls, total_successes, status, source_url),
+                )
+            else:
+                await self.db.execute(
+                    "UPDATE feed_health SET last_poll_at = datetime('now'), "
+                    "consecutive_failures = ?, total_polls = ?, total_successes = ?, "
+                    "last_error = ?, status = ? WHERE source_url = ?",
+                    (consecutive, total_polls, total_successes, error, status, source_url),
+                )
+        await self.db.commit()
+
+    async def get_feed_health(self, source_url: str) -> dict | None:
+        """Get health record for a single feed."""
+        cursor = await self.db.execute(
+            "SELECT source_url, topic_slug, last_poll_at, last_success_at, "
+            "consecutive_failures, total_polls, total_successes, last_error, status "
+            "FROM feed_health WHERE source_url = ?",
+            (source_url,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return {
+            "source_url": row[0], "topic_slug": row[1],
+            "last_poll_at": row[2], "last_success_at": row[3],
+            "consecutive_failures": row[4], "total_polls": row[5],
+            "total_successes": row[6], "last_error": row[7], "status": row[8],
+        }
+
+    async def get_dead_feeds(self) -> list[dict]:
+        """Get all feeds flagged as dead."""
+        cursor = await self.db.execute(
+            "SELECT source_url, topic_slug, last_poll_at, last_success_at, "
+            "consecutive_failures, total_polls, total_successes, last_error, status "
+            "FROM feed_health WHERE status = 'dead'"
+        )
+        return [
+            {
+                "source_url": r[0], "topic_slug": r[1],
+                "last_poll_at": r[2], "last_success_at": r[3],
+                "consecutive_failures": r[4], "total_polls": r[5],
+                "total_successes": r[6], "last_error": r[7], "status": r[8],
+            }
+            for r in await cursor.fetchall()
+        ]
+
+    async def get_all_feed_health(self) -> list[dict]:
+        """Get health records for all tracked feeds."""
+        cursor = await self.db.execute(
+            "SELECT source_url, topic_slug, last_poll_at, last_success_at, "
+            "consecutive_failures, total_polls, total_successes, last_error, status "
+            "FROM feed_health ORDER BY status DESC, consecutive_failures DESC"
+        )
+        return [
+            {
+                "source_url": r[0], "topic_slug": r[1],
+                "last_poll_at": r[2], "last_success_at": r[3],
+                "consecutive_failures": r[4], "total_polls": r[5],
+                "total_successes": r[6], "last_error": r[7], "status": r[8],
+            }
+            for r in await cursor.fetchall()
+        ]
+
     async def _build_event_from_row(self, row) -> Event:
         """Build an Event object from a DB row, loading sources and entities."""
         event_id = row[0]
