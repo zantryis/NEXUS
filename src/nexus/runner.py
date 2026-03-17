@@ -134,18 +134,21 @@ async def run_all(
     except asyncio.CancelledError:
         pass  # Normal Ctrl+C shutdown
     finally:
-        # Graceful shutdown
+        # Graceful shutdown — let in-flight jobs finish, with timeouts
         if scheduler:
-            scheduler.shutdown(wait=False)
+            try:
+                scheduler.shutdown(wait=True)
+            except BaseException:
+                pass
             logger.info("Scheduler stopped")
         if bot:
             try:
-                await bot.stop()
+                await asyncio.wait_for(bot.stop(), timeout=10.0)
             except BaseException:
                 pass
         try:
             await llm.flush_usage()
-            await store.close()
+            await asyncio.wait_for(store.close(), timeout=10.0)
         except BaseException:
             pass
         logger.info("Nexus shutdown complete")

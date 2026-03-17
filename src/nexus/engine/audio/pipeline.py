@@ -82,6 +82,12 @@ async def run_audio_pipeline(
     output_path = data_dir / "artifacts" / "audio" / f"{today}{suffix}.mp3"
     logger.info(f"{lang_label}Concatenating {len(segments)} segments → {output_path}")
 
-    result = await concatenate_audio(segments, output_path)
+    try:
+        result = await concatenate_audio(segments, output_path)
+    except Exception:
+        # Clean up partial output file on failure
+        if output_path.exists():
+            output_path.unlink()
+        raise
     logger.info(f"{lang_label}Audio pipeline complete: {result}")
     return result

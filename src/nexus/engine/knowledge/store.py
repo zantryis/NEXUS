@@ -69,64 +69,73 @@ class KnowledgeStore:
     # ── Events ────────────────────────────────────────────────────────
 
     async def add_events(self, events: list[Event], topic_slug: str) -> list[int]:
-        """Insert events and their sources. Returns list of new event row IDs."""
-        ids = []
-        for event in events:
-            raw_entities = event.raw_entities or event.entities
-            cursor = await self.db.execute(
-                "INSERT INTO events (date, summary, significance, relation_to_prior, raw_entities, topic_slug) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    event.date.isoformat(),
-                    event.summary,
-                    event.significance,
-                    event.relation_to_prior,
-                    json.dumps(raw_entities),
-                    topic_slug,
-                ),
-            )
-            event_id = cursor.lastrowid
-            ids.append(event_id)
-            event.event_id = event_id
+        """Insert events and their sources. Returns list of new event row IDs.
 
-            # Insert sources
-            for src in event.sources:
-                await self.db.execute(
-                    "INSERT INTO event_sources (event_id, url, outlet, affiliation, country, language, framing) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        All inserts are wrapped in a transaction — if any insert fails,
+        the entire batch is rolled back (all-or-nothing).
+        """
+        ids = []
+        await self.db.execute("BEGIN")
+        try:
+            for event in events:
+                raw_entities = event.raw_entities or event.entities
+                cursor = await self.db.execute(
+                    "INSERT INTO events (date, summary, significance, relation_to_prior, raw_entities, topic_slug) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
                     (
-                        event_id,
-                        src.get("url", ""),
-                        src.get("outlet", ""),
-                        src.get("affiliation", ""),
-                        src.get("country", ""),
-                        src.get("language", "en"),
-                        src.get("framing", ""),
+                        event.date.isoformat(),
+                        event.summary,
+                        event.significance,
+                        event.relation_to_prior,
+                        json.dumps(raw_entities),
+                        topic_slug,
                     ),
                 )
+                event_id = cursor.lastrowid
+                ids.append(event_id)
+                event.event_id = event_id
 
-            # Backward-compatible path for tests/manual store use:
-            # when raw_entities is absent, treat event.entities as canonical enough to link.
-            if not event.raw_entities:
-                for entity_name in event.entities:
+                # Insert sources
+                for src in event.sources:
                     await self.db.execute(
-                        "INSERT INTO entities (canonical_name, entity_type, first_seen, last_seen) "
-                        "VALUES (?, 'unknown', ?, ?) "
-                        "ON CONFLICT(canonical_name) DO UPDATE SET last_seen = excluded.last_seen",
-                        (entity_name, event.date.isoformat(), event.date.isoformat()),
+                        "INSERT INTO event_sources (event_id, url, outlet, affiliation, country, language, framing) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            event_id,
+                            src.get("url", ""),
+                            src.get("outlet", ""),
+                            src.get("affiliation", ""),
+                            src.get("country", ""),
+                            src.get("language", "en"),
+                            src.get("framing", ""),
+                        ),
                     )
-                    cursor2 = await self.db.execute(
-                        "SELECT id FROM entities WHERE canonical_name = ?",
-                        (entity_name,),
-                    )
-                    row = await cursor2.fetchone()
-                    if row:
-                        await self.db.execute(
-                            "INSERT OR IGNORE INTO event_entities (event_id, entity_id) VALUES (?, ?)",
-                            (event_id, row[0]),
-                        )
 
-        await self.db.commit()
+                # Backward-compatible path for tests/manual store use:
+                # when raw_entities is absent, treat event.entities as canonical enough to link.
+                if not event.raw_entities:
+                    for entity_name in event.entities:
+                        await self.db.execute(
+                            "INSERT INTO entities (canonical_name, entity_type, first_seen, last_seen) "
+                            "VALUES (?, 'unknown', ?, ?) "
+                            "ON CONFLICT(canonical_name) DO UPDATE SET last_seen = excluded.last_seen",
+                            (entity_name, event.date.isoformat(), event.date.isoformat()),
+                        )
+                        cursor2 = await self.db.execute(
+                            "SELECT id FROM entities WHERE canonical_name = ?",
+                            (entity_name,),
+                        )
+                        row = await cursor2.fetchone()
+                        if row:
+                            await self.db.execute(
+                                "INSERT OR IGNORE INTO event_entities (event_id, entity_id) VALUES (?, ?)",
+                                (event_id, row[0]),
+                            )
+
+            await self.db.execute("COMMIT")
+        except Exception:
+            await self.db.execute("ROLLBACK")
+            raise
         return ids
 
     async def get_events(
@@ -2718,6 +2727,37 @@ class KnowledgeStore:
             }
             for r in await cursor.fetchall()
         ]
+
+    # ── Breaking Feedback ─────────────────────────────────────────────
+
+    async def add_breaking_feedback(
+        self, headline_hash: str, topic_slug: str, feedback: str,
+    ) -> int:
+        """Record user feedback on a breaking news alert."""
+        cursor = await self.db.execute(
+            "INSERT INTO breaking_feedback (headline_hash, topic_slug, feedback) VALUES (?, ?, ?)",
+            (headline_hash, topic_slug, feedback),
+        )
+        await self.db.commit()
+        return cursor.lastrowid
+
+    async def get_breaking_fp_rate(self) -> float:
+        """Compute the false-positive rate from breaking feedback.
+
+        FP rate = not_breaking / total feedback entries.
+        Returns 0.0 if no feedback exists.
+        """
+        cursor = await self.db.execute(
+            "SELECT COUNT(*) FROM breaking_feedback"
+        )
+        total = (await cursor.fetchone())[0]
+        if total == 0:
+            return 0.0
+        cursor = await self.db.execute(
+            "SELECT COUNT(*) FROM breaking_feedback WHERE feedback = 'not_breaking'"
+        )
+        not_breaking = (await cursor.fetchone())[0]
+        return not_breaking / total
 
     async def _build_event_from_row(self, row) -> Event:
         """Build an Event object from a DB row, loading sources and entities."""
