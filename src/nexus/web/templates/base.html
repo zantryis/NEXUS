@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script>(function(){var t=localStorage.getItem('nexus-theme');if(t)document.documentElement.setAttribute('data-theme',t);else if(window.matchMedia&&matchMedia('(prefers-color-scheme:light)').matches)document.documentElement.setAttribute('data-theme','light')})()</script>
     <title>{% block title %}Nexus{% endblock %}</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M32 6 L35 16 L32 26 L29 16Z' fill='%2306b6d4' opacity='.5' transform='rotate(15 32 16)'/><path d='M38 32 L48 29 L58 32 L48 35Z' fill='%2322d3ee' opacity='.38' transform='rotate(15 48 32)'/><path d='M32 38 L35 48 L32 58 L29 48Z' fill='%2306b6d4' opacity='.5' transform='rotate(15 32 48)'/><path d='M6 32 L16 29 L26 32 L16 35Z' fill='%2322d3ee' opacity='.38' transform='rotate(15 16 32)'/><path d='M32 27 L37 32 L32 37 L27 32Z' fill='%2306b6d4' opacity='.7'/></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Share+Tech+Mono&display=swap">
@@ -14,7 +15,7 @@
 <body>
     <header class="site-header">
         <nav class="site-nav">
-            <a href="/" class="brand">&#9670; Nexus</a>
+            <a href="/" class="brand"><svg width="16" height="16" viewBox="0 0 64 64" style="vertical-align:-2px"><path d="M32 6 L35 16 L32 26 L29 16Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 16)"/><path d="M38 32 L48 29 L58 32 L48 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 48 32)"/><path d="M32 38 L35 48 L32 58 L29 48Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 48)"/><path d="M6 32 L16 29 L26 32 L16 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 16 32)"/><path d="M32 27 L37 32 L32 37 L27 32Z" fill="#06b6d4" opacity=".7"/></svg> Nexus</a>
             {% if is_demo_mode() %}<span class="demo-badge">Demo</span>{% endif %}
             <div class="nav-primary">
                 <a href="/" class="nav-link {% block nav_briefing %}{% endblock %}">Briefing</a>
@@ -53,7 +54,7 @@
     </main>
     <footer class="site-footer">
         <div class="footer-inner">
-            <span class="footer-brand">&#9670; Nexus Intelligence</span>
+            <span class="footer-brand"><svg width="14" height="14" viewBox="0 0 64 64" style="vertical-align:-1px"><path d="M32 6 L35 16 L32 26 L29 16Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 16)"/><path d="M38 32 L48 29 L58 32 L48 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 48 32)"/><path d="M32 38 L35 48 L32 58 L29 48Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 48)"/><path d="M6 32 L16 29 L26 32 L16 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 16 32)"/><path d="M32 27 L37 32 L32 37 L27 32Z" fill="#06b6d4" opacity=".7"/></svg> Nexus Intelligence</span>
             <span class="footer-links">
                 {% if has_data() %}
                 <a href="/entities/">Entities</a>
