@@ -21,11 +21,22 @@ async def thread_list(request: Request):
 
     clusters = cluster_threads(threads)
 
+    # Fetch available topics with thread counts for the filter bar
+    cursor = await store.db.execute(
+        "SELECT tt.topic_slug, COUNT(DISTINCT tt.thread_id) "
+        "FROM thread_topics tt "
+        "JOIN threads t ON tt.thread_id = t.id "
+        "WHERE t.status NOT IN ('resolved') "
+        "GROUP BY tt.topic_slug ORDER BY COUNT(DISTINCT tt.thread_id) DESC",
+    )
+    topic_counts = await cursor.fetchall()
+
     return templates.TemplateResponse(request, "thread_list.html", {
         "threads": threads,
         "clusters": clusters,
         "filter_status": status,
         "filter_topic": topic,
+        "topic_counts": topic_counts,
     })
 
 
@@ -43,7 +54,9 @@ async def thread_detail(request: Request, slug: str):
     events = await store.get_events_for_thread(thread["id"])
     convergence = await store.get_convergence_for_thread(thread["id"])
     divergence = await store.get_divergence_for_thread(thread["id"])
+    causal_links = await store.get_causal_links_for_thread(thread["id"])
     topics = await store.get_topics_for_thread(thread["id"])
+    projection_items = await store.get_projection_items_for_thread(thread["id"])
 
     # Build full events with sources for the tracker
     events_with_sources = []
@@ -63,6 +76,8 @@ async def thread_detail(request: Request, slug: str):
         "events": events_with_sources,
         "convergence": convergence,
         "divergence": divergence,
+        "causal_links": causal_links,
         "topics": topics,
         "page": page,
+        "projection_items": projection_items,
     })

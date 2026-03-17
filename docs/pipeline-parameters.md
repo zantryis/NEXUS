@@ -28,7 +28,7 @@ All others are code constants — modify in source or wait for future config sup
 | Parameter | Value | Location | Notes |
 |-----------|-------|----------|-------|
 | `BATCH_SIZE` | 10 | `filter.py:38` | Articles per LLM call |
-| `filter_threshold` | 5.0 (default) | `models.py:29` | **Configurable** per-topic. Scale: 1–10, lower = more pass. Benchmark: 5.0 optimal (6.5/10), 6.0 drops source balance |
+| `filter_threshold` | 4.0 (default) | `models.py:29` | **Configurable** per-topic. Scale: 1–10, lower = more pass. Benchmark: 4.0 optimal (6.4/10), 5.0 slightly lower (6.1), ≥7.0 collapses quality |
 | Snippet cap | 1000 chars | `filter.py:90` | Max article text per batch item |
 
 **Rubric** (system prompt at `filter.py:23-29`):
@@ -236,6 +236,89 @@ Warnings triggered by:
 
 **Rubric** (system prompt at `judge.py:12-34`):
 > Score on 5 dimensions (1–10 each): completeness, source balance, convergence accuracy, divergence detection, entity coverage.
+
+## 13. Future Projection Pipeline
+
+### Projection Configuration
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| `future_projection.enabled` | `false` | `models.py:108` | **Configurable**. Master switch for projection generation |
+| `future_projection.engine` | `"actor"` | `models.py:110` | **Configurable**. Engine choice: `actor` \| `native` \| `graphrag` \| `perspective` \| `debate` \| `naked` \| `structural` |
+| `future_projection.min_history_days` | 7 | `models.py:111` | **Configurable**. Minimum days of event data needed for eligibility |
+| `future_projection.min_thread_snapshots` | 2 | `models.py:112` | **Configurable**. Minimum thread snapshots needed for eligibility |
+| `future_projection.horizons` | `[3, 7, 14]` | `models.py:113` | **Configurable**. Forecast horizons in days (reserved for future use) |
+| `future_projection.max_items_per_topic` | 3 | `models.py:114` | **Configurable**. Max forecast questions generated per topic (1-5) |
+| `future_projection.critic_pass` | `true` | `models.py:115` | **Configurable**. Whether to apply confidence filtering pass |
+| `future_projection.daily_engine` | `"structural"` | `models.py:118` | **Configurable**. Engine used for scheduled daily runs |
+| `future_projection.prediction_schedule_offset_minutes` | 30 | `models.py:117` | **Configurable**. Delay after pipeline before prediction run |
+| `future_projection.kg_native_enabled` | `true` | `models.py:119` | **Configurable**. Enable KG-native predictions (no external market) |
+| `future_projection.max_kg_questions_per_topic` | 5 | `models.py:120` | **Configurable**. Max KG-native questions per topic (1-10) |
+| `topic.projection_eligible` | `true` | `models.py:32` | **Configurable** per-topic. Set `false` to skip projection for a topic |
+
+### Calibration Constants
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| `gamma` (extremization) | 0.8 | `swarm.py:51` | gamma < 1 compresses overconfident probabilities toward 0.5 |
+| `swarm_weight` (anchor blend) | 0.4 | `swarm.py:104` | LLM moves probability by 40% of gap between anchor and LLM estimate |
+| Probability clipping | [0.02, 0.98] | `swarm.py:35,48,61` | Hard bounds on all probabilities |
+| `MIN_RESOLVED_FOR_TUNING` | 20 | `swarm.py:120` | Minimum resolved forecasts needed before auto-calibration |
+| Baseline `swarm_weight` (tuning) | 0.45 | `swarm.py:160` | Default weight used during grid search baseline |
+
+### Verdict Derivation Thresholds
+
+| Probability Range | Verdict | Confidence |
+|-------------------|---------|------------|
+| >= 0.80 | yes | high |
+| >= 0.65 | yes | medium |
+| >= 0.55 | yes | low |
+| 0.45 - 0.55 | uncertain | low |
+| <= 0.45 | no | low |
+| <= 0.35 | no | medium |
+| <= 0.20 | no | high |
+
+### Eligibility Thresholds (service.py)
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| Min history days | `config.min_history_days` (default 7) | `service.py:169` | Days between first and last event for topic |
+| Min thread snapshots | `config.min_thread_snapshots` (default 2) | `service.py:169` | Max snapshot count across all threads |
+| Stale synthesis cutoff | 3 days | `service.py:690` | KG-native skips topics with synthesis older than 3 days |
+| Recent events window | 14 days, max 40 | `service.py:53` | Events loaded for forecast engine context |
+| Cross-topic signal limit | 5 | `service.py:391` | Max signals attached per topic |
+
+### Trajectory Classification Thresholds (analytics.py)
+
+| Constant | Value | Label Triggered | Notes |
+|----------|-------|-----------------|-------|
+| `BREAK_MIN_EVENTS` | 3 | `about_to_break` | Minimum event count |
+| `BREAK_MIN_SIGNIFICANCE` | 7 | `about_to_break` | Minimum significance score |
+| `BREAK_MIN_VELOCITY` | 2.0 | `about_to_break` | Minimum 7-day velocity |
+| `ACCEL_VELOCITY_THRESHOLD` | 1.0 | `accelerating` | Velocity > 1.0 triggers |
+| `ACCEL_ACCEL_THRESHOLD` | 0.5 | `accelerating` | Acceleration > 0.5 triggers |
+| `ACCEL_SIG_TREND_THRESHOLD` | 1.0 | `accelerating` | Significance trend > 1.0 triggers |
+| `DECEL_VELOCITY_THRESHOLD` | -0.5 | `decelerating` | Velocity < -0.5 triggers |
+| `DECEL_ACCEL_THRESHOLD` | -0.5 | `decelerating` | Acceleration < -0.5 triggers |
+| `DECEL_SIG_TREND_THRESHOLD` | -1.0 | `decelerating` | Significance trend < -1.0 triggers |
+
+`about_to_break` requires ALL conditions met (events >= 3, significance >= 7, velocity >= 2.0, acceleration > 0). `accelerating` and `decelerating` trigger on ANY single condition. Default label is `steady`.
+
+### Momentum Formula (analytics.py)
+
+```
+momentum = (velocity_7d * 1.5) + acceleration_7d + significance_trend_7d
+```
+
+### Kalshi Benchmark Configuration
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| `kalshi.enabled` | `false` | `models.py:93` | **Configurable** |
+| `kalshi.auto_scan` | `false` | `models.py:102` | **Configurable**. Auto-scan markets after projection |
+| `kalshi.auto_match_min_score` | 2 | `models.py:103` | **Configurable**. Minimum match score (1-based) |
+| `kalshi.max_markets_per_topic` | 5 | `models.py:104` | **Configurable**. Max markets per topic (1-20) |
+| `kalshi.comparison_tolerance_minutes` | 30 | `models.py:100` | **Configurable**. Tolerance for timestamp comparison |
 
 ---
 

@@ -9,6 +9,20 @@ import aiosqlite
 
 from nexus.engine.knowledge.events import Event
 from nexus.engine.knowledge.compression import Summary
+from nexus.engine.projection.analytics import compute_snapshot_metrics, detect_cross_topic_signals
+from nexus.engine.projection.models import (
+    CausalLink,
+    CrossTopicSignal,
+    ForecastQuestion,
+    ForecastResolution,
+    ForecastRun,
+    ForecastScenario,
+    ProjectionItem,
+    ProjectionOutcome,
+    ThreadSnapshot,
+    TopicProjection,
+    build_forecast_key,
+)
 from nexus.engine.knowledge.schema import initialize_schema
 
 logger = logging.getLogger(__name__)
@@ -21,18 +35,24 @@ class KnowledgeStore:
     so downstream consumers (renderers, judge, metrics) don't change.
     """
 
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path, *, read_only: bool = False):
         self._db_path = db_path
+        self._read_only = read_only
         self._db: aiosqlite.Connection | None = None
 
     async def initialize(self) -> None:
         """Open connection, create tables if needed."""
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._db = await aiosqlite.connect(str(self._db_path))
+        if self._read_only:
+            self._db = await aiosqlite.connect(f"file:{self._db_path}?mode=ro", uri=True)
+        else:
+            self._db_path.parent.mkdir(parents=True, exist_ok=True)
+            self._db = await aiosqlite.connect(str(self._db_path))
         self._db.row_factory = aiosqlite.Row
-        await self._db.execute("PRAGMA journal_mode=WAL")
+        if not self._read_only:
+            await self._db.execute("PRAGMA journal_mode=WAL")
         await self._db.execute("PRAGMA foreign_keys=ON")
-        await initialize_schema(self._db)
+        if not self._read_only:
+            await initialize_schema(self._db)
 
     async def close(self) -> None:
         """Close the database connection."""
@@ -52,19 +72,22 @@ class KnowledgeStore:
         """Insert events and their sources. Returns list of new event row IDs."""
         ids = []
         for event in events:
+            raw_entities = event.raw_entities or event.entities
             cursor = await self.db.execute(
-                "INSERT INTO events (date, summary, significance, relation_to_prior, topic_slug) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO events (date, summary, significance, relation_to_prior, raw_entities, topic_slug) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     event.date.isoformat(),
                     event.summary,
                     event.significance,
                     event.relation_to_prior,
+                    json.dumps(raw_entities),
                     topic_slug,
                 ),
             )
             event_id = cursor.lastrowid
             ids.append(event_id)
+            event.event_id = event_id
 
             # Insert sources
             for src in event.sources:
@@ -82,27 +105,26 @@ class KnowledgeStore:
                     ),
                 )
 
-            # Insert raw entity strings (unresolved — linked to entity table in Phase 3)
-            # For now, store entity names in a lightweight join table
-            # that just tracks the raw string per event for reconstruction.
-            for entity_name in event.entities:
-                # Upsert into entities table with 'unknown' type
-                await self.db.execute(
-                    "INSERT INTO entities (canonical_name, entity_type, first_seen, last_seen) "
-                    "VALUES (?, 'unknown', ?, ?) "
-                    "ON CONFLICT(canonical_name) DO UPDATE SET last_seen = excluded.last_seen",
-                    (entity_name, event.date.isoformat(), event.date.isoformat()),
-                )
-                cursor2 = await self.db.execute(
-                    "SELECT id FROM entities WHERE canonical_name = ?",
-                    (entity_name,),
-                )
-                row = await cursor2.fetchone()
-                if row:
+            # Backward-compatible path for tests/manual store use:
+            # when raw_entities is absent, treat event.entities as canonical enough to link.
+            if not event.raw_entities:
+                for entity_name in event.entities:
                     await self.db.execute(
-                        "INSERT OR IGNORE INTO event_entities (event_id, entity_id) VALUES (?, ?)",
-                        (event_id, row[0]),
+                        "INSERT INTO entities (canonical_name, entity_type, first_seen, last_seen) "
+                        "VALUES (?, 'unknown', ?, ?) "
+                        "ON CONFLICT(canonical_name) DO UPDATE SET last_seen = excluded.last_seen",
+                        (entity_name, event.date.isoformat(), event.date.isoformat()),
                     )
+                    cursor2 = await self.db.execute(
+                        "SELECT id FROM entities WHERE canonical_name = ?",
+                        (entity_name,),
+                    )
+                    row = await cursor2.fetchone()
+                    if row:
+                        await self.db.execute(
+                            "INSERT OR IGNORE INTO event_entities (event_id, entity_id) VALUES (?, ?)",
+                            (event_id, row[0]),
+                        )
 
         await self.db.commit()
         return ids
@@ -115,7 +137,10 @@ class KnowledgeStore:
         limit: int | None = None,
     ) -> list[Event]:
         """Load events for a topic, optionally filtered by date range."""
-        query = "SELECT id, date, summary, significance, relation_to_prior FROM events WHERE topic_slug = ?"
+        query = (
+            "SELECT id, date, summary, significance, relation_to_prior, raw_entities "
+            "FROM events WHERE topic_slug = ?"
+        )
         params: list = [topic_slug]
 
         if since:
@@ -163,14 +188,17 @@ class KnowledgeStore:
                 (event_id,),
             )
             entities = [e[0] for e in await ent_cursor.fetchall()]
+            raw_entities = json.loads(row[5]) if row[5] else []
 
             events.append(Event(
+                event_id=event_id,
                 date=date.fromisoformat(row[1]),
                 summary=row[2],
                 significance=row[3],
                 relation_to_prior=row[4],
                 sources=sources,
-                entities=entities,
+                entities=entities or raw_entities,
+                raw_entities=raw_entities,
             ))
 
         return events
@@ -286,7 +314,7 @@ class KnowledgeStore:
     async def get_events_for_entity(self, entity_id: int) -> list[Event]:
         """Get all events involving a specific entity, across all topics."""
         cursor = await self.db.execute(
-            "SELECT ev.id, ev.date, ev.summary, ev.significance, ev.relation_to_prior, ev.topic_slug "
+            "SELECT ev.id, ev.date, ev.summary, ev.significance, ev.relation_to_prior, ev.raw_entities, ev.topic_slug "
             "FROM events ev "
             "JOIN event_entities ee ON ev.id = ee.event_id "
             "WHERE ee.entity_id = ? "
@@ -316,12 +344,14 @@ class KnowledgeStore:
             entities = [e[0] for e in await ent_cursor.fetchall()]
 
             events.append(Event(
+                event_id=event_id,
                 date=date.fromisoformat(row[1]),
                 summary=row[2],
                 significance=row[3],
                 relation_to_prior=row[4],
                 sources=sources,
-                entities=entities,
+                entities=entities or (json.loads(row[5]) if row[5] else []),
+                raw_entities=json.loads(row[5]) if row[5] else [],
             ))
         return events
 
@@ -436,7 +466,10 @@ class KnowledgeStore:
                 "updated_at": r[6],
                 "key_entities": key_entities,
             })
-        return threads
+        enriched = []
+        for thread in threads:
+            enriched.append(await self._attach_latest_snapshot_fields(thread))
+        return enriched
 
     async def link_thread_events(self, thread_id: int, event_ids: list[int]) -> None:
         """Link events to a thread."""
@@ -565,14 +598,13 @@ class KnowledgeStore:
 
         return {"nodes": nodes, "links": links}
 
-    async def merge_threads(self, keep_id: int, absorb_id: int) -> None:
-        """Merge absorb_id thread into keep_id. Reassign events, topics, analysis."""
+    async def merge_threads(self, keep_id: int, absorb_id: int) -> dict:
+        """Merge absorb_id thread into keep_id. Reassign events, topics, analysis, snapshots, evidence refs."""
         # Reassign thread_events (ignore duplicates)
         await self.db.execute(
             "UPDATE OR IGNORE thread_events SET thread_id = ? WHERE thread_id = ?",
             (keep_id, absorb_id),
         )
-        # Remove any remaining (duplicate) rows for absorbed thread
         await self.db.execute(
             "DELETE FROM thread_events WHERE thread_id = ?", (absorb_id,),
         )
@@ -593,11 +625,48 @@ class KnowledgeStore:
             "UPDATE divergence SET thread_id = ? WHERE thread_id = ?",
             (keep_id, absorb_id),
         )
+        # Move thread_snapshots (OR IGNORE handles date conflicts)
+        await self.db.execute(
+            "UPDATE OR IGNORE thread_snapshots SET thread_id = ? WHERE thread_id = ?",
+            (keep_id, absorb_id),
+        )
+        await self.db.execute(
+            "DELETE FROM thread_snapshots WHERE thread_id = ?", (absorb_id,),
+        )
+        # Rewrite evidence_thread_ids_json in projection_items
+        items_updated = await self._rewrite_thread_id_json(
+            "projection_items", "evidence_thread_ids_json", keep_id, absorb_id,
+        )
+        # Rewrite evidence_thread_ids_json in forecast_questions
+        questions_updated = await self._rewrite_thread_id_json(
+            "forecast_questions", "evidence_thread_ids_json", keep_id, absorb_id,
+        )
         # Mark absorbed thread as resolved
         await self.db.execute(
             "UPDATE threads SET status = 'resolved' WHERE id = ?", (absorb_id,),
         )
         await self.db.commit()
+        return {"items_updated": items_updated, "questions_updated": questions_updated}
+
+    async def _rewrite_thread_id_json(
+        self, table: str, column: str, keep_id: int, absorb_id: int,
+    ) -> int:
+        """Replace absorb_id with keep_id in a JSON array column. Returns rows updated."""
+        cursor = await self.db.execute(
+            f"SELECT id, {column} FROM {table} WHERE {column} LIKE ?",  # noqa: S608
+            (f"%{absorb_id}%",),
+        )
+        updated = 0
+        for row in await cursor.fetchall():
+            ids = json.loads(row[1])
+            if absorb_id in ids:
+                ids = list(dict.fromkeys(keep_id if x == absorb_id else x for x in ids))
+                await self.db.execute(
+                    f"UPDATE {table} SET {column} = ? WHERE id = ?",  # noqa: S608
+                    (json.dumps(ids), row[0]),
+                )
+                updated += 1
+        return updated
 
     async def link_thread_topic(self, thread_id: int, topic_slug: str) -> None:
         """Link a thread to a topic."""
@@ -653,6 +722,12 @@ class KnowledgeStore:
         await self.db.commit()
         return cursor.lastrowid
 
+    async def clear_thread_analysis(self, thread_id: int) -> None:
+        """Clear stored convergence/divergence records for a thread before replacement."""
+        await self.db.execute("DELETE FROM convergence WHERE thread_id = ?", (thread_id,))
+        await self.db.execute("DELETE FROM divergence WHERE thread_id = ?", (thread_id,))
+        await self.db.commit()
+
     # ── Syntheses ─────────────────────────────────────────────────────
 
     async def save_synthesis(
@@ -707,6 +782,1013 @@ class KnowledgeStore:
             "SELECT DISTINCT date FROM syntheses ORDER BY date DESC",
         )
         return [r[0] for r in await cursor.fetchall()]
+
+    # ── Projection substrate ────────────────────────────────────────
+
+    async def upsert_thread_snapshot(self, snapshot: ThreadSnapshot) -> int:
+        """Insert or update a thread snapshot and keep metrics synchronized."""
+        history = await self.get_thread_snapshots(snapshot.thread_id)
+        computed = compute_snapshot_metrics(history, snapshot)
+        await self.db.execute(
+            "INSERT INTO thread_snapshots (thread_id, snapshot_date, status, significance, event_count, "
+            "latest_event_date, velocity_7d, acceleration_7d, significance_trend_7d, momentum_score, trajectory_label) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(thread_id, snapshot_date) DO UPDATE SET "
+            "status = excluded.status, significance = excluded.significance, event_count = excluded.event_count, "
+            "latest_event_date = excluded.latest_event_date, velocity_7d = excluded.velocity_7d, "
+            "acceleration_7d = excluded.acceleration_7d, significance_trend_7d = excluded.significance_trend_7d, "
+            "momentum_score = excluded.momentum_score, trajectory_label = excluded.trajectory_label",
+            (
+                computed.thread_id,
+                computed.snapshot_date.isoformat(),
+                computed.status,
+                computed.significance,
+                computed.event_count,
+                computed.latest_event_date.isoformat() if computed.latest_event_date else None,
+                computed.velocity_7d,
+                computed.acceleration_7d,
+                computed.significance_trend_7d,
+                computed.momentum_score,
+                computed.trajectory_label,
+            ),
+        )
+        await self.db.commit()
+        cursor = await self.db.execute(
+            "SELECT id FROM thread_snapshots WHERE thread_id = ? AND snapshot_date = ?",
+            (snapshot.thread_id, snapshot.snapshot_date.isoformat()),
+        )
+        row = await cursor.fetchone()
+        return row[0]
+
+    async def get_thread_snapshots(self, thread_id: int, *, until: date | None = None) -> list[ThreadSnapshot]:
+        """Load all snapshots for a thread ordered by date."""
+        query = (
+            "SELECT thread_id, snapshot_date, status, significance, event_count, latest_event_date, "
+            "velocity_7d, acceleration_7d, significance_trend_7d, momentum_score, trajectory_label "
+            "FROM thread_snapshots WHERE thread_id = ?"
+        )
+        params: list = [thread_id]
+        if until:
+            query += " AND snapshot_date <= ?"
+            params.append(until.isoformat())
+        query += " ORDER BY snapshot_date ASC"
+        cursor = await self.db.execute(query, params)
+        rows = await cursor.fetchall()
+        snapshots = []
+        for row in rows:
+            snapshots.append(ThreadSnapshot(
+                thread_id=row[0],
+                snapshot_date=date.fromisoformat(row[1]),
+                status=row[2],
+                significance=row[3],
+                event_count=row[4],
+                latest_event_date=date.fromisoformat(row[5]) if row[5] else None,
+                velocity_7d=row[6],
+                acceleration_7d=row[7],
+                significance_trend_7d=row[8],
+                momentum_score=row[9],
+                trajectory_label=row[10],
+            ))
+        return snapshots
+
+    async def get_latest_thread_snapshot(self, thread_id: int) -> ThreadSnapshot | None:
+        """Load the newest snapshot for a thread."""
+        snapshots = await self.get_thread_snapshots(thread_id)
+        return snapshots[-1] if snapshots else None
+
+    async def get_thread_snapshot_as_of(self, thread_id: int, cutoff: date) -> ThreadSnapshot | None:
+        """Load the newest snapshot for a thread on or before the cutoff."""
+        snapshots = await self.get_thread_snapshots(thread_id, until=cutoff)
+        return snapshots[-1] if snapshots else None
+
+    async def _attach_snapshot_fields(self, payload: dict, *, as_of: date | None = None) -> dict:
+        """Attach trajectory metrics to a thread-like dict."""
+        snapshot = await (
+            self.get_thread_snapshot_as_of(payload["id"], as_of)
+            if as_of else self.get_latest_thread_snapshot(payload["id"])
+        )
+        if not snapshot:
+            payload["trajectory_label"] = None
+            payload["momentum_score"] = None
+            payload["velocity_7d"] = None
+            payload["acceleration_7d"] = None
+            payload["significance_trend_7d"] = None
+            payload["snapshot_count"] = 0
+            return payload
+
+        payload["trajectory_label"] = snapshot.trajectory_label
+        payload["momentum_score"] = snapshot.momentum_score
+        payload["velocity_7d"] = snapshot.velocity_7d
+        payload["acceleration_7d"] = snapshot.acceleration_7d
+        payload["significance_trend_7d"] = snapshot.significance_trend_7d
+        payload["snapshot_count"] = len(await self.get_thread_snapshots(payload["id"], until=as_of))
+        payload["status"] = snapshot.status
+        payload["significance"] = snapshot.significance
+        return payload
+
+    async def _attach_latest_snapshot_fields(self, payload: dict) -> dict:
+        """Attach latest trajectory metrics to a thread-like dict."""
+        return await self._attach_snapshot_fields(payload)
+
+    async def add_causal_link(self, causal_link: CausalLink) -> int:
+        """Persist a structured causal link."""
+        await self.db.execute(
+            "INSERT OR REPLACE INTO causal_links (source_event_id, target_event_id, relation_type, evidence_text, strength) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                causal_link.source_event_id,
+                causal_link.target_event_id,
+                causal_link.relation_type,
+                causal_link.evidence_text,
+                causal_link.strength,
+            ),
+        )
+        await self.db.commit()
+        cursor = await self.db.execute(
+            "SELECT id FROM causal_links WHERE source_event_id = ? AND target_event_id = ? AND relation_type = ?",
+            (
+                causal_link.source_event_id,
+                causal_link.target_event_id,
+                causal_link.relation_type,
+            ),
+        )
+        row = await cursor.fetchone()
+        return row[0]
+
+    async def replace_thread_causal_links(self, thread_id: int, causal_links: list[CausalLink]) -> None:
+        """Replace causal links for all events attached to a thread."""
+        await self.db.execute(
+            "DELETE FROM causal_links WHERE source_event_id IN "
+            "(SELECT event_id FROM thread_events WHERE thread_id = ?) "
+            "AND target_event_id IN (SELECT event_id FROM thread_events WHERE thread_id = ?)",
+            (thread_id, thread_id),
+        )
+        for link in causal_links:
+            await self.db.execute(
+                "INSERT OR IGNORE INTO causal_links (source_event_id, target_event_id, relation_type, evidence_text, strength) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    link.source_event_id,
+                    link.target_event_id,
+                    link.relation_type,
+                    link.evidence_text,
+                    link.strength,
+                ),
+            )
+        await self.db.commit()
+
+    async def get_causal_links_for_thread(self, thread_id: int) -> list[dict]:
+        """Load causal links that stay within one thread."""
+        cursor = await self.db.execute(
+            "SELECT id, source_event_id, target_event_id, relation_type, evidence_text, strength "
+            "FROM causal_links WHERE source_event_id IN "
+            "(SELECT event_id FROM thread_events WHERE thread_id = ?) "
+            "AND target_event_id IN (SELECT event_id FROM thread_events WHERE thread_id = ?) "
+            "ORDER BY source_event_id, target_event_id",
+            (thread_id, thread_id),
+        )
+        return [
+            {
+                "id": row[0],
+                "source_event_id": row[1],
+                "target_event_id": row[2],
+                "relation_type": row[3],
+                "evidence_text": row[4],
+                "strength": row[5],
+            }
+            for row in await cursor.fetchall()
+        ]
+
+    async def get_causal_links_for_events(self, event_ids: list[int]) -> list[dict]:
+        """Load causal links touching a set of event IDs."""
+        if not event_ids:
+            return []
+        placeholders = ", ".join("?" for _ in event_ids)
+        cursor = await self.db.execute(
+            "SELECT id, source_event_id, target_event_id, relation_type, evidence_text, strength "
+            f"FROM causal_links WHERE source_event_id IN ({placeholders}) OR target_event_id IN ({placeholders}) "
+            "ORDER BY source_event_id, target_event_id",
+            event_ids + event_ids,
+        )
+        return [
+            {
+                "id": row[0],
+                "source_event_id": row[1],
+                "target_event_id": row[2],
+                "relation_type": row[3],
+                "evidence_text": row[4],
+                "strength": row[5],
+            }
+            for row in await cursor.fetchall()
+        ]
+
+    async def replace_cross_topic_signals(self, signals: list[CrossTopicSignal], observed_for: date) -> None:
+        """Replace cross-topic signals for a specific observed date."""
+        await self.db.execute(
+            "DELETE FROM cross_topic_signals WHERE observed_at = ?",
+            (observed_for.isoformat(),),
+        )
+        for signal in signals:
+            await self.db.execute(
+                "INSERT OR IGNORE INTO cross_topic_signals "
+                "(topic_slug, related_topic_slug, shared_entity, signal_type, observed_at, event_ids_json, related_event_ids_json, note) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    signal.topic_slug,
+                    signal.related_topic_slug,
+                    signal.shared_entity,
+                    signal.signal_type,
+                    signal.observed_at.isoformat(),
+                    json.dumps(signal.event_ids),
+                    json.dumps(signal.related_event_ids),
+                    signal.note,
+                ),
+            )
+        await self.db.commit()
+
+    async def get_cross_topic_signals(
+        self,
+        topic_slug: str,
+        *,
+        since: date | None = None,
+        limit: int = 10,
+    ) -> list[CrossTopicSignal]:
+        """Load recent cross-topic signals for a topic."""
+        query = (
+            "SELECT id, topic_slug, related_topic_slug, shared_entity, signal_type, observed_at, "
+            "event_ids_json, related_event_ids_json, note "
+            "FROM cross_topic_signals WHERE topic_slug = ?"
+        )
+        params: list = [topic_slug]
+        if since:
+            query += " AND observed_at >= ?"
+            params.append(since.isoformat())
+        query += " ORDER BY observed_at DESC LIMIT ?"
+        params.append(limit)
+        cursor = await self.db.execute(query, params)
+        rows = await cursor.fetchall()
+        return [
+            CrossTopicSignal(
+                signal_id=row[0],
+                topic_slug=row[1],
+                related_topic_slug=row[2],
+                shared_entity=row[3],
+                signal_type=row[4],
+                observed_at=date.fromisoformat(row[5]),
+                event_ids=json.loads(row[6]) if row[6] else [],
+                related_event_ids=json.loads(row[7]) if row[7] else [],
+                note=row[8],
+            )
+            for row in rows
+        ]
+
+    async def get_cross_topic_signals_as_of(
+        self,
+        topic_slug: str,
+        cutoff: date,
+        *,
+        limit: int = 10,
+        lookback_days: int = 14,
+    ) -> list[CrossTopicSignal]:
+        """Derive cross-topic signals using only events available on or before the cutoff."""
+        rows = await self.get_recent_entity_activity(reference_date=cutoff, lookback_days=lookback_days)
+        signals = detect_cross_topic_signals(rows, lookback_days=lookback_days)
+        return [signal for signal in signals if signal.topic_slug == topic_slug][:limit]
+
+    async def get_recent_entity_activity(
+        self,
+        *,
+        reference_date: date | None = None,
+        lookback_days: int = 14,
+    ) -> list[dict]:
+        """Return canonical entity mentions across topics for bridge detection."""
+        ref = reference_date or date.today()
+        since = (ref - timedelta(days=lookback_days)).isoformat()
+        cursor = await self.db.execute(
+            "SELECT ev.id, ev.topic_slug, ev.date, e.canonical_name "
+            "FROM events ev "
+            "JOIN event_entities ee ON ev.id = ee.event_id "
+            "JOIN entities e ON ee.entity_id = e.id "
+            "WHERE ev.date >= ? AND ev.date <= ? "
+            "ORDER BY ev.date ASC",
+            (since, ref.isoformat()),
+        )
+        rows = await cursor.fetchall()
+        return [
+            {
+                "event_id": row[0],
+                "topic_slug": row[1],
+                "event_date": date.fromisoformat(row[2]),
+                "canonical_name": row[3],
+            }
+            for row in rows
+        ]
+
+    async def detect_and_save_cross_topic_signals(
+        self,
+        *,
+        reference_date: date | None = None,
+        lookback_days: int = 14,
+    ) -> list[CrossTopicSignal]:
+        """Compute and persist cross-topic bridge signals."""
+        ref = reference_date or date.today()
+        rows = await self.get_recent_entity_activity(reference_date=ref, lookback_days=lookback_days)
+        signals = detect_cross_topic_signals(rows, lookback_days=lookback_days)
+        await self.replace_cross_topic_signals(signals, ref)
+        return signals
+
+    async def save_projection(self, projection: TopicProjection) -> int:
+        """Persist a topic projection and its items."""
+        cursor = await self.db.execute(
+            "INSERT INTO projections (topic_slug, topic_name, engine, generated_for, status, summary, metadata_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                projection.topic_slug,
+                projection.topic_name,
+                projection.engine,
+                projection.generated_for.isoformat(),
+                projection.status,
+                projection.summary,
+                json.dumps(projection.metadata),
+            ),
+        )
+        projection_id = cursor.lastrowid
+        for item in projection.items:
+            item_cursor = await self.db.execute(
+                "INSERT INTO projection_items "
+                "(projection_id, claim, confidence, horizon_days, signpost, signals_cited_json, "
+                "evidence_event_ids_json, evidence_thread_ids_json, review_after, external_ref) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    projection_id,
+                    item.claim,
+                    item.confidence,
+                    item.horizon_days,
+                    item.signpost,
+                    json.dumps(item.signals_cited),
+                    json.dumps(item.evidence_event_ids),
+                    json.dumps(item.evidence_thread_ids),
+                    item.review_after.isoformat(),
+                    item.external_ref,
+                ),
+            )
+            projection_item_id = item_cursor.lastrowid
+            await self.db.execute(
+                "INSERT INTO projection_outcomes (projection_item_id, outcome_status, external_ref) VALUES (?, 'pending', ?)",
+                (projection_item_id, item.external_ref),
+            )
+        await self.db.commit()
+        return projection_id
+
+    async def save_forecast_run(self, forecast_run: ForecastRun) -> int:
+        """Persist a structured forecast run and initialize pending resolutions."""
+        cursor = await self.db.execute(
+            "INSERT INTO forecast_runs (topic_slug, topic_name, engine, generated_for, summary, metadata_json) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                forecast_run.topic_slug,
+                forecast_run.topic_name,
+                forecast_run.engine,
+                forecast_run.generated_for.isoformat(),
+                forecast_run.summary,
+                json.dumps(forecast_run.metadata),
+            ),
+        )
+        run_id = cursor.lastrowid
+        forecast_run.run_id = run_id
+
+        for scenario in forecast_run.scenarios:
+            scenario_cursor = await self.db.execute(
+                "INSERT INTO forecast_scenarios (forecast_run_id, scenario_key, label, probability, description, signposts_json, status) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    run_id,
+                    scenario.scenario_key,
+                    scenario.label,
+                    scenario.probability,
+                    scenario.description,
+                    json.dumps(scenario.signposts),
+                    scenario.status,
+                ),
+            )
+            scenario.scenario_id = scenario_cursor.lastrowid
+
+        for question in forecast_run.questions:
+            if not question.forecast_key:
+                question.forecast_key = build_forecast_key(
+                    topic_slug=forecast_run.topic_slug,
+                    generated_for=forecast_run.generated_for,
+                    target_variable=question.target_variable,
+                    target_metadata=question.target_metadata,
+                    resolution_date=question.resolution_date,
+                    horizon_days=question.horizon_days,
+                    expected_direction=question.expected_direction,
+                )
+            question_cursor = await self.db.execute(
+                "INSERT INTO forecast_questions "
+                "(forecast_run_id, forecast_key, question, forecast_type, target_variable, target_metadata_json, probability, base_rate, "
+                "resolution_criteria, resolution_date, horizon_days, signpost, expected_direction, signals_cited_json, "
+                "evidence_event_ids_json, evidence_thread_ids_json, cross_topic_signal_ids_json, status, external_ref) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    run_id,
+                    question.forecast_key,
+                    question.question,
+                    question.forecast_type,
+                    question.target_variable,
+                    json.dumps(question.target_metadata),
+                    question.probability,
+                    question.base_rate,
+                    question.resolution_criteria,
+                    question.resolution_date.isoformat(),
+                    question.horizon_days,
+                    question.signpost,
+                    question.expected_direction,
+                    json.dumps(question.signals_cited),
+                    json.dumps(question.evidence_event_ids),
+                    json.dumps(question.evidence_thread_ids),
+                    json.dumps(question.cross_topic_signal_ids),
+                    question.status,
+                    question.external_ref,
+                ),
+            )
+            question_id = question_cursor.lastrowid
+            question.question_id = question_id
+            await self.db.execute(
+                "INSERT INTO forecast_resolutions (forecast_question_id, outcome_status, external_ref) VALUES (?, 'pending', ?)",
+                (question_id, question.external_ref),
+            )
+            if question.external_ref:
+                await self.db.execute(
+                    "INSERT INTO forecast_mappings (forecast_question_id, forecast_key, mapping_type, external_ref, metadata_json) "
+                    "VALUES (?, ?, 'external_ref', ?, '{}')",
+                    (question_id, question.forecast_key or "", question.external_ref),
+                )
+
+        await self.db.commit()
+        return run_id
+
+    async def get_latest_projection(self, topic_slug: str, engine: str | None = None) -> TopicProjection | None:
+        """Load the latest stored projection for a topic."""
+        query = (
+            "SELECT id, topic_slug, topic_name, engine, generated_for, status, summary, metadata_json "
+            "FROM projections WHERE topic_slug = ?"
+        )
+        params: list = [topic_slug]
+        if engine:
+            query += " AND engine = ?"
+            params.append(engine)
+        query += " ORDER BY generated_for DESC, id DESC LIMIT 1"
+        cursor = await self.db.execute(query, params)
+        row = await cursor.fetchone()
+        if not row:
+            return None
+
+        items_cursor = await self.db.execute(
+            "SELECT id, claim, confidence, horizon_days, signpost, signals_cited_json, "
+            "evidence_event_ids_json, evidence_thread_ids_json, review_after, external_ref "
+            "FROM projection_items WHERE projection_id = ? ORDER BY id ASC",
+            (row[0],),
+        )
+        items = [
+            ProjectionItem(
+                claim=item_row[1],
+                confidence=item_row[2],
+                horizon_days=item_row[3],
+                signpost=item_row[4],
+                signals_cited=json.loads(item_row[5]) if item_row[5] else [],
+                evidence_event_ids=json.loads(item_row[6]) if item_row[6] else [],
+                evidence_thread_ids=json.loads(item_row[7]) if item_row[7] else [],
+                review_after=date.fromisoformat(item_row[8]),
+                external_ref=item_row[9],
+            )
+            for item_row in await items_cursor.fetchall()
+        ]
+
+        return TopicProjection(
+            topic_slug=row[1],
+            topic_name=row[2],
+            engine=row[3],
+            generated_for=date.fromisoformat(row[4]),
+            status=row[5],
+            summary=row[6],
+            items=items,
+            cross_topic_signals=await self.get_cross_topic_signals(topic_slug, limit=5),
+            metadata=json.loads(row[7]) if row[7] else {},
+        )
+
+    async def get_latest_forecast_run(self, topic_slug: str, engine: str | None = None) -> ForecastRun | None:
+        """Load the latest structured forecast run for a topic."""
+        query = (
+            "SELECT id, topic_slug, topic_name, engine, generated_for, summary, metadata_json "
+            "FROM forecast_runs WHERE topic_slug = ?"
+        )
+        params: list = [topic_slug]
+        if engine:
+            query += " AND engine = ?"
+            params.append(engine)
+        query += " ORDER BY generated_for DESC, id DESC LIMIT 1"
+        cursor = await self.db.execute(query, params)
+        row = await cursor.fetchone()
+        if not row:
+            return None
+
+        questions_cursor = await self.db.execute(
+            "SELECT id, forecast_key, question, forecast_type, target_variable, target_metadata_json, probability, base_rate, "
+            "resolution_criteria, resolution_date, horizon_days, signpost, expected_direction, signals_cited_json, "
+            "evidence_event_ids_json, evidence_thread_ids_json, cross_topic_signal_ids_json, status, external_ref "
+            "FROM forecast_questions WHERE forecast_run_id = ? ORDER BY id ASC",
+            (row[0],),
+        )
+        questions = [
+            ForecastQuestion(
+                question_id=question_row[0],
+                forecast_key=question_row[1],
+                question=question_row[2],
+                forecast_type=question_row[3],
+                target_variable=question_row[4],
+                target_metadata=json.loads(question_row[5]) if question_row[5] else {},
+                probability=question_row[6],
+                base_rate=question_row[7],
+                resolution_criteria=question_row[8],
+                resolution_date=date.fromisoformat(question_row[9]),
+                horizon_days=question_row[10],
+                signpost=question_row[11],
+                expected_direction=question_row[12],
+                signals_cited=json.loads(question_row[13]) if question_row[13] else [],
+                evidence_event_ids=json.loads(question_row[14]) if question_row[14] else [],
+                evidence_thread_ids=json.loads(question_row[15]) if question_row[15] else [],
+                cross_topic_signal_ids=json.loads(question_row[16]) if question_row[16] else [],
+                status=question_row[17],
+                external_ref=question_row[18],
+            )
+            for question_row in await questions_cursor.fetchall()
+        ]
+        for question in questions:
+            if not question.forecast_key:
+                question.forecast_key = build_forecast_key(
+                    topic_slug=row[1],
+                    generated_for=date.fromisoformat(row[4]),
+                    target_variable=question.target_variable,
+                    target_metadata=question.target_metadata,
+                    resolution_date=question.resolution_date,
+                    horizon_days=question.horizon_days,
+                    expected_direction=question.expected_direction,
+                )
+
+        scenarios_cursor = await self.db.execute(
+            "SELECT id, scenario_key, label, probability, description, signposts_json, status "
+            "FROM forecast_scenarios WHERE forecast_run_id = ? ORDER BY id ASC",
+            (row[0],),
+        )
+        scenarios = [
+            ForecastScenario(
+                scenario_id=scenario_row[0],
+                scenario_key=scenario_row[1],
+                label=scenario_row[2],
+                probability=scenario_row[3],
+                description=scenario_row[4],
+                signposts=json.loads(scenario_row[5]) if scenario_row[5] else [],
+                status=scenario_row[6],
+            )
+            for scenario_row in await scenarios_cursor.fetchall()
+        ]
+
+        return ForecastRun(
+            run_id=row[0],
+            topic_slug=row[1],
+            topic_name=row[2],
+            engine=row[3],
+            generated_for=date.fromisoformat(row[4]),
+            summary=row[5],
+            questions=questions,
+            scenarios=scenarios,
+            metadata=json.loads(row[6]) if row[6] else {},
+        )
+
+    async def get_projection_items_for_thread(self, thread_id: int) -> list[dict]:
+        """Return stored projection items that cite a thread as evidence."""
+        cursor = await self.db.execute(
+            "SELECT pi.id, p.topic_slug, p.engine, p.generated_for, pi.claim, pi.confidence, "
+            "pi.horizon_days, pi.signpost, pi.review_after, pi.evidence_thread_ids_json "
+            "FROM projection_items pi "
+            "JOIN projections p ON pi.projection_id = p.id "
+            "ORDER BY p.generated_for DESC, pi.id DESC",
+        )
+        matches = []
+        for row in await cursor.fetchall():
+            evidence_thread_ids = json.loads(row[9]) if row[9] else []
+            if thread_id not in evidence_thread_ids:
+                continue
+            matches.append({
+                "id": row[0],
+                "topic_slug": row[1],
+                "engine": row[2],
+                "generated_for": row[3],
+                "claim": row[4],
+                "confidence": row[5],
+                "horizon_days": row[6],
+                "signpost": row[7],
+                "review_after": row[8],
+            })
+        return matches
+
+    async def get_pending_projection_items(
+        self,
+        *,
+        until: date | None = None,
+        engine: str | None = None,
+    ) -> list[dict]:
+        """Projection items due for automated evaluation."""
+        ref = until or date.today()
+        query = (
+            "SELECT po.id, pi.id, p.topic_slug, p.engine, p.generated_for, pi.claim, pi.signpost, "
+            "pi.review_after, pi.confidence, pi.horizon_days "
+            "FROM projection_outcomes po "
+            "JOIN projection_items pi ON po.projection_item_id = pi.id "
+            "JOIN projections p ON pi.projection_id = p.id "
+            "WHERE po.outcome_status = 'pending' AND pi.review_after <= ?"
+        )
+        params: list = [ref.isoformat()]
+        if engine:
+            query += " AND p.engine = ?"
+            params.append(engine)
+        cursor = await self.db.execute(query, params)
+        rows = await cursor.fetchall()
+        return [
+            {
+                "outcome_id": row[0],
+                "projection_item_id": row[1],
+                "topic_slug": row[2],
+                "engine": row[3],
+                "generated_for": row[4],
+                "claim": row[5],
+                "signpost": row[6],
+                "review_after": row[7],
+                "confidence": row[8],
+                "horizon_days": row[9],
+            }
+            for row in rows
+        ]
+
+    async def get_pending_forecast_questions(
+        self,
+        *,
+        until: date | None = None,
+        engine: str | None = None,
+    ) -> list[dict]:
+        """Forecast questions due for resolution."""
+        ref = until or date.today()
+        query = (
+            "SELECT fr.id, fq.id, fr.topic_slug, fr.engine, fr.generated_for, fq.forecast_key, fq.question, fq.forecast_type, "
+            "fq.target_variable, fq.target_metadata_json, fq.probability, fq.base_rate, fq.resolution_criteria, "
+            "fq.resolution_date, fq.horizon_days, fq.expected_direction "
+            "FROM forecast_resolutions fres "
+            "JOIN forecast_questions fq ON fres.forecast_question_id = fq.id "
+            "JOIN forecast_runs fr ON fq.forecast_run_id = fr.id "
+            "WHERE fres.outcome_status = 'pending' AND fq.resolution_date <= ?"
+        )
+        params: list = [ref.isoformat()]
+        if engine:
+            query += " AND fr.engine = ?"
+            params.append(engine)
+        cursor = await self.db.execute(query, params)
+        rows = await cursor.fetchall()
+        return [
+            {
+                "forecast_run_id": row[0],
+                "forecast_question_id": row[1],
+                "topic_slug": row[2],
+                "engine": row[3],
+                "generated_for": row[4],
+                "forecast_key": row[5] or build_forecast_key(
+                    topic_slug=row[2],
+                    generated_for=date.fromisoformat(row[4]),
+                    target_variable=row[8],
+                    target_metadata=json.loads(row[9]) if row[9] else {},
+                    resolution_date=date.fromisoformat(row[13]),
+                    horizon_days=row[14],
+                    expected_direction=row[15],
+                ),
+                "question": row[6],
+                "forecast_type": row[7],
+                "target_variable": row[8],
+                "target_metadata": json.loads(row[9]) if row[9] else {},
+                "probability": row[10],
+                "base_rate": row[11],
+                "resolution_criteria": row[12],
+                "resolution_date": row[13],
+                "horizon_days": row[14],
+                "expected_direction": row[15],
+            }
+            for row in rows
+        ]
+
+    async def get_forecast_questions_between(
+        self,
+        *,
+        start: date,
+        end: date,
+        engine: str | None = None,
+    ) -> list[dict]:
+        """Return stored forecast questions generated within a date window."""
+        query = (
+            "SELECT fr.topic_slug, fr.topic_name, fr.engine, fr.generated_for, fq.id, fq.forecast_key, fq.question, "
+            "fq.forecast_type, fq.target_variable, fq.target_metadata_json, fq.probability, fq.base_rate, "
+            "fq.resolution_criteria, fq.resolution_date, fq.horizon_days, fq.expected_direction, "
+            "fres.outcome_status, fres.resolved_bool, fres.brier_score, fres.log_loss "
+            "FROM forecast_questions fq "
+            "JOIN forecast_runs fr ON fq.forecast_run_id = fr.id "
+            "LEFT JOIN forecast_resolutions fres ON fres.forecast_question_id = fq.id "
+            "WHERE fr.generated_for >= ? AND fr.generated_for <= ?"
+        )
+        params: list = [start.isoformat(), end.isoformat()]
+        if engine:
+            query += " AND fr.engine = ?"
+            params.append(engine)
+        query += " ORDER BY fr.generated_for ASC, fq.id ASC"
+        cursor = await self.db.execute(query, params)
+        rows = await cursor.fetchall()
+        return [
+            {
+                "topic_slug": row[0],
+                "topic_name": row[1],
+                "engine": row[2],
+                "generated_for": row[3],
+                "forecast_question_id": row[4],
+                "forecast_key": row[5] or build_forecast_key(
+                    topic_slug=row[0],
+                    generated_for=date.fromisoformat(row[3]),
+                    target_variable=row[8],
+                    target_metadata=json.loads(row[9]) if row[9] else {},
+                    resolution_date=date.fromisoformat(row[13]),
+                    horizon_days=row[14],
+                    expected_direction=row[15],
+                ),
+                "question": row[6],
+                "forecast_type": row[7],
+                "target_variable": row[8],
+                "target_metadata": json.loads(row[9]) if row[9] else {},
+                "probability": row[10],
+                "base_rate": row[11],
+                "resolution_criteria": row[12],
+                "resolution_date": row[13],
+                "horizon_days": row[14],
+                "expected_direction": row[15],
+                "outcome_status": row[16],
+                "resolved_bool": None if row[17] is None else bool(row[17]),
+                "brier_score": row[18],
+                "log_loss": row[19],
+            }
+            for row in rows
+        ]
+
+    async def backfill_forecast_keys(
+        self,
+        *,
+        start: date | None = None,
+        end: date | None = None,
+        engine: str | None = None,
+    ) -> dict:
+        """Persist stable forecast keys for existing rows that predate the key contract."""
+        query = (
+            "SELECT fq.id, fr.topic_slug, fr.generated_for, fq.target_variable, fq.target_metadata_json, "
+            "fq.resolution_date, fq.horizon_days, fq.expected_direction "
+            "FROM forecast_questions fq "
+            "JOIN forecast_runs fr ON fq.forecast_run_id = fr.id "
+            "WHERE (fq.forecast_key = '' OR fq.forecast_key IS NULL)"
+        )
+        params: list = []
+        if start is not None:
+            query += " AND fr.generated_for >= ?"
+            params.append(start.isoformat())
+        if end is not None:
+            query += " AND fr.generated_for <= ?"
+            params.append(end.isoformat())
+        if engine:
+            query += " AND fr.engine = ?"
+            params.append(engine)
+        query += " ORDER BY fr.generated_for ASC, fq.id ASC"
+
+        cursor = await self.db.execute(query, params)
+        rows = await cursor.fetchall()
+        questions_backfilled = 0
+        mappings_backfilled = 0
+        for row in rows:
+            forecast_key = build_forecast_key(
+                topic_slug=row[1],
+                generated_for=date.fromisoformat(row[2]),
+                target_variable=row[3],
+                target_metadata=json.loads(row[4]) if row[4] else {},
+                resolution_date=date.fromisoformat(row[5]),
+                horizon_days=row[6],
+                expected_direction=row[7],
+            )
+            await self.db.execute(
+                "UPDATE forecast_questions SET forecast_key = ? WHERE id = ?",
+                (forecast_key, row[0]),
+            )
+            mapping_cursor = await self.db.execute(
+                "UPDATE forecast_mappings SET forecast_key = ? "
+                "WHERE forecast_question_id = ? AND (forecast_key = '' OR forecast_key IS NULL)",
+                (forecast_key, row[0]),
+            )
+            questions_backfilled += 1
+            mappings_backfilled += max(0, mapping_cursor.rowcount or 0)
+
+        if rows:
+            await self.db.commit()
+
+        return {
+            "questions_scanned": len(rows),
+            "questions_backfilled": questions_backfilled,
+            "mappings_backfilled": mappings_backfilled,
+            "start": start.isoformat() if start else None,
+            "end": end.isoformat() if end else None,
+            "engine": engine,
+        }
+
+    async def set_projection_outcome(self, outcome: ProjectionOutcome) -> None:
+        """Update a stored projection outcome."""
+        await self.db.execute(
+            "UPDATE projection_outcomes SET outcome_status = ?, score = ?, notes = ?, reviewed_at = ?, external_ref = ? "
+            "WHERE projection_item_id = ?",
+            (
+                outcome.outcome_status,
+                outcome.score,
+                outcome.notes,
+                outcome.reviewed_at.isoformat() if outcome.reviewed_at else None,
+                outcome.external_ref,
+                outcome.projection_item_id,
+            ),
+        )
+        await self.db.commit()
+
+    async def set_forecast_resolution(self, resolution: ForecastResolution) -> None:
+        """Persist the resolved outcome for a forecast question."""
+        await self.db.execute(
+            "UPDATE forecast_resolutions SET outcome_status = ?, resolved_bool = ?, realized_direction = ?, "
+            "actual_value = ?, brier_score = ?, log_loss = ?, notes = ?, resolved_at = ?, external_ref = ? "
+            "WHERE forecast_question_id = ?",
+            (
+                resolution.outcome_status,
+                None if resolution.resolved_bool is None else int(resolution.resolved_bool),
+                resolution.realized_direction,
+                resolution.actual_value,
+                resolution.brier_score,
+                resolution.log_loss,
+                resolution.notes,
+                resolution.resolved_at.isoformat() if resolution.resolved_at else None,
+                resolution.external_ref,
+                resolution.forecast_question_id,
+            ),
+        )
+        await self.db.commit()
+
+    async def get_historical_calibration(self, *, as_of: date | None = None) -> list[dict]:
+        """Return resolved forecast questions with outcomes for calibration feedback.
+
+        Joins forecast_questions → forecast_resolutions → forecast_runs.
+        Returns rows with target_variable, probability, resolved_bool, base_rate.
+        If as_of is provided, only includes runs generated on or before that date.
+        """
+        query = (
+            "SELECT fq.target_variable, fq.probability, fq.base_rate, "
+            "fres.resolved_bool, fr.generated_for "
+            "FROM forecast_questions fq "
+            "JOIN forecast_runs fr ON fq.forecast_run_id = fr.id "
+            "JOIN forecast_resolutions fres ON fres.forecast_question_id = fq.id "
+            "WHERE fres.outcome_status = 'resolved' AND fres.resolved_bool IS NOT NULL"
+        )
+        params: list = []
+        if as_of is not None:
+            query += " AND fr.generated_for <= ?"
+            params.append(as_of.isoformat())
+        query += " ORDER BY fr.generated_for ASC"
+        cursor = await self.db.execute(query, params)
+        rows = await cursor.fetchall()
+        return [
+            {
+                "target_variable": row[0],
+                "probability": row[1],
+                "base_rate": row[2],
+                "resolved_bool": bool(row[3]),
+                "generated_for": row[4],
+            }
+            for row in rows
+        ]
+
+    async def get_interesting_kalshi_markets(self, limit: int = 5) -> list[dict]:
+        """Return open Kalshi-aligned markets ranked by interestingness.
+
+        Score = 0.6 * |our_prob - market_prob| + 0.4 * (1 / days_until_resolution).
+        """
+        today = date.today().isoformat()
+        cursor = await self.db.execute(
+            "SELECT fq.question, fq.probability, fq.target_metadata_json, "
+            "fq.resolution_date, fq.external_ref "
+            "FROM forecast_questions fq "
+            "JOIN forecast_runs fr ON fq.forecast_run_id = fr.id "
+            "WHERE fq.target_variable = 'kalshi_aligned' "
+            "AND fq.status = 'open' "
+            "AND fq.resolution_date >= ? "
+            "ORDER BY fq.resolution_date ASC",
+            (today,),
+        )
+        rows = await cursor.fetchall()
+
+        results = []
+        for row in rows:
+            meta = json.loads(row[2]) if row[2] else {}
+            market_prob = meta.get("kalshi_implied", row[1])
+            if market_prob is None:
+                continue
+            resolution_date = row[3]
+            days_until = max(
+                1,
+                (date.fromisoformat(resolution_date) - date.today()).days,
+            )
+            gap = abs(row[1] - market_prob)
+            score = 0.6 * gap + 0.4 * (1.0 / days_until)
+            gap_pp = round(gap * 100)
+            ticker = meta.get("kalshi_ticker", row[4] or "")
+            results.append({
+                "question": row[0],
+                "probability": row[1],
+                "market_prob": market_prob,
+                "resolution_date": resolution_date,
+                "days_until_resolution": days_until,
+                "gap_pp": gap_pp,
+                "ticker": ticker,
+                "score": score,
+            })
+
+        # Deduplicate by ticker — keep highest-scoring entry per market
+        seen: dict[str, dict] = {}
+        for r in results:
+            key = r["ticker"] or r["question"][:60]
+            if key not in seen or r["score"] > seen[key]["score"]:
+                seen[key] = r
+        deduped = sorted(seen.values(), key=lambda r: r["score"], reverse=True)
+        return deduped[:limit]
+
+    async def purge_template_projections(self, dry_run: bool = True) -> dict:
+        """Delete projection items containing template-mush questions.
+
+        Identifies items matching patterns like:
+        - "Will % be involved in significant % developments%"
+        - "Will % produce significant new developments%"
+        """
+        cursor = await self.db.execute(
+            "SELECT id, projection_id FROM projection_items "
+            "WHERE claim LIKE 'Will % be involved in significant%developments%' "
+            "OR claim LIKE 'Will % produce significant new developments%' "
+            "OR claim LIKE 'Will a new event be recorded in the%thread by%' "
+            "OR claim LIKE 'Will the total number of%events recorded%' "
+            "OR claim LIKE 'Will the volume of%reports increase%'"
+        )
+        items = await cursor.fetchall()
+        item_ids = [row[0] for row in items]
+        projection_ids = list({row[1] for row in items})
+
+        result = {
+            "items_found": len(item_ids),
+            "items_deleted": 0,
+            "projections_deleted": 0,
+            "dry_run": dry_run,
+        }
+
+        if dry_run or not item_ids:
+            return result
+
+        # Delete outcomes for matched items
+        placeholders = ",".join("?" * len(item_ids))
+        await self.db.execute(
+            f"DELETE FROM projection_outcomes WHERE projection_item_id IN ({placeholders})",
+            item_ids,
+        )
+        # Delete the template items
+        await self.db.execute(
+            f"DELETE FROM projection_items WHERE id IN ({placeholders})",
+            item_ids,
+        )
+        result["items_deleted"] = len(item_ids)
+
+        # Delete projections left with zero items
+        for proj_id in projection_ids:
+            cursor = await self.db.execute(
+                "SELECT COUNT(*) FROM projection_items WHERE projection_id = ?",
+                (proj_id,),
+            )
+            count = (await cursor.fetchone())[0]
+            if count == 0:
+                await self.db.execute(
+                    "DELETE FROM projections WHERE id = ?", (proj_id,),
+                )
+                result["projections_deleted"] += 1
+
+        await self.db.commit()
+        return result
 
     async def get_filter_log_dates(self, topic_slug: str | None = None) -> list[str]:
         """Get all dates with filter log entries, most recent first."""
@@ -915,7 +1997,7 @@ class KnowledgeStore:
     async def get_event_by_id(self, event_id: int) -> Event | None:
         """Load a single event with full sources and entities."""
         cursor = await self.db.execute(
-            "SELECT id, date, summary, significance, relation_to_prior "
+            "SELECT id, date, summary, significance, relation_to_prior, raw_entities "
             "FROM events WHERE id = ?",
             (event_id,),
         )
@@ -927,12 +2009,25 @@ class KnowledgeStore:
     async def get_events_for_thread(self, thread_id: int) -> list[Event]:
         """Get all events linked to a thread, with full sources+entities."""
         cursor = await self.db.execute(
-            "SELECT ev.id, ev.date, ev.summary, ev.significance, ev.relation_to_prior "
+            "SELECT ev.id, ev.date, ev.summary, ev.significance, ev.relation_to_prior, ev.raw_entities "
             "FROM events ev "
             "JOIN thread_events te ON ev.id = te.event_id "
             "WHERE te.thread_id = ? "
             "ORDER BY ev.date ASC",
             (thread_id,),
+        )
+        rows = await cursor.fetchall()
+        return [await self._build_event_from_row(r) for r in rows]
+
+    async def get_events_for_thread_as_of(self, thread_id: int, cutoff: date) -> list[Event]:
+        """Get thread-linked events up to and including the cutoff date."""
+        cursor = await self.db.execute(
+            "SELECT ev.id, ev.date, ev.summary, ev.significance, ev.relation_to_prior, ev.raw_entities "
+            "FROM events ev "
+            "JOIN thread_events te ON ev.id = te.event_id "
+            "WHERE te.thread_id = ? AND ev.date <= ? "
+            "ORDER BY ev.date ASC",
+            (thread_id, cutoff.isoformat()),
         )
         rows = await cursor.fetchall()
         return [await self._build_event_from_row(r) for r in rows]
@@ -983,12 +2078,41 @@ class KnowledgeStore:
             (thread_id,),
         )
         key_entities = [e[0] for e in await ent_cursor.fetchall()]
-        return {
+        payload = {
             "id": thread_id, "slug": row[1], "headline": row[2],
             "status": row[3], "significance": row[4],
             "created_at": row[5], "updated_at": row[6],
             "key_entities": key_entities,
         }
+        return await self._attach_latest_snapshot_fields(payload)
+
+    async def get_thread_as_of(self, slug: str, cutoff: date) -> dict | None:
+        """Get a single thread by slug with snapshot state pinned to a cutoff."""
+        cursor = await self.db.execute(
+            "SELECT id, slug, headline, status, significance, created_at, updated_at "
+            "FROM threads WHERE slug = ?",
+            (slug,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        thread_id = row[0]
+        ent_cursor = await self.db.execute(
+            "SELECT DISTINCT e.canonical_name FROM entities e "
+            "JOIN event_entities ee ON e.id = ee.entity_id "
+            "JOIN thread_events te ON ee.event_id = te.event_id "
+            "JOIN events ev ON te.event_id = ev.id "
+            "WHERE te.thread_id = ? AND ev.date <= ?",
+            (thread_id, cutoff.isoformat()),
+        )
+        key_entities = [e[0] for e in await ent_cursor.fetchall()]
+        payload = {
+            "id": thread_id, "slug": row[1], "headline": row[2],
+            "status": row[3], "significance": row[4],
+            "created_at": row[5], "updated_at": row[6],
+            "key_entities": key_entities,
+        }
+        return await self._attach_snapshot_fields(payload, as_of=cutoff)
 
     async def get_all_threads(
         self, topic_slug: str | None = None, status: str | None = None,
@@ -1038,6 +2162,62 @@ class KnowledgeStore:
                 "created_at": r[5], "updated_at": r[6],
                 "key_entities": key_entities,
             })
+        enriched = []
+        for thread in threads:
+            enriched.append(await self._attach_latest_snapshot_fields(thread))
+        return enriched
+
+    async def get_all_threads_as_of(
+        self, topic_slug: str | None = None, cutoff: date | None = None, status: str | None = None,
+    ) -> list[dict]:
+        """Get threads with snapshot state and entity context pinned to a cutoff."""
+        if cutoff is None:
+            return await self.get_all_threads(topic_slug=topic_slug, status=status)
+
+        if topic_slug:
+            query = (
+                "SELECT DISTINCT t.id, t.slug, t.headline, t.status, t.significance, "
+                "t.created_at, t.updated_at "
+                "FROM threads t "
+                "JOIN thread_topics tt ON t.id = tt.thread_id "
+                "WHERE tt.topic_slug = ?"
+            )
+            params: list = [topic_slug]
+        else:
+            query = (
+                "SELECT id, slug, headline, status, significance, created_at, updated_at "
+                "FROM threads"
+            )
+            params = []
+
+        cursor = await self.db.execute(query, params)
+        rows = await cursor.fetchall()
+
+        threads = []
+        for r in rows:
+            thread_id = r[0]
+            snapshot = await self.get_thread_snapshot_as_of(thread_id, cutoff)
+            if not snapshot:
+                continue
+            if status and snapshot.status != status:
+                continue
+            ent_cursor = await self.db.execute(
+                "SELECT DISTINCT e.canonical_name FROM entities e "
+                "JOIN event_entities ee ON e.id = ee.entity_id "
+                "JOIN thread_events te ON ee.event_id = te.event_id "
+                "JOIN events ev ON te.event_id = ev.id "
+                "WHERE te.thread_id = ? AND ev.date <= ?",
+                (thread_id, cutoff.isoformat()),
+            )
+            key_entities = [e[0] for e in await ent_cursor.fetchall()]
+            payload = {
+                "id": thread_id, "slug": r[1], "headline": r[2],
+                "status": snapshot.status, "significance": snapshot.significance,
+                "created_at": r[5], "updated_at": r[6],
+                "key_entities": key_entities,
+            }
+            threads.append(await self._attach_snapshot_fields(payload, as_of=cutoff))
+        threads.sort(key=lambda thread: (thread.get("momentum_score") or 0.0, thread["headline"]), reverse=True)
         return threads
 
     async def get_threads_for_entity(self, entity_id: int) -> list[dict]:
@@ -1173,6 +2353,38 @@ class KnowledgeStore:
             })
         return stats
 
+    async def get_topic_event_range(self, topic_slug: str, *, until: date | None = None) -> dict:
+        """Return first/last event dates plus event count for a topic."""
+        query = "SELECT MIN(date), MAX(date), COUNT(*) FROM events WHERE topic_slug = ?"
+        params: list = [topic_slug]
+        if until:
+            query += " AND date <= ?"
+            params.append(until.isoformat())
+        cursor = await self.db.execute(query, params)
+        row = await cursor.fetchone()
+        return {
+            "first_date": date.fromisoformat(row[0]) if row and row[0] else None,
+            "last_date": date.fromisoformat(row[1]) if row and row[1] else None,
+            "event_count": row[2] if row else 0,
+        }
+
+    async def get_thread_event_stats(self, thread_id: int, *, until: date | None = None) -> dict:
+        """Return event count and latest event date for a thread."""
+        query = (
+            "SELECT COUNT(*), MAX(ev.date) FROM thread_events te "
+            "JOIN events ev ON te.event_id = ev.id WHERE te.thread_id = ?"
+        )
+        params: list = [thread_id]
+        if until:
+            query += " AND ev.date <= ?"
+            params.append(until.isoformat())
+        cursor = await self.db.execute(query, params)
+        row = await cursor.fetchone()
+        return {
+            "event_count": row[0] if row else 0,
+            "latest_event_date": date.fromisoformat(row[1]) if row and row[1] else None,
+        }
+
     async def get_related_entities(
         self, entity_id: int, limit: int = 20,
     ) -> list[dict]:
@@ -1196,6 +2408,214 @@ class KnowledgeStore:
             }
             for r in await cursor.fetchall()
         ]
+
+    # ── Entity Relationships ──────────────────────────────────────────
+
+    async def save_entity_relationship(self, rel: dict) -> int:
+        """Insert an entity-entity relationship. Returns ID.
+
+        Uses INSERT OR IGNORE so duplicates (same source, target, type, event)
+        are idempotent.
+        """
+        await self.db.execute(
+            "INSERT OR IGNORE INTO entity_relationships "
+            "(source_entity_id, target_entity_id, relation_type, evidence_text, "
+            "source_event_id, strength, valid_from) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                rel["source_entity_id"],
+                rel["target_entity_id"],
+                rel["relation_type"],
+                rel.get("evidence_text", ""),
+                rel.get("source_event_id"),
+                rel.get("strength", 0.5),
+                rel["valid_from"],
+            ),
+        )
+        await self.db.commit()
+        # Return the ID (either new or existing due to UNIQUE constraint)
+        cursor = await self.db.execute(
+            "SELECT id FROM entity_relationships "
+            "WHERE source_entity_id = ? AND target_entity_id = ? "
+            "AND relation_type = ? AND source_event_id IS ?",
+            (
+                rel["source_entity_id"],
+                rel["target_entity_id"],
+                rel["relation_type"],
+                rel.get("source_event_id"),
+            ),
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+    async def invalidate_relationship(
+        self, relationship_id: int, valid_until: date,
+    ) -> None:
+        """Set valid_until on an existing relationship (bi-temporal invalidation)."""
+        await self.db.execute(
+            "UPDATE entity_relationships SET valid_until = ? WHERE id = ?",
+            (valid_until.isoformat(), relationship_id),
+        )
+        await self.db.commit()
+
+    async def get_active_relationships_for_entity(
+        self, entity_id: int, *, as_of: date | None = None,
+    ) -> list[dict]:
+        """All active relationships where entity is source or target.
+
+        Active means: valid_from <= as_of AND (valid_until IS NULL OR valid_until > as_of).
+        """
+        cutoff = (as_of or date.today()).isoformat()
+        cursor = await self.db.execute(
+            "SELECT r.id, r.source_entity_id, r.target_entity_id, "
+            "r.relation_type, r.evidence_text, r.source_event_id, "
+            "r.strength, r.valid_from, r.valid_until, "
+            "se.canonical_name AS source_entity_name, "
+            "te.canonical_name AS target_entity_name "
+            "FROM entity_relationships r "
+            "JOIN entities se ON r.source_entity_id = se.id "
+            "JOIN entities te ON r.target_entity_id = te.id "
+            "WHERE (r.source_entity_id = ? OR r.target_entity_id = ?) "
+            "AND r.valid_from <= ? "
+            "AND (r.valid_until IS NULL OR r.valid_until > ?)",
+            (entity_id, entity_id, cutoff, cutoff),
+        )
+        return [dict(r) for r in await cursor.fetchall()]
+
+    async def get_relationships_between(
+        self,
+        entity_a_id: int,
+        entity_b_id: int,
+        *,
+        as_of: date | None = None,
+    ) -> list[dict]:
+        """Direct relationships between two specific entities (either direction)."""
+        cutoff = (as_of or date.today()).isoformat()
+        cursor = await self.db.execute(
+            "SELECT r.id, r.source_entity_id, r.target_entity_id, "
+            "r.relation_type, r.evidence_text, r.source_event_id, "
+            "r.strength, r.valid_from, r.valid_until "
+            "FROM entity_relationships r "
+            "WHERE ((r.source_entity_id = ? AND r.target_entity_id = ?) "
+            "   OR (r.source_entity_id = ? AND r.target_entity_id = ?)) "
+            "AND r.valid_from <= ? "
+            "AND (r.valid_until IS NULL OR r.valid_until > ?)",
+            (entity_a_id, entity_b_id, entity_b_id, entity_a_id, cutoff, cutoff),
+        )
+        return [dict(r) for r in await cursor.fetchall()]
+
+    async def get_entity_neighborhood(
+        self,
+        entity_id: int,
+        *,
+        hops: int = 2,
+        as_of: date | None = None,
+        limit: int = 50,
+    ) -> dict:
+        """BFS traversal: entities within N hops with their relationships.
+
+        Returns {entities: [{id, name, type, distance}], relationships: [...]}.
+        """
+        cutoff = (as_of or date.today()).isoformat()
+        visited: set[int] = set()
+        entities_out: list[dict] = []
+        relationships_out: list[dict] = []
+        frontier = {entity_id}
+
+        for hop in range(1, hops + 1):
+            if not frontier or len(entities_out) >= limit:
+                break
+            placeholders = ",".join("?" for _ in frontier)
+            cursor = await self.db.execute(
+                f"SELECT r.id, r.source_entity_id, r.target_entity_id, "
+                f"r.relation_type, r.evidence_text, r.strength, "
+                f"r.valid_from, r.valid_until, r.source_event_id "
+                f"FROM entity_relationships r "
+                f"WHERE (r.source_entity_id IN ({placeholders}) "
+                f"   OR r.target_entity_id IN ({placeholders})) "
+                f"AND r.valid_from <= ? "
+                f"AND (r.valid_until IS NULL OR r.valid_until > ?)",
+                (*frontier, *frontier, cutoff, cutoff),
+            )
+            rows = await cursor.fetchall()
+            next_frontier: set[int] = set()
+            for r in rows:
+                rel = dict(r)
+                relationships_out.append(rel)
+                # Find the neighbor (the entity that's NOT in our current search set)
+                for eid in (rel["source_entity_id"], rel["target_entity_id"]):
+                    if eid != entity_id and eid not in visited:
+                        next_frontier.add(eid)
+
+            visited |= frontier
+            frontier = next_frontier - visited
+
+        # Fetch entity details for all discovered neighbors
+        all_neighbor_ids = {
+            eid
+            for r in relationships_out
+            for eid in (r["source_entity_id"], r["target_entity_id"])
+            if eid != entity_id
+        }
+        if all_neighbor_ids:
+            placeholders = ",".join("?" for _ in all_neighbor_ids)
+            cursor = await self.db.execute(
+                f"SELECT id, canonical_name, entity_type "
+                f"FROM entities WHERE id IN ({placeholders})",
+                tuple(all_neighbor_ids),
+            )
+            for row in await cursor.fetchall():
+                entities_out.append({
+                    "id": row[0],
+                    "name": row[1],
+                    "type": row[2],
+                })
+
+        # Deduplicate relationships by id
+        seen_rel_ids: set[int] = set()
+        unique_rels = []
+        for r in relationships_out:
+            if r["id"] not in seen_rel_ids:
+                seen_rel_ids.add(r["id"])
+                unique_rels.append(r)
+
+        return {
+            "entities": entities_out[:limit],
+            "relationships": unique_rels,
+        }
+
+    async def get_relationship_timeline(
+        self,
+        entity_id: int,
+        *,
+        days: int = 30,
+        reference_date: date | None = None,
+    ) -> list[dict]:
+        """Relationships created or invalidated recently for an entity.
+
+        Returns relationships sorted by valid_from DESC, showing what changed.
+        Includes both active and recently invalidated relationships.
+        """
+        ref = (reference_date or date.today()).isoformat()
+        cutoff = (
+            (reference_date or date.today()) - timedelta(days=days)
+        ).isoformat()
+        cursor = await self.db.execute(
+            "SELECT r.id, r.source_entity_id, r.target_entity_id, "
+            "r.relation_type, r.evidence_text, r.strength, "
+            "r.valid_from, r.valid_until, r.source_event_id, "
+            "se.canonical_name AS source_entity_name, "
+            "te.canonical_name AS target_entity_name "
+            "FROM entity_relationships r "
+            "JOIN entities se ON r.source_entity_id = se.id "
+            "JOIN entities te ON r.target_entity_id = te.id "
+            "WHERE (r.source_entity_id = ? OR r.target_entity_id = ?) "
+            "AND r.valid_from <= ? "
+            "AND (r.valid_from >= ? OR (r.valid_until IS NOT NULL AND r.valid_until >= ?)) "
+            "ORDER BY r.valid_from DESC",
+            (entity_id, entity_id, ref, cutoff, cutoff),
+        )
+        return [dict(r) for r in await cursor.fetchall()]
 
     # ── Breaking Alerts ─────────────────────────────────────────────
 
@@ -1318,13 +2738,16 @@ class KnowledgeStore:
             (event_id,),
         )
         entities = [e[0] for e in await ent_cursor.fetchall()]
+        raw_entities = json.loads(row[5]) if len(row) > 5 and row[5] else []
         return Event(
+            event_id=event_id,
             date=date.fromisoformat(row[1]),
             summary=row[2],
             significance=row[3],
             relation_to_prior=row[4],
             sources=sources,
-            entities=entities,
+            entities=entities or raw_entities,
+            raw_entities=raw_entities,
         )
 
     # ── Usage Log ─────────────────────────────────────────────────────

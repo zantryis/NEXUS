@@ -48,3 +48,28 @@ sources:
   tier: B
   type: rss
   url: https://www.energymonitor.ai/feed/
+# Trade press — specialist energy coverage
+- affiliation: private
+  country: US
+  id: utility-dive
+  language: en
+  name: Utility Dive
+  tier: B
+  type: rss
+  url: https://www.utilitydive.com/feeds/news/
+- affiliation: private
+  country: DE
+  id: pv-magazine
+  language: en
+  name: PV Magazine
+  tier: B
+  type: rss
+  url: https://www.pv-magazine.com/feed/
+- affiliation: public
+  country: US
+  id: doe-news
+  language: en
+  name: US Department of Energy
+  tier: A
+  type: rss
+  url: https://www.energy.gov/rss.xml

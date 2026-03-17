@@ -32,6 +32,63 @@
     {% endif %}
 </div>
 
+{% if thread.trajectory_label or causal_links or projection_items %}
+<div class="analysis-panel">
+    {% if thread.trajectory_label %}
+    <div class="analysis-card convergence">
+        <div class="analysis-card-header">Trajectory</div>
+        <div class="analysis-card-body">
+            <div class="analysis-item">
+                <div class="analysis-fact">{{ thread.trajectory_label | replace('_', ' ') }}</div>
+                <div class="analysis-sources">
+                    <span class="source-badge">momentum {{ '%.1f'|format(thread.momentum_score or 0) }}</span>
+                    <span class="source-badge">velocity {{ '%.1f'|format(thread.velocity_7d or 0) }}</span>
+                    <span class="source-badge">snapshots {{ thread.snapshot_count or 0 }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if causal_links %}
+    <div class="analysis-card convergence">
+        <div class="analysis-card-header">Causal Chain</div>
+        <div class="analysis-card-body">
+            {% for link in causal_links %}
+            <div class="analysis-item">
+                <div class="analysis-fact">{{ link.relation_type | replace('_', ' ') }}</div>
+                <div class="analysis-sources">
+                    <span class="source-badge">events {{ link.source_event_id }} -> {{ link.target_event_id }}</span>
+                    {% if link.evidence_text %}
+                    <span class="source-badge">{{ link.evidence_text }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if projection_items %}
+    <div class="analysis-card divergence">
+        <div class="analysis-card-header">Projection Evidence</div>
+        <div class="analysis-card-body">
+            {% for item in projection_items %}
+            <div class="analysis-item">
+                <div class="analysis-fact">{{ item.claim }}</div>
+                <div class="analysis-sources">
+                    <span class="source-badge">{{ item.confidence }}</span>
+                    <span class="source-badge">{{ item.horizon_days }}d</span>
+                    <span class="source-badge">watch: {{ item.signpost }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
 {# ── Convergence / Divergence ── #}
 {% if convergence or divergence %}
 <div class="analysis-panel">

@@ -233,3 +233,103 @@ def test_check_staleness_active_old():
 def test_check_staleness_resolved_unaffected():
     """Resolved threads stay resolved regardless of event age."""
     assert check_staleness("resolved", date(2026, 1, 1), reference_date=date(2026, 3, 14)) == "resolved"
+
+
+# ── Thread merge candidates ─────────────────────────────────────
+
+
+from nexus.engine.synthesis.threads import find_merge_candidates
+
+
+def _merge_thread(id, slug, headline, entities, significance=7, status="active"):
+    return {
+        "id": id,
+        "slug": slug,
+        "headline": headline,
+        "key_entities": entities,
+        "status": status,
+        "significance": significance,
+        "created_at": "2026-03-01",
+    }
+
+
+async def test_find_merge_candidates_high_overlap_auto():
+    """Jaccard >= 0.5 should auto-merge without LLM."""
+    threads = [
+        _merge_thread(1, "iran-sanctions", "Iran Sanctions", ["Iran", "IAEA", "US"], significance=8),
+        _merge_thread(2, "iran-nuclear", "Iran Nuclear", ["Iran", "IAEA", "EU"], significance=5),
+    ]
+    # Jaccard = |{iran, iaea}| / |{iran, iaea, us, eu}| = 2/4 = 0.5
+    llm = AsyncMock()
+    pairs = await find_merge_candidates(threads, llm)
+    assert len(pairs) == 1
+    keep_id, absorb_id = pairs[0]
+    assert keep_id == 1  # higher significance
+    assert absorb_id == 2
+    llm.complete.assert_not_called()
+
+
+async def test_find_merge_candidates_low_overlap_ignored():
+    """Jaccard < 0.3 should produce no candidates."""
+    threads = [
+        _merge_thread(1, "iran-sanctions", "Iran Sanctions", ["Iran", "IAEA"]),
+        _merge_thread(2, "ai-progress", "AI Progress", ["OpenAI", "Google", "Meta"]),
+    ]
+    # Jaccard = 0/5 = 0.0
+    pairs = await find_merge_candidates(threads)
+    assert pairs == []
+
+
+async def test_find_merge_candidates_ambiguous_llm_confirms():
+    """Jaccard 0.3-0.5 + LLM says same arc → merge."""
+    threads = [
+        _merge_thread(1, "iran-talks", "Iran Talks", ["Iran", "US", "IAEA"], significance=8),
+        _merge_thread(2, "nuclear-deal", "Nuclear Deal", ["Iran", "EU", "Russia", "IAEA"], significance=5),
+    ]
+    # Jaccard = |{iran, iaea}| / |{iran, us, iaea, eu, russia}| = 2/5 = 0.4
+    llm = AsyncMock()
+    llm.complete = AsyncMock(return_value=json.dumps({"pairs": [{"thread_a": 1, "thread_b": 2, "same_arc": True}]}))
+    pairs = await find_merge_candidates(threads, llm)
+    assert len(pairs) == 1
+    assert pairs[0] == (1, 2)
+    llm.complete.assert_called_once()
+
+
+async def test_find_merge_candidates_ambiguous_llm_rejects():
+    """Jaccard 0.3-0.5 + LLM says different → no merge."""
+    threads = [
+        _merge_thread(1, "iran-talks", "Iran Talks", ["Iran", "US", "IAEA"], significance=8),
+        _merge_thread(2, "nuclear-deal", "Nuclear Deal", ["Iran", "EU", "Russia", "IAEA"], significance=5),
+    ]
+    llm = AsyncMock()
+    llm.complete = AsyncMock(return_value=json.dumps({"pairs": [{"thread_a": 1, "thread_b": 2, "same_arc": False}]}))
+    pairs = await find_merge_candidates(threads, llm)
+    assert pairs == []
+
+
+async def test_find_merge_candidates_keeps_higher_significance():
+    """The thread with higher significance should be the keep_id."""
+    threads = [
+        _merge_thread(1, "thread-a", "Thread A", ["Iran", "IAEA"], significance=3),
+        _merge_thread(2, "thread-b", "Thread B", ["Iran", "IAEA"], significance=9),
+    ]
+    pairs = await find_merge_candidates(threads)
+    assert len(pairs) == 1
+    assert pairs[0] == (2, 1)  # thread 2 kept (higher significance)
+
+
+async def test_find_merge_candidates_chain_safe():
+    """If A merges with B and B merges with C, A should absorb both."""
+    threads = [
+        _merge_thread(1, "a", "Thread A", ["Iran", "IAEA", "US"], significance=9),
+        _merge_thread(2, "b", "Thread B", ["Iran", "IAEA", "EU"], significance=5),
+        _merge_thread(3, "c", "Thread C", ["Iran", "IAEA", "Russia"], significance=3),
+    ]
+    # A-B: Jaccard = 2/4 = 0.5, B-C: Jaccard = 2/4 = 0.5, A-C: 2/4 = 0.5
+    # All should merge into thread 1 (highest significance)
+    pairs = await find_merge_candidates(threads)
+    # After transitive resolution, both 2 and 3 should point to 1
+    keep_ids = {p[0] for p in pairs}
+    absorb_ids = {p[1] for p in pairs}
+    assert keep_ids == {1}
+    assert absorb_ids == {2, 3}

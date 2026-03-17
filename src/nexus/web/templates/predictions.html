@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+{% block title %}Nexus — Predictions{% endblock %}
+{% block nav_predictions %}active{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h2>Predictions</h2>
+</div>
+
+{# ── Summary Stats ── #}
+<div class="pred-summary">
+    <div class="pred-stat">
+        <div class="pred-stat-label">Markets</div>
+        <div class="pred-stat-value">{{ summary.unique_markets }}</div>
+    </div>
+    <div class="pred-stat">
+        <div class="pred-stat-label">Engines</div>
+        <div class="pred-stat-value">{{ summary.engines_active }}</div>
+    </div>
+    <div class="pred-stat">
+        <div class="pred-stat-label">Resolved</div>
+        <div class="pred-stat-value">{{ summary.resolved }}</div>
+    </div>
+    <div class="pred-stat">
+        <div class="pred-stat-label">Best Engine</div>
+        <div class="pred-stat-value">
+            {% if summary.best_engine %}
+                {{ summary.best_engine.label }}
+                <span style="font-size: 0.85rem; font-weight: 400; color: var(--nx-text-secondary);">{{ "%.3f"|format(summary.best_engine.brier) }}</span>
+            {% else %}&mdash;{% endif %}
+        </div>
+        {% if summary.best_run_mode %}
+        <div class="pred-stat-sub">{{ summary.best_run_mode }}</div>
+        {% endif %}
+    </div>
+    <div class="pred-stat">
+        <div class="pred-stat-label">vs Market</div>
+        <div class="pred-stat-value">
+            {% if summary.beat_market is not none %}
+                {% if summary.beat_market %}
+                    <span class="pred-beats">&#9650; Beating</span>
+                    <span style="font-size: 0.85rem; font-weight: 400;">{{ "%+.3f"|format(summary.best_engine.vs_market) }}</span>
+                {% else %}
+                    <span class="pred-behind">&#9660; Behind</span>
+                    <span style="font-size: 0.85rem; font-weight: 400;">{{ "%+.3f"|format(summary.best_engine.vs_market) }}</span>
+                {% endif %}
+            {% else %}&mdash;{% endif %}
+        </div>
+        {% if summary.market_mean_brier is not none %}
+        <div class="pred-stat-sub">Baseline: {{ "%.3f"|format(summary.market_mean_brier) }}</div>
+        {% endif %}
+    </div>
+</div>
+
+{# ── Filter Pills ── #}
+<div class="pred-filters" id="pred-filters">
+    <button class="pred-pill active" data-filter="all">All</button>
+    <button class="pred-pill" data-filter="benchmark">Benchmark</button>
+    <button class="pred-pill" data-filter="kalshi">Kalshi</button>
+    <button class="pred-pill" data-filter="hindcast">Hindcast</button>
+    <button class="pred-pill" data-filter="kg">KG</button>
+    <span class="pred-filter-sep">|</span>
+    <button class="pred-pill active" data-filter-run="all">Both</button>
+    <button class="pred-pill" data-filter-run="independent">Independent</button>
+    <button class="pred-pill" data-filter-run="anchored">Anchored</button>
+</div>
+
+{# ── Active Predictions ── #}
+{% if pending_events %}
+<details class="pred-section" open>
+    <summary class="pred-section-title">Active <span class="pred-count">{{ summary.pending }}</span></summary>
+    {% for event_group in pending_events %}
+    <div class="pred-event-group">
+        {% if event_group.title != "Standalone" %}
+        <div class="pred-event-heading">
+            {{ event_group.title }}
+            <span class="pred-count">{{ event_group.markets|length }}</span>
+        </div>
+        {% endif %}
+        <div class="pred-cards">
+        {% for market in event_group.markets %}
+            <div class="pred-card" data-source="{{ market.source_type }}" data-run-label="{{ market.run_label or '' }}">
+                <div class="pred-card-question">{{ market.display_question }}</div>
+
+                <div class="pred-engine-rows">
+                    {% if market.market_prob is not none %}
+                    <div class="pred-erow">
+                        <span class="pred-erow-name pred-erow-market">Market</span>
+                        <div class="pred-minibar"><div class="pred-minibar-fill pred-minibar-market" style="width: {{ (market.market_prob * 100)|round }}%"></div></div>
+                        <span class="pred-erow-pct">{{ "%.0f"|format(market.market_prob * 100) }}%</span>
+                    </div>
+                    {% endif %}
+                    {% for eng_name, eq in market.engine_list %}
+                    <div class="pred-erow">
+                        <span class="pred-erow-name">{{ engine_info[eng_name]['label'] if eng_name in engine_info else eng_name }}</span>
+                        <div class="pred-minibar"><div class="pred-minibar-fill pred-minibar-{{ eq.verdict or 'uncertain' }}" style="width: {{ (eq.probability * 100)|round }}%"></div></div>
+                        <span class="pred-erow-pct">{{ "%.0f"|format(eq.probability * 100) }}%</span>
+                        {% if eq.verdict %}
+                        <span class="pred-verdict-dot pred-verdict-dot-{{ eq.verdict }}" title="{{ eq.verdict }}"></span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="pred-card-footer">
+                    <span class="source-badge source-{{ market.source_type }}">{{ market.source_type }}</span>
+                    {% if market.run_label %}
+                    <span class="run-badge run-badge-{{ market.run_label }}">{{ market.run_label }}</span>
+                    {% endif %}
+                    {% if market.ticker %}<span class="pred-ticker">{{ market.ticker }}</span>{% endif %}
+                    {% if market.days_until_resolution is not none %}
+                        <span class="pred-meta-dim">{{ market.days_until_resolution }}d</span>
+                    {% endif %}
+                    {% if market.spread_pp %}
+                    <span class="pred-meta-dim">{{ market.spread_pp }}pp spread</span>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</details>
+{% endif %}
+
+{# ── Engine Analytics ── #}
+{% if analytics_anchored or analytics_independent %}
+<details class="pred-section" open>
+    <summary class="pred-section-title">Engine Analytics</summary>
+
+    {% if summary.market_mean_brier is not none %}
+    <div class="pred-meta-dim" style="margin-bottom: 1rem;">
+        Lower Brier is better &middot; Green = beats market baseline ({{ "%.3f"|format(summary.market_mean_brier) }})
+    </div>
+    {% endif %}
+
+    {% macro brier_chart(rows, title, subtitle, market_brier) %}
+    <div class="analytics-chart-section">
+        <h4 class="pred-analytics-heading">{{ title }} <span class="pred-meta-dim">{{ subtitle }}</span></h4>
+        <div class="brier-chart">
+            {% for row in rows %}
+            <div class="brier-row {{ 'brier-row-best' if loop.first else '' }}">
+                <span class="brier-label">{{ row.label }}</span>
+                <div class="brier-bar-track">
+                    {# Scale: 0 to 0.35 Brier mapped to 0-100% width #}
+                    {% set pct = (row.brier / 0.35 * 100)|round %}
+                    {% set mkt_pct = (market_brier / 0.35 * 100)|round if market_brier else 0 %}
+                    <div class="brier-bar-fill {{ 'brier-bar-beats' if row.vs_market < 0 else 'brier-bar-behind' }}" style="width: {{ [pct, 100]|min }}%"></div>
+                    {% if market_brier %}
+                    <div class="brier-baseline" style="left: {{ [mkt_pct, 100]|min }}%" title="Market baseline: {{ '%.3f'|format(market_brier) }}"></div>
+                    {% endif %}
+                </div>
+                <span class="brier-value {{ 'pred-beats' if row.vs_market < 0 else 'pred-behind' }}">{{ "%.3f"|format(row.brier) }}</span>
+                <span class="brier-vs {{ 'pred-beats' if row.vs_market < 0 else 'pred-behind' }}">{{ "%+.3f"|format(row.vs_market) }}</span>
+                <span class="brier-meta">{{ "%.0f"|format(row.hit_rate) }}% hit &middot; {{ row.count }}q</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endmacro %}
+
+    {% if analytics_anchored %}
+    {{ brier_chart(analytics_anchored, "Anchored", "(engine sees market price)", summary.market_mean_brier) }}
+    {% endif %}
+
+    {% if analytics_independent %}
+    {{ brier_chart(analytics_independent, "Independent", "(no market info)", summary.market_mean_brier) }}
+    {% endif %}
+</details>
+{% endif %}
+
+{# ── Resolved (grouped by source) ── #}
+{% for source, markets in resolved_by_source.items() %}
+<details class="pred-section pred-resolved-group" data-source="{{ source }}">
+    <summary class="pred-section-title">
+        Resolved &mdash; {{ source|title }}
+        <span class="source-badge source-{{ source }}">{{ source }}</span>
+        <span class="pred-count">{{ markets|length }}</span>
+    </summary>
+    <div class="pred-resolved-list">
+    {% for market in markets %}
+        <div class="pred-resolved-card {{ 'pred-resolved-hit' if market.status_label == 'hit' else 'pred-resolved-miss' if market.status_label == 'miss' else '' }}"
+             data-source="{{ source }}" data-run-label="{{ market.run_label or '' }}">
+            <div class="pred-resolved-header">
+                <span class="pred-resolved-question">{{ market.display_question }}</span>
+                {% if market.resolved_bool is not none %}
+                <span class="pred-outcome {{ 'pred-outcome-yes' if market.resolved_bool else 'pred-outcome-no' }}">
+                    {{ "YES" if market.resolved_bool else "NO" }}
+                </span>
+                {% endif %}
+            </div>
+
+            <div class="pred-engine-rows pred-engine-rows-sm">
+                {% if market.market_prob is not none %}
+                {% set mkt_brier = (market.market_prob - (1.0 if market.resolved_bool else 0.0)) ** 2 %}
+                <div class="pred-erow">
+                    <span class="pred-erow-name pred-erow-market">Market</span>
+                    <div class="pred-minibar"><div class="pred-minibar-fill pred-minibar-market" style="width: {{ (market.market_prob * 100)|round }}%"></div></div>
+                    <span class="pred-erow-pct">{{ "%.0f"|format(market.market_prob * 100) }}%</span>
+                    <span class="pred-erow-brier">{{ "%.3f"|format(mkt_brier) }}</span>
+                </div>
+                {% endif %}
+                {% for eng_name, eq in market.engine_list %}
+                <div class="pred-erow">
+                    <span class="pred-erow-name">{{ engine_info[eng_name]['label'] if eng_name in engine_info else eng_name }}</span>
+                    <div class="pred-minibar"><div class="pred-minibar-fill pred-minibar-{{ eq.verdict or 'uncertain' }}" style="width: {{ (eq.probability * 100)|round }}%"></div></div>
+                    <span class="pred-erow-pct">{{ "%.0f"|format(eq.probability * 100) }}%</span>
+                    <span class="pred-erow-brier {{ 'pred-beats' if eq.brier_score is not none and eq.brier_score < 0.25 else 'pred-behind' if eq.brier_score is not none else '' }}">
+                        {% if eq.brier_score is not none %}{{ "%.3f"|format(eq.brier_score) }}{% else %}&mdash;{% endif %}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="pred-card-footer">
+                {% if market.run_label %}
+                <span class="run-badge run-badge-{{ market.run_label }}">{{ market.run_label }}</span>
+                {% endif %}
+                {% if market.ticker %}<span class="pred-ticker">{{ market.ticker }}</span>{% endif %}
+                {% if market.resolution_date_str %}
+                <span class="pred-meta-dim">settled {{ market.resolution_date_str }}</span>
+                {% endif %}
+            </div>
+        </div>
+    {% endfor %}
+    </div>
+</details>
+{% endfor %}
+
+{# ── Empty state ── #}
+{% if not pending_events and not resolved_by_source %}
+<div class="empty-state">
+    <p>No predictions yet. Run the Kalshi loop to generate predictions.</p>
+    <p style="font-size: 0.85rem; color: var(--nx-text-dim); margin-top: 0.5rem;">
+        <code>python -m nexus forecast kalshi-loop --engine structural</code>
+    </p>
+</div>
+{% endif %}
+
+{# ── Engine Legend ── #}
+<details class="pred-section" style="margin-top: 2rem;">
+    <summary class="pred-section-title">Engine Legend</summary>
+    <div class="pred-engines-grid">
+    {% for key, info in engine_info.items() %}
+        {% if key in engines_active %}
+        <div class="pred-engine-card">
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem;">
+                <span class="engine-badge engine-badge-{{ info['class'] }}">{{ info.label }}</span>
+                <span class="pred-meta-dim">{{ info.calls }} calls</span>
+                {% if info.uses_kg %}<span class="pred-evidence">KG</span>{% endif %}
+            </div>
+            <div style="font-size: 0.82rem; color: var(--nx-text-dim);">{{ info.desc }}</div>
+        </div>
+        {% endif %}
+    {% endfor %}
+    </div>
+</details>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    const sourcePills = document.querySelectorAll('.pred-pill[data-filter]');
+    const runPills = document.querySelectorAll('.pred-pill[data-filter-run]');
+    let activeSource = 'all';
+    let activeRun = 'all';
+
+    function applyFilters() {
+        document.querySelectorAll('.pred-card[data-source], .pred-resolved-card[data-source]').forEach(el => {
+            const srcMatch = activeSource === 'all' || el.dataset.source === activeSource;
+            const runMatch = activeRun === 'all' || !el.dataset.runLabel || el.dataset.runLabel === activeRun;
+            el.style.display = (srcMatch && runMatch) ? '' : 'none';
+        });
+        document.querySelectorAll('.pred-resolved-group[data-source]').forEach(el => {
+            const visible = el.querySelectorAll('.pred-resolved-card:not([style*="display: none"])');
+            el.style.display = visible.length ? '' : 'none';
+        });
+    }
+
+    sourcePills.forEach(btn => {
+        btn.addEventListener('click', () => {
+            sourcePills.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activeSource = btn.dataset.filter;
+            applyFilters();
+        });
+    });
+    runPills.forEach(btn => {
+        btn.addEventListener('click', () => {
+            runPills.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activeRun = btn.dataset.filterRun;
+            applyFilters();
+        });
+    });
+})();
+</script>
+{% endblock %}

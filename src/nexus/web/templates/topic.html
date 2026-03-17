@@ -8,6 +8,9 @@
         {% if backstory %}
         <a href="/pages/backstory:{{ slug }}">Read backstory &rarr;</a> &middot;
         {% endif %}
+        {% if projection_page %}
+        <a href="/pages/projection:{{ slug }}">Forward look &rarr;</a> &middot;
+        {% endif %}
         {% if filter_stats and filter_stats.get('total', 0) > 0 %}
         <a href="/filters/{{ slug }}/{{ today }}">Filter log</a>:
         {{ filter_stats.get('accepted', 0) }} accepted /
@@ -18,6 +21,50 @@
 
 <div class="entity-layout">
     <div>
+        {% if latest_projection %}
+        <div class="analysis-panel" style="margin-bottom: 1.5rem;">
+            <div class="analysis-card convergence">
+                <div class="analysis-card-header">Forward Look</div>
+                <div class="analysis-card-body">
+                    {% if latest_projection.items %}
+                    {% for item in latest_projection.items %}
+                    <div class="analysis-item">
+                        <div class="analysis-fact">{{ item.claim }}</div>
+                        <div class="analysis-sources">
+                            <span class="source-badge">{{ item.confidence }}</span>
+                            <span class="source-badge">{{ item.horizon_days }}d</span>
+                            <span class="source-badge">watch: {{ item.signpost }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="analysis-item">
+                        <div class="analysis-fact">{{ latest_projection.summary }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if cross_topic_signals %}
+        <div class="analysis-panel" style="margin-bottom: 1.5rem;">
+            <div class="analysis-card divergence">
+                <div class="analysis-card-header">Cross-Topic Bridges</div>
+                <div class="analysis-card-body">
+                    {% for signal in cross_topic_signals %}
+                    <div class="analysis-item">
+                        <div class="analysis-fact">{{ signal.shared_entity }} linked to {{ signal.related_topic_slug | replace('-', ' ') }}</div>
+                        <div class="analysis-sources">
+                            <span class="source-badge">{{ signal.observed_at }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         {# Active Threads #}
         {% if active_threads %}
         <div class="card-section">
@@ -34,6 +81,9 @@
                 </div>
                 <div class="thread-card-meta">
                     <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
+                    {% if t.trajectory_label %}
+                    <span class="entity-tag">{{ t.trajectory_label | replace('_', ' ') }}</span>
+                    {% endif %}
                     {% if t.key_entities %}
                     {% for e in t.key_entities[:3] %}
                     <span class="entity-tag">{{ e }}</span>

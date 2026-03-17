@@ -121,6 +121,12 @@
                     {% endfor %}
                 </div>
                 {% endif %}
+                {% if thread.trajectory_label %}
+                <div class="briefing-thread-entities" style="margin-bottom: 0.5rem;">
+                    <span class="entity-tag">{{ thread.trajectory_label | replace('_', ' ') }}</span>
+                    <span class="entity-tag">momentum {{ '%.1f'|format(thread.momentum_score or 0) }}</span>
+                </div>
+                {% endif %}
 
                 {% for ev in thread.events %}
                 <div class="briefing-event {{ 'major' if ev.significance >= 8 }}">
@@ -191,6 +197,59 @@
             </div>
             {% endif %}
 
+            {% if topic.projection %}
+            <div class="sidebar-section">
+                <div class="sidebar-title">Forward Look</div>
+                {% if topic.projection.items %}
+                {% for item in topic.projection.items[:3] %}
+                <div class="sidebar-insight">
+                    <div class="sidebar-insight-claim">{{ item.claim }}</div>
+                    {% if item.signals_cited %}
+                        {% for sig in item.signals_cited %}
+                            {% if sig.startswith('reasoning:') %}
+                    <div class="sidebar-insight-reasoning">{{ sig[10:] }}</div>
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                    <div style="display:flex;gap:0.3rem;flex-wrap:wrap;margin-top:0.25rem;">
+                        <span class="source-badge source-badge-{{ item.confidence }}">{{ item.confidence }}</span>
+                        <span class="source-badge">{{ item.horizon_days }}d</span>
+                        {% if item.evidence_thread_ids %}
+                        <span class="source-badge">{{ item.evidence_thread_ids | length }} thread{{ 's' if item.evidence_thread_ids | length > 1 }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="sidebar-insight">
+                    <div class="sidebar-insight-claim">{{ topic.projection.summary or 'Not enough history yet.' }}</div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if topic.cross_topic_signals %}
+            <div class="sidebar-section">
+                <div class="sidebar-title">Cross-Topic Bridges</div>
+                {% for signal in topic.cross_topic_signals %}
+                <div class="sidebar-bridge">
+                    <div class="sidebar-bridge-entity">{{ signal.shared_entity }}</div>
+                    {% if signal.source_summary %}
+                    <div class="sidebar-bridge-event">
+                        {% if signal.source_thread_slug %}<a href="/threads/{{ signal.source_thread_slug }}">{{ signal.source_summary }}</a>{% else %}{{ signal.source_summary }}{% endif %}
+                    </div>
+                    {% endif %}
+                    {% if signal.related_summary %}
+                    <div class="sidebar-bridge-event sidebar-bridge-related">
+                        {% if signal.related_thread_slug %}<a href="/threads/{{ signal.related_thread_slug }}">{{ signal.related_summary }}</a>{% else %}{{ signal.related_summary }}{% endif %}
+                    </div>
+                    {% endif %}
+                    <span class="sidebar-time">{{ signal.observed_at }} &middot; {{ signal.related_topic_slug | replace('-', ' ') }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
             {% if active_threads %}
             <div class="sidebar-section">
                 <div class="sidebar-title">Active Threads</div>
@@ -207,6 +266,28 @@
                 {% endfor %}
                 <div style="margin-top: 0.5rem;">
                     <a href="/threads/" class="section-link">View all threads &rarr;</a>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if kalshi_sidebar %}
+            <div class="sidebar-section">
+                <div class="sidebar-title">Kalshi Markets</div>
+                {% for m in kalshi_sidebar %}
+                <div class="sidebar-kalshi">
+                    <div class="sidebar-kalshi-question">{{ m.question[:100] }}{% if m.question|length > 100 %}...{% endif %}</div>
+                    <div class="sidebar-kalshi-probs">
+                        <span class="sidebar-kalshi-us">Us {{ "%.0f"|format(m.probability * 100) }}%</span>
+                        <span class="sidebar-kalshi-mkt">Mkt {{ "%.0f"|format(m.market_prob * 100) }}%</span>
+                        {% if m.gap_pp >= 10 %}
+                        <span class="sidebar-kalshi-gap">{{ m.gap_pp }}pp gap</span>
+                        {% endif %}
+                        <span class="sidebar-time">{{ m.days_until_resolution }}d</span>
+                    </div>
+                </div>
+                {% endfor %}
+                <div style="margin-top: 0.5rem;">
+                    <a href="/predictions" class="section-link">All predictions &rarr;</a>
                 </div>
             </div>
             {% endif %}

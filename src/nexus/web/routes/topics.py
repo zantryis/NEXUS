@@ -21,6 +21,9 @@ async def topic_detail(request: Request, slug: str):
 
     # Check for backstory page
     backstory = await store.get_page(f"backstory:{slug}")
+    projection_page = await store.get_page(f"projection:{slug}")
+    latest_projection = await store.get_latest_projection(slug)
+    cross_topic_signals = await store.get_cross_topic_signals(slug, limit=5)
 
     return templates.TemplateResponse(request, "topic.html", {
         "slug": slug,
@@ -28,5 +31,8 @@ async def topic_detail(request: Request, slug: str):
         "recent_events": recent_events,
         "filter_stats": filter_stats,
         "backstory": backstory,
+        "projection_page": projection_page,
+        "latest_projection": latest_projection,
+        "cross_topic_signals": cross_topic_signals,
         "today": today,
     })

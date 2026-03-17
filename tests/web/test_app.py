@@ -6,6 +6,7 @@ from httpx import AsyncClient, ASGITransport
 
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.engine.knowledge.events import Event
+from nexus.engine.projection.models import ProjectionItem, ThreadSnapshot, TopicProjection
 from nexus.web.app import create_app
 
 
@@ -45,6 +46,36 @@ async def seeded_app(tmp_path):
         "reuters", "Devastating impact",
         "tass", "Minimal effect",
     )
+    await store.upsert_thread_snapshot(ThreadSnapshot(
+        thread_id=tid,
+        snapshot_date=date(2026, 3, 9),
+        status="active",
+        significance=8,
+        event_count=1,
+        latest_event_date=date(2026, 3, 9),
+    ))
+    await store.upsert_thread_snapshot(ThreadSnapshot(
+        thread_id=tid,
+        snapshot_date=date(2026, 3, 10),
+        status="active",
+        significance=8,
+        event_count=2,
+        latest_event_date=date(2026, 3, 10),
+    ))
+    await store.save_projection(TopicProjection(
+        topic_slug="iran-us",
+        topic_name="Iran-US",
+        generated_for=date(2026, 3, 10),
+        summary="Forward look summary",
+        items=[ProjectionItem(
+            claim="Sanctions pressure is likely to persist.",
+            confidence="medium",
+            horizon_days=7,
+            signpost="Watch for Treasury follow-through",
+            evidence_thread_ids=[tid],
+            review_after=date(2026, 3, 17),
+        )],
+    ))
 
     # Seed a page
     await store.save_page(
@@ -148,6 +179,7 @@ async def test_topic_detail(client):
     resp = await client.get("/topics/iran-us")
     assert resp.status_code == 200
     assert "Sanctions Escalation" in resp.text
+    assert "Forward Look" in resp.text
 
 
 async def test_thread_list(client):
@@ -162,6 +194,7 @@ async def test_thread_detail(client):
     assert "Sanctions Escalation" in resp.text
     assert "What Sources Agree On" in resp.text
     assert "Where They Disagree" in resp.text
+    assert "Trajectory" in resp.text
 
 
 async def test_thread_not_found(client):
@@ -254,6 +287,20 @@ async def test_audio_route_404_missing(seeded_app, tmp_path):
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/audio/nonexistent.mp3")
         assert resp.status_code == 404
+
+
+async def test_predictions_page_loads(client):
+    """Predictions page returns 200 even with no forecast data."""
+    resp = await client.get("/predictions")
+    assert resp.status_code == 200
+    assert "Predictions" in resp.text
+
+
+async def test_predictions_page_shows_empty_state(client):
+    """Predictions page shows empty state when no forecasts exist."""
+    resp = await client.get("/predictions")
+    assert resp.status_code == 200
+    assert "No predictions yet" in resp.text
 
 
 async def test_dashboard_shows_audio_player(seeded_app, tmp_path):

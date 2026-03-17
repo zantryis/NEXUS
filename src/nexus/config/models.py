@@ -26,9 +26,10 @@ class TopicConfig(BaseModel):
     subtopics: list[str] = Field(default_factory=list)
     source_languages: list[str] = Field(default_factory=lambda: ["en"])
     perspective_diversity: Literal["low", "medium", "high"] = "high"
-    filter_threshold: float = Field(default=5.0, ge=0.0, le=10.0)
+    filter_threshold: float = Field(default=4.0, ge=0.0, le=10.0)
     scope: Literal["narrow", "medium", "broad"] = "medium"
     max_events: Optional[int] = None  # override auto-calculated event cap
+    projection_eligible: bool = True  # set False to skip future-projection pipeline
 
 
 class ModelsConfig(BaseModel):
@@ -80,6 +81,47 @@ class BudgetConfig(BaseModel):
     degradation_strategy: Literal["skip_expensive", "stop_all"] = "skip_expensive"
 
 
+class GraphSidecarConfig(BaseModel):
+    enabled: bool = False
+    export_schema_version: int = Field(default=1, ge=1)
+    adapters: list[Literal["kuzu", "graphiti"]] = Field(default_factory=lambda: ["kuzu", "graphiti"])
+    export_dir: str = "data/benchmarks/graph"
+    max_evidence_ids: int = Field(default=8, ge=1)
+
+
+class KalshiBenchmarkConfig(BaseModel):
+    enabled: bool = False
+    base_url: str = "https://api.elections.kalshi.com/trade-api/v2"
+    api_key_id_env: str = "KALSHI_API_KEY_ID"
+    private_key_path_env: str = "KALSHI_PRIVATE_KEY_PATH"
+    private_key_pem_env: str = "KALSHI_PRIVATE_KEY_PEM"
+    ledger_path: str = "data/benchmarks/kalshi.sqlite"
+    mapping_file: str = "data/benchmarks/kalshi_mappings.json"
+    comparison_tolerance_minutes: int = Field(default=30, ge=1)
+    default_status: str = "open"
+    auto_scan: bool = False
+    auto_match_min_score: int = Field(default=2, ge=1)
+    max_markets_per_topic: int = Field(default=5, ge=1, le=20)
+
+
+class FutureProjectionConfig(BaseModel):
+    enabled: bool = False
+    # "actor" = multi-actor swarm engine, "native" = single-pass LLM engine
+    engine: Literal["actor", "native", "graphrag", "perspective", "debate", "naked", "structural"] = "actor"
+    min_history_days: int = Field(default=7, ge=1)
+    min_thread_snapshots: int = Field(default=2, ge=1)
+    horizons: list[int] = Field(default_factory=lambda: [3, 7, 14])  # reserved for future use
+    max_items_per_topic: int = Field(default=3, ge=1, le=5)
+    critic_pass: bool = True
+    # Daily prediction scheduling
+    prediction_schedule_offset_minutes: int = Field(default=30, ge=0)
+    daily_engine: str = "structural"
+    kg_native_enabled: bool = True
+    max_kg_questions_per_topic: int = Field(default=5, ge=1, le=10)
+    graph_sidecars: GraphSidecarConfig = Field(default_factory=GraphSidecarConfig)
+    kalshi: KalshiBenchmarkConfig = Field(default_factory=KalshiBenchmarkConfig)
+
+
 class NexusConfig(BaseModel):
     user: UserConfig
     briefing: BriefingConfig = Field(default_factory=BriefingConfig)
@@ -90,5 +132,6 @@ class NexusConfig(BaseModel):
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
     sources: SourcesConfig = Field(default_factory=SourcesConfig)
     budget: BudgetConfig = Field(default_factory=BudgetConfig)
+    future_projection: FutureProjectionConfig = Field(default_factory=FutureProjectionConfig)
     preset: Optional[str] = None
     demo_mode: bool = False

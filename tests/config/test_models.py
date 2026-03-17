@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from nexus.config.models import (
     UserConfig,
     BriefingConfig,
+    FutureProjectionConfig,
     TopicConfig,
     ModelsConfig,
     SourcesConfig,
@@ -160,11 +161,13 @@ def test_nexus_config_with_new_sections():
         audio={"tts_backend": "openai", "voice_host_a": "nova"},
         breaking_news={"threshold": 8},
         telegram={"chat_id": 12345},
+        future_projection={"enabled": True, "engine": "native"},
     )
     assert config.audio.tts_backend == "openai"
     assert config.audio.voice_host_a == "nova"
     assert config.breaking_news.threshold == 8
     assert config.telegram.chat_id == 12345
+    assert config.future_projection.enabled is True
 
 
 def test_briefing_additional_languages_default():
@@ -216,6 +219,21 @@ def test_topic_invalid_perspective_diversity():
 def test_budget_negative_limit():
     with pytest.raises(ValidationError):
         BudgetConfig(daily_limit_usd=-5.0)
+
+
+def test_future_projection_defaults():
+    cfg = FutureProjectionConfig()
+    assert cfg.enabled is False
+    assert cfg.engine == "actor"
+    assert cfg.horizons == [3, 7, 14]
+    assert cfg.max_items_per_topic == 3
+    assert cfg.graph_sidecars.adapters == ["kuzu", "graphiti"]
+    assert cfg.kalshi.ledger_path == "data/benchmarks/kalshi.sqlite"
+    # Daily prediction scheduling
+    assert cfg.prediction_schedule_offset_minutes == 30
+    assert cfg.daily_engine == "structural"
+    assert cfg.kg_native_enabled is True
+    assert cfg.max_kg_questions_per_topic == 5
 
 
 def test_budget_negative_warning():

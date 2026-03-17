@@ -19,6 +19,7 @@ from nexus.engine.knowledge.events import (
     Event, extract_event, is_duplicate_event, merge_events,
 )
 from nexus.engine.knowledge.pages import refresh_stale_pages
+from nexus.engine.projection.service import run_projection_pass
 from nexus.engine.sources.polling import ContentItem, poll_all_feeds, filter_recent
 from nexus.engine.synthesis.knowledge import TopicSynthesis, synthesize_topic
 from nexus.engine.synthesis.renderers import render_text_briefing
@@ -98,12 +99,14 @@ async def run_topic_pipeline(
     data_dir: Path,
     sources: list[dict],
     store: KnowledgeStore,
+    run_date: date | None = None,
     capture: FixtureCapture | None = None,
     max_ingest: int | None = None,
     bg_tasks: list | None = None,
 ) -> TopicSynthesis:
     """Run the pipeline for a single topic: poll → ingest → filter → events → synthesize."""
     slug = topic.name.lower().replace(" ", "-").replace("/", "-")
+    processing_date = run_date or date.today()
     timings: dict[str, float] = {}
 
     # Poll, dedup, and ingest
@@ -152,10 +155,10 @@ async def run_topic_pipeline(
         capture.save_ingested(ingested)
 
     # Load existing events from store (last 14 days only — older events live in summaries)
-    existing_events = await store.get_events(slug, since=date.today() - timedelta(days=14))
+    existing_events = await store.get_events(slug, since=processing_date - timedelta(days=14))
 
     # Recent events = last 7 days (up to 30) for novelty assessment
-    cutoff = date.today() - timedelta(days=7)
+    cutoff = processing_date - timedelta(days=7)
     recent_events = [e for e in existing_events if e.date >= cutoff][-30:]
 
     # Filter (two-pass: relevance → significance+novelty)
@@ -184,7 +187,7 @@ async def run_topic_pipeline(
 
     async def _extract(item):
         async with extraction_sem:
-            return await extract_event(llm, item, topic, existing_events, current_date=date.today())
+            return await extract_event(llm, item, topic, existing_events, current_date=processing_date)
 
     raw_events = await asyncio.gather(*[_extract(item) for item in top_relevant])
     extracted_events = [e for e in raw_events if e is not None]
@@ -227,6 +230,19 @@ async def run_topic_pipeline(
 
         timings["entity_resolution"] = time.monotonic() - t0
 
+        for event in new_events:
+            event.raw_entities = event.raw_entities or list(event.entities)
+            canonical_entities = []
+            seen_entities: set[str] = set()
+            for entity_name in event.raw_entities:
+                canonical_name = resolve_map.get(entity_name, (None, entity_name))[1]
+                key = canonical_name.lower()
+                if key in seen_entities:
+                    continue
+                seen_entities.add(key)
+                canonical_entities.append(canonical_name)
+            event.entities = canonical_entities
+
         new_entity_ids = [
             eid for r in resolutions if r.is_new
             for eid in [resolve_map.get(r.raw, (None,))[0]] if eid
@@ -253,13 +269,62 @@ async def run_topic_pipeline(
         # Link events to resolved entities
         if resolve_map:
             for event_id, event in zip(event_ids, new_events):
+                event.event_id = event_id
                 entity_ids = [
                     resolve_map[e_name][0]
-                    for e_name in event.entities
+                    for e_name in event.raw_entities or event.entities
                     if e_name in resolve_map
                 ]
                 if entity_ids:
                     await store.link_event_entities(event_id, entity_ids)
+
+        # Extract entity-entity relationships from new events
+        if resolve_map:
+            from nexus.engine.knowledge.relationships import (
+                extract_relationships_from_event,
+                invalidate_contradicted_relationships,
+            )
+            t_rel = time.monotonic()
+            rel_count = 0
+            for event in new_events:
+                if not event.event_id:
+                    continue
+                # Gather existing relationships for contradiction detection
+                seen_entity_ids = set()
+                existing_rels: list[dict] = []
+                for e_name in event.raw_entities or event.entities:
+                    if e_name in resolve_map:
+                        eid = resolve_map[e_name][0]
+                        if eid not in seen_entity_ids:
+                            seen_entity_ids.add(eid)
+                            existing_rels.extend(
+                                await store.get_active_relationships_for_entity(eid)
+                            )
+                extracted_rels = await extract_relationships_from_event(
+                    llm, event, existing_relationships=existing_rels,
+                )
+                if extracted_rels:
+                    await invalidate_contradicted_relationships(
+                        store, extracted_rels, event.date,
+                    )
+                    for rel in extracted_rels:
+                        src_id = resolve_map.get(rel.source_entity, (None,))[0]
+                        tgt_id = resolve_map.get(rel.target_entity, (None,))[0]
+                        if src_id and tgt_id:
+                            await store.save_entity_relationship({
+                                "source_entity_id": src_id,
+                                "target_entity_id": tgt_id,
+                                "relation_type": rel.relation_type,
+                                "evidence_text": rel.evidence_text,
+                                "source_event_id": event.event_id,
+                                "strength": rel.strength,
+                                "valid_from": rel.valid_from.isoformat(),
+                            })
+                            rel_count += 1
+            timings["relationship_extraction"] = time.monotonic() - t_rel
+            if rel_count:
+                logger.info(f"[{topic.name}] Extracted {rel_count} entity relationships")
+
         logger.info(
             f"[{topic.name}] Logged {len(new_events)} new events "
             f"({len(extracted_events)} extracted, {len(extracted_events) - len(new_events)} merged)"
@@ -275,7 +340,7 @@ async def run_topic_pipeline(
 
     # Knowledge synthesis: build TopicSynthesis (X)
     # Fallback to recent events only (last 3 days) — older context lives in summaries
-    recent_fallback = [e for e in all_events if e.date >= date.today() - timedelta(days=3)][-10:]
+    recent_fallback = [e for e in all_events if e.date >= processing_date - timedelta(days=3)][-10:]
     t0 = time.monotonic()
     synthesis = await synthesize_topic(
         llm, topic,
@@ -365,6 +430,7 @@ async def run_pipeline(
                 cap = FixtureCapture(fixture_dir, slug)
             try:
                 syn = await run_topic_pipeline(llm, topic, data_dir, sources,
+                                               run_date=date.today(),
                                                store=store, capture=cap,
                                                max_ingest=max_ingest,
                                                bg_tasks=bg_tasks)
@@ -373,8 +439,19 @@ async def run_pipeline(
                 logger.exception(f"[{topic.name}] Topic pipeline failed — skipping")
                 continue
 
+        today_date = date.today()
+        if syntheses:
+            await run_projection_pass(
+                store,
+                llm,
+                syntheses,
+                run_date=today_date,
+                config=config.future_projection,
+                experiments_dir=data_dir / "experiments",
+            )
+
         # Save each TopicSynthesis to disk and store
-        today = date.today().isoformat()
+        today = today_date.isoformat()
         synth_dir = data_dir / "artifacts" / "syntheses" / today
         synth_dir.mkdir(parents=True, exist_ok=True)
         for syn in syntheses:
@@ -383,7 +460,7 @@ async def run_pipeline(
             synth_path.write_text(
                 yaml.dump(syn.model_dump(), default_flow_style=False, allow_unicode=True)
             )
-            await store.save_synthesis(syn.model_dump(), slug, date.today())
+            await store.save_synthesis(syn.model_dump(), slug, today_date)
             logger.info(f"Saved synthesis: {synth_path}")
 
         # Compute and save run metrics
@@ -623,15 +700,28 @@ async def run_backtest(
                         aliases = [r.raw] if r.raw != r.canonical else []
                         eid = await bt_store.upsert_entity(r.canonical, r.entity_type, aliases)
                         resolve_map[r.raw] = (eid, r.canonical)
+                    for event in new_events:
+                        event.raw_entities = event.raw_entities or list(event.entities)
+                        canonical_entities = []
+                        seen_entities: set[str] = set()
+                        for entity_name in event.raw_entities:
+                            canonical_name = resolve_map.get(entity_name, (None, entity_name))[1]
+                            key = canonical_name.lower()
+                            if key in seen_entities:
+                                continue
+                            seen_entities.add(key)
+                            canonical_entities.append(canonical_name)
+                        event.entities = canonical_entities
 
                 if new_events:
                     event_ids = await bt_store.add_events(new_events, slug)
                     # Link events to resolved entities
                     if resolve_map:
                         for event_id, event in zip(event_ids, new_events):
+                            event.event_id = event_id
                             entity_ids = [
                                 resolve_map[e_name][0]
-                                for e_name in event.entities
+                                for e_name in event.raw_entities or event.entities
                                 if e_name in resolve_map
                             ]
                             if entity_ids:

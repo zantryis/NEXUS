@@ -80,6 +80,155 @@ def check_staleness(current_status: str, last_event_date: date, reference_date: 
     return current_status
 
 
+_MERGE_SYSTEM_PROMPT = (
+    "You are a thread consolidation engine for a news intelligence system.\n\n"
+    "Given pairs of narrative threads, determine whether each pair tracks the SAME "
+    "specific story — meaning they follow the same chain of cause and effect, the same "
+    "actors taking the same actions, just described with different headlines.\n\n"
+    "IMPORTANT distinctions:\n"
+    "- same_arc = TRUE: 'Iran Nuclear Talks Resume' and 'IAEA-Iran Negotiations Continue' "
+    "(same story, different wording)\n"
+    "- same_arc = FALSE: 'Iran Nuclear Program' and 'Strait of Hormuz Blockade' "
+    "(related topics but different causal chains)\n"
+    "- same_arc = FALSE: 'US Climate Policy Reversal' and 'UK Grid Modernization' "
+    "(same sector but different countries/actors)\n\n"
+    "When in doubt, answer FALSE. Merging incorrectly destroys analytical granularity.\n\n"
+    "Respond with JSON:\n"
+    '{"pairs": [{"thread_a": <id>, "thread_b": <id>, "same_arc": true|false}]}'
+)
+
+
+async def find_merge_candidates(
+    threads: list[dict],
+    llm: "LLMClient | None" = None,
+    high_threshold: float = HIGH_OVERLAP,
+    low_threshold: float = LOW_OVERLAP,
+) -> list[tuple[int, int]]:
+    """Find thread pairs that should be merged using hybrid Jaccard+LLM.
+
+    Returns (keep_id, absorb_id) tuples. Higher significance thread is kept.
+    Stage 1: Jaccard >= high_threshold → auto-merge.
+    Stage 2: low_threshold <= Jaccard < high_threshold → LLM decides.
+    """
+    auto_merges: list[tuple[int, int, float]] = []  # (id_a, id_b, overlap)
+    ambiguous: list[tuple[int, int, float]] = []
+
+    for i in range(len(threads)):
+        ent_i = threads[i].get("key_entities", [])
+        for j in range(i + 1, len(threads)):
+            ent_j = threads[j].get("key_entities", [])
+            overlap = compute_entity_overlap(ent_i, ent_j)
+            if overlap >= high_threshold:
+                auto_merges.append((threads[i]["id"], threads[j]["id"], overlap))
+            elif overlap >= low_threshold:
+                ambiguous.append((threads[i]["id"], threads[j]["id"], overlap))
+
+    # Resolve auto-merges: keep higher significance
+    sig_map = {t["id"]: t.get("significance", 5) for t in threads}
+    created_map = {t["id"]: t.get("created_at", "") for t in threads}
+
+    def _pick_keep(id_a: int, id_b: int) -> tuple[int, int]:
+        sig_a, sig_b = sig_map.get(id_a, 5), sig_map.get(id_b, 5)
+        if sig_a > sig_b:
+            return (id_a, id_b)
+        elif sig_b > sig_a:
+            return (id_b, id_a)
+        # Tie-break: older thread wins
+        if created_map.get(id_a, "") <= created_map.get(id_b, ""):
+            return (id_a, id_b)
+        return (id_b, id_a)
+
+    pairs: list[tuple[int, int]] = []
+    for id_a, id_b, _ in auto_merges:
+        pairs.append(_pick_keep(id_a, id_b))
+
+    # Stage 2: LLM for ambiguous pairs
+    if ambiguous and llm is not None:
+        llm_confirmed = await _llm_merge_check(llm, threads, ambiguous)
+        for id_a, id_b in llm_confirmed:
+            pairs.append(_pick_keep(id_a, id_b))
+
+    # Chain-safe transitive resolution: if A absorbs B and B absorbs C, A absorbs C
+    if pairs:
+        pairs = _resolve_transitive_merges(pairs)
+
+    return pairs
+
+
+async def _llm_merge_check(
+    llm: "LLMClient",
+    threads: list[dict],
+    ambiguous: list[tuple[int, int, float]],
+) -> list[tuple[int, int]]:
+    """Ask LLM to confirm whether ambiguous thread pairs cover the same arc."""
+    thread_map = {t["id"]: t for t in threads}
+    pair_lines = []
+    for id_a, id_b, overlap in ambiguous:
+        ta, tb = thread_map[id_a], thread_map[id_b]
+        pair_lines.append(
+            f"- Thread {id_a}: \"{ta['headline']}\" (entities: {', '.join(ta.get('key_entities', []))})\n"
+            f"  Thread {id_b}: \"{tb['headline']}\" (entities: {', '.join(tb.get('key_entities', []))})\n"
+            f"  Entity overlap: {overlap:.2f}"
+        )
+
+    user_prompt = "Determine if these thread pairs cover the same narrative arc:\n\n" + "\n\n".join(pair_lines)
+
+    try:
+        response = await llm.complete(
+            config_key="filtering",
+            system_prompt=_MERGE_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            json_response=True,
+        )
+        data = json.loads(response)
+        confirmed = []
+        for p in data.get("pairs", []):
+            if p.get("same_arc"):
+                confirmed.append((p["thread_a"], p["thread_b"]))
+        return confirmed
+    except Exception as e:
+        logger.warning(f"Thread merge LLM check failed: {e}. Skipping ambiguous pairs.")
+        return []
+
+
+def _resolve_transitive_merges(pairs: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Resolve transitive chains: if A←B and B←C, return A←B and A←C."""
+    # Build a union-find to collapse chains
+    parent: dict[int, int] = {}
+
+    def find(x: int) -> int:
+        while parent.get(x, x) != x:
+            parent[x] = parent.get(parent[x], parent[x])
+            x = parent[x]
+        return x
+
+    # For each pair, the keep_id is the root
+    keep_sig: dict[int, int] = {}
+    for keep_id, absorb_id in pairs:
+        keep_sig[keep_id] = keep_sig.get(keep_id, 0)
+        keep_sig[absorb_id] = keep_sig.get(absorb_id, 0)
+        root_keep = find(keep_id)
+        root_absorb = find(absorb_id)
+        if root_keep != root_absorb:
+            # Always make the keep_id the root
+            parent[root_absorb] = root_keep
+
+    # Reconstruct pairs: each non-root points to its root
+    all_ids = set()
+    for k, a in pairs:
+        all_ids.add(k)
+        all_ids.add(a)
+
+    result = []
+    seen_absorb = set()
+    for tid in all_ids:
+        root = find(tid)
+        if tid != root and tid not in seen_absorb:
+            result.append((root, tid))
+            seen_absorb.add(tid)
+    return result
+
+
 MATCH_SYSTEM_PROMPT = (
     "You are a thread matching engine. Given new events and existing narrative threads, "
     "determine which thread each event belongs to, or if it starts a new thread.\n\n"

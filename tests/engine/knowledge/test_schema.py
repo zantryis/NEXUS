@@ -23,6 +23,10 @@ async def test_initialize_creates_all_tables(db):
         "schema_version", "entities", "events", "event_entities",
         "event_sources", "threads", "thread_events", "thread_topics",
         "convergence", "divergence", "summaries", "pages", "syntheses",
+        "thread_snapshots", "causal_links", "cross_topic_signals",
+        "projections", "projection_items", "projection_outcomes",
+        "forecast_runs", "forecast_questions", "forecast_scenarios",
+        "forecast_resolutions", "forecast_mappings",
     }
     assert expected.issubset(tables)
 
@@ -38,6 +42,16 @@ async def test_schema_version_set(db):
     await initialize_schema(db)
     version = await get_schema_version(db)
     assert version == CURRENT_VERSION
+
+
+async def test_forecast_readiness_columns_exist(db):
+    await initialize_schema(db)
+    cursor = await db.execute("PRAGMA table_info(forecast_questions)")
+    forecast_question_columns = {row[1] for row in await cursor.fetchall()}
+    cursor = await db.execute("PRAGMA table_info(forecast_mappings)")
+    forecast_mapping_columns = {row[1] for row in await cursor.fetchall()}
+    assert "forecast_key" in forecast_question_columns
+    assert "forecast_key" in forecast_mapping_columns
 
 
 async def test_foreign_keys_enforced(db):
@@ -75,6 +89,14 @@ async def test_page_type_constraint(db):
             "INSERT INTO pages (slug, title, page_type, content_md, stale_after) "
             "VALUES ('test', 'Test', 'invalid_type', 'content', '2026-01-01')"
         )
+
+
+async def test_projection_page_type_allowed(db):
+    await initialize_schema(db)
+    await db.execute(
+        "INSERT INTO pages (slug, title, page_type, content_md, stale_after) "
+        "VALUES ('projection:test', 'Test', 'projection', 'content', '2026-01-01')"
+    )
 
 
 async def test_entity_unique_name(db):

@@ -477,3 +477,66 @@ def test_check_thread_overlaps_empty_entities():
     ]
     overlaps = _check_thread_overlaps(threads)
     assert len(overlaps) == 0
+
+
+async def test_consolidate_threads_merges_overlapping(tmp_path):
+    """_consolidate_threads should merge overlapping threads after persistence."""
+    from nexus.engine.knowledge.store import KnowledgeStore
+    from nexus.engine.synthesis.knowledge import _consolidate_threads
+
+    store = KnowledgeStore(tmp_path / "test.db")
+    await store.initialize()
+
+    # Create two overlapping active threads
+    tid_a = await store.upsert_thread("iran-sanctions-a", "Iran Sanctions Push", 8, "active")
+    tid_b = await store.upsert_thread("iran-sanctions-b", "Iran Sanctions Drive", 5, "active")
+    await store.link_thread_topic(tid_a, "iran-us")
+    await store.link_thread_topic(tid_b, "iran-us")
+
+    # Manually set key_entities via event linking + entity resolution
+    # Simpler: use the get_active_threads override
+    # Actually, get_active_threads fetches key_entities from event_entities.
+    # For this test, we'll add events with matching entities.
+    ev_a = Event(
+        date=date(2026, 3, 10), summary="Iran sanctions tightened",
+        entities=["Iran", "IAEA", "US"], sources=[],
+    )
+    ev_b = Event(
+        date=date(2026, 3, 11), summary="Iran nuclear deal stalls",
+        entities=["Iran", "IAEA", "EU"], sources=[],
+    )
+    ids_a = await store.add_events([ev_a], "iran-us")
+    ids_b = await store.add_events([ev_b], "iran-us")
+    await store.link_thread_events(tid_a, ids_a)
+    await store.link_thread_events(tid_b, ids_b)
+
+    # Resolve entities so key_entities show up
+    for name in ["Iran", "IAEA", "US", "EU"]:
+        eid = await store.upsert_entity(name, "country")
+        # Link entities to events
+        for ev_id in ids_a + ids_b:
+            # Check if this entity name is in the event's entities
+            ev_row = await store.db.execute("SELECT id FROM events WHERE id = ?", (ev_id,))
+            if await ev_row.fetchone():
+                await store.db.execute(
+                    "INSERT OR IGNORE INTO event_entities (event_id, entity_id) VALUES (?, ?)",
+                    (ev_id, eid),
+                )
+    await store.db.commit()
+
+    llm = AsyncMock()
+    merged = await _consolidate_threads(store, llm, "iran-us")
+
+    # Should have merged the two threads
+    assert len(merged) >= 1
+    # Higher significance thread (tid_a, sig=8) should be the keeper
+    keep_ids = {p[0] for p in merged}
+    absorb_ids = {p[1] for p in merged}
+    assert tid_a in keep_ids
+    assert tid_b in absorb_ids
+
+    # Verify absorbed thread is resolved
+    cursor = await store.db.execute("SELECT status FROM threads WHERE id = ?", (tid_b,))
+    assert (await cursor.fetchone())[0] == "resolved"
+
+    await store.close()

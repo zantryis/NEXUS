@@ -13,10 +13,12 @@ from pydantic import BaseModel, Field
 from nexus.config.models import TopicConfig
 from nexus.engine.knowledge.compression import Summary
 from nexus.engine.knowledge.events import Event, are_independent
+from nexus.engine.projection.models import CrossTopicSignal, TopicProjection
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.engine.sources.polling import ContentItem
 from nexus.engine.synthesis.threads import (
     match_events_to_threads, create_thread_slug, promote_thread_status,
+    find_merge_candidates,
 )
 from nexus.llm.client import LLMClient
 
@@ -45,6 +47,12 @@ class NarrativeThread(BaseModel):
     thread_id: Optional[int] = None
     slug: Optional[str] = None
     status: Optional[str] = None
+    velocity_7d: Optional[float] = None
+    acceleration_7d: Optional[float] = None
+    significance_trend_7d: Optional[float] = None
+    momentum_score: Optional[float] = None
+    trajectory_label: Optional[str] = None
+    snapshot_count: Optional[int] = None
 
 
 class TopicSynthesis(BaseModel):
@@ -54,6 +62,8 @@ class TopicSynthesis(BaseModel):
     background: list[Summary] = Field(default_factory=list)
     source_balance: dict = Field(default_factory=dict)  # {affiliation: count}
     languages_represented: list[str] = Field(default_factory=list)
+    cross_topic_signals: list[CrossTopicSignal] = Field(default_factory=list)
+    projection: TopicProjection | None = None
     metadata: dict = Field(default_factory=dict)
 
 
@@ -477,6 +487,24 @@ async def synthesize_topic(
     return synthesis
 
 
+async def _consolidate_threads(
+    store: KnowledgeStore,
+    llm: LLMClient,
+    topic_slug: str,
+) -> list[tuple[int, int]]:
+    """Post-synthesis thread deduplication. Returns merge pairs executed."""
+    active = await store.get_active_threads(topic_slug)
+    if len(active) < 2:
+        return []
+
+    pairs = await find_merge_candidates(active, llm)
+    for keep_id, absorb_id in pairs:
+        logger.info(f"Auto-merging thread {absorb_id} → {keep_id}")
+        await store.merge_threads(keep_id, absorb_id)
+
+    return pairs
+
+
 async def _persist_threads(
     store: KnowledgeStore,
     llm: LLMClient,
@@ -540,6 +568,7 @@ async def _persist_threads(
             thread.status = status
 
             # Persist convergence/divergence
+            await store.clear_thread_analysis(tid)
             for c in thread.convergence:
                 if isinstance(c, dict):
                     await store.add_convergence(
@@ -559,6 +588,11 @@ async def _persist_threads(
                         d.get("source_b", ""),
                         d.get("framing_b", ""),
                     )
+
+        # Post-synthesis: consolidate overlapping threads
+        merged = await _consolidate_threads(store, llm, topic_slug)
+        if merged:
+            logger.info(f"Consolidated {len(merged)} overlapping thread pairs for {topic_slug}")
 
     except Exception as e:
         logger.warning(f"Thread persistence failed (non-blocking): {e}")
