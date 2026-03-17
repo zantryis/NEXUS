@@ -266,9 +266,6 @@ async def test_synthesize_topic_passes_divergence_instructions(topic, events, ar
 
 def test_event_formatting_includes_framing():
     """Events with framing in source dicts produce per-source framing lines in synthesis prompt."""
-    from nexus.engine.synthesis.knowledge import _build_synthesis_prompt
-    topic = TopicConfig(name="Test", subtopics=["a"])
-
     events = [Event(
         date=date(2026, 3, 9),
         summary="Sanctions announced",

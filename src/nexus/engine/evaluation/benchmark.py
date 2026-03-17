@@ -8,18 +8,16 @@ Usage:
 
 import json
 import logging
-import random
 import time
 from dataclasses import dataclass, field, asdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 
-from nexus.config.models import NexusConfig, TopicConfig
+from nexus.config.models import NexusConfig
 from nexus.engine.evaluation.judge import judge_synthesis
 from nexus.engine.knowledge.events import Event
-from nexus.engine.sources.polling import ContentItem
 from nexus.engine.synthesis.knowledge import (
-    TopicSynthesis, NarrativeThread, Summary, synthesize_topic,
+    TopicSynthesis, NarrativeThread, synthesize_topic,
 )
 from nexus.engine.synthesis.renderers import render_text_briefing
 from nexus.llm.client import LLMClient

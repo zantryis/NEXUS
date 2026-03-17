@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import date
 
 import pytest
 
 from nexus.engine.projection.fact_evaluation import (
-    FactEvaluationReport,
     evaluate_predictions,
 )
-from nexus.engine.projection.models import StructuralAssessment, EvidenceFactor
+from nexus.engine.projection.models import StructuralAssessment
 
 
 def _make_assessment(

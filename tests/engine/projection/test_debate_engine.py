@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
-import pytest
 
 from nexus.engine.projection.debate_engine import (
     DebateBenchmarkEngine,
@@ -139,8 +138,8 @@ class TestDebateBenchmarkEngine:
     async def test_debate_changes_estimates(self):
         """Revised estimates should differ from initial when debate has effect."""
         engine = DebateBenchmarkEngine()
-        initial_probs = []
-        revised_probs = []
+        initial_probs = []  # noqa: F841
+        revised_probs = []  # noqa: F841
         is_revision_phase = False
 
         async def mock_complete(**kwargs):

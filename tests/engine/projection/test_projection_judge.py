@@ -7,11 +7,9 @@ from dataclasses import dataclass, field
 from datetime import date
 from unittest.mock import AsyncMock
 
-import pytest
 
 from nexus.engine.projection.evaluation import (
     ProjectionJudgment,
-    EventVerdict,
     judge_projection_item,
     evaluate_projection_item,
 )

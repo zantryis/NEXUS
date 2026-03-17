@@ -3,7 +3,7 @@
 import json
 from datetime import date
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -151,11 +151,11 @@ class TestRunFastBenchmark:
         fake_stats = {"articles_in": 5, "pass_out": 3, "pass_rate": 0.6, "events": 2}
 
         with patch("nexus.engine.evaluation.fast_bench.run_full_pipeline_variant",
-                    return_value=(fake_synth, fake_stats)) as mock_full, \
+                    return_value=(fake_synth, fake_stats)), \
              patch("nexus.engine.evaluation.fast_bench.run_no_filter_variant",
-                    return_value=(fake_synth, fake_stats)) as mock_nf, \
+                    return_value=(fake_synth, fake_stats)), \
              patch("nexus.engine.evaluation.fast_bench.build_naive_synthesis",
-                    return_value=fake_synth) as mock_naive, \
+                    return_value=fake_synth), \
              patch("nexus.engine.evaluation.fast_bench.judge_synthesis",
                     return_value={"completeness": 7, "source_balance": 6,
                                   "convergence_accuracy": 5, "divergence_detection": 3,
@@ -265,7 +265,7 @@ class TestResultSaving:
              patch("nexus.engine.evaluation.fast_bench.judge_synthesis",
                     return_value={"completeness": 7, "overall": 5.6}):
 
-            report = await run_fast_benchmark(
+            await run_fast_benchmark(
                 llm=AsyncMock(),
                 store=AsyncMock(),
                 fixture_dir=fixture_dir,

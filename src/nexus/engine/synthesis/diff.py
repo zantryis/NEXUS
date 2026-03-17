@@ -1,6 +1,6 @@
 """Compute diffs between TopicSynthesis snapshots — "what changed since last briefing"."""
 
-from nexus.engine.synthesis.knowledge import NarrativeThread, TopicSynthesis
+from nexus.engine.synthesis.knowledge import TopicSynthesis
 
 
 def diff_syntheses(current: TopicSynthesis, previous: TopicSynthesis) -> dict:

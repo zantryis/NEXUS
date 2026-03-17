@@ -10,7 +10,6 @@ from pathlib import Path
 from nexus.config.models import FutureProjectionConfig, NexusConfig
 from nexus.engine.knowledge.pages import compute_prompt_hash
 from nexus.engine.knowledge.store import KnowledgeStore
-from nexus.engine.projection.engines import ProjectionEngineInput
 from nexus.engine.projection.forecasting import (
     ForecastEngineInput,
     get_forecast_engine,

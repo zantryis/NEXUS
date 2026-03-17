@@ -1,6 +1,5 @@
 """Tests for persistent cost tracking: LLMClient → SQLite store."""
 
-import asyncio
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch

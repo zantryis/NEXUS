@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
-from nexus.engine.projection.models import ForecastQuestion, ForecastRun
+from nexus.engine.projection.models import ForecastQuestion
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────

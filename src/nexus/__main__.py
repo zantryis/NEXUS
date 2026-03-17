@@ -959,13 +959,13 @@ def run_forecast():
     start = None
     end = None
     target_date = None
-    through = None
+    _through = None  # noqa: F841 — reserved for future CLI wiring
     engine = None
     engines = ["actor", "native"]
     min_thread_snapshots = None
     topic_slug_filter = None
     profile = "signal-rich"
-    mode = "audit"
+    _mode = "audit"  # noqa: F841 — reserved for future CLI wiring
     strict = True
     tickers: list[str] = []
     mapping_file = None
@@ -985,7 +985,7 @@ def run_forecast():
             end = date.fromisoformat(args[i + 1])
             i += 2
         elif args[i] == "--through" and i + 1 < len(args):
-            through = date.fromisoformat(args[i + 1])
+            _through = date.fromisoformat(args[i + 1])  # noqa: F841
             i += 2
         elif args[i] == "--date" and i + 1 < len(args):
             target_date = date.fromisoformat(args[i + 1])
@@ -1006,7 +1006,7 @@ def run_forecast():
             profile = args[i + 1]
             i += 2
         elif args[i] == "--mode" and i + 1 < len(args):
-            mode = args[i + 1]
+            _mode = args[i + 1]  # noqa: F841
             i += 2
         elif args[i] == "--tickers" and i + 1 < len(args):
             tickers = [part.strip() for part in args[i + 1].split(",") if part.strip()]
@@ -1030,10 +1030,10 @@ def run_forecast():
             min_significance = int(args[i + 1])
             i += 2
         elif args[i] == "--strict":
-            strict = True
+            strict = True  # noqa: F841
             i += 1
         elif args[i] == "--no-strict":
-            strict = False
+            strict = False  # noqa: F841
             i += 1
         else:
             i += 1
@@ -1458,7 +1458,6 @@ def run_forecast():
 
             if subcommand == "kalshi-benchmark":
                 from nexus.engine.projection.kalshi_benchmark import (
-                    BenchmarkReport,
                     build_benchmark_dataset,
                     build_benchmark_from_metadata,
                     discover_settled_markets,
@@ -1532,7 +1531,7 @@ def run_forecast():
                                 start=sync_start, end=sync_end,
                             )
                             synced += 1
-                        except Exception as exc:
+                        except Exception:
                             pass  # silent — many tickers won't have candlestick data
                         if (idx + 1) % 50 == 0:
                             print(f"  Progress: {idx + 1}/{len(settled)} tickers synced ({synced} with data)")

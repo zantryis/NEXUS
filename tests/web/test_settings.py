@@ -1,6 +1,5 @@
 """Tests for the settings page."""
 
-import os
 
 import pytest
 from unittest.mock import patch

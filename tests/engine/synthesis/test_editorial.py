@@ -1,15 +1,14 @@
 """Tests for editorial style injection in briefing and dialogue renderers."""
 
-import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 from nexus.config.models import NexusConfig, BriefingConfig, UserConfig
 from nexus.engine.synthesis.knowledge import TopicSynthesis
 from nexus.engine.synthesis.renderers import (
-    EDITORIAL_STANCE, BRIEFING_SYSTEM_PROMPT, render_text_briefing,
+    render_text_briefing,
 )
 from nexus.engine.audio.script import (
-    EDITORIAL_DIALOGUE_ADDENDUM, DIALOGUE_SYSTEM_PROMPT, generate_dialogue_script,
+    generate_dialogue_script,
 )
 
 

@@ -313,7 +313,6 @@ async def backtest_forecasts(
     Returns:
         BacktestReport with per-engine Brier scores and calibration data.
     """
-    from nexus.engine.projection.evidence import assemble_evidence_package
     from nexus.engine.projection.models import (
         ForecastQuestion,
         ForecastResolution,

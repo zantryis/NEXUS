@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+from datetime import date
 from unittest.mock import AsyncMock
 
-import pytest
 
 from nexus.engine.knowledge.events import Event
 from nexus.engine.projection.actor_engine import (

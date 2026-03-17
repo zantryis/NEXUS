@@ -13,7 +13,7 @@ from nexus.engine.projection.evaluation import (
     export_graph_bundles,
     statistical_significance_test,
 )
-from nexus.engine.projection.models import CrossTopicSignal, ThreadSnapshot
+from nexus.engine.projection.models import ThreadSnapshot
 from nexus.engine.synthesis.knowledge import NarrativeThread, TopicSynthesis
 
 

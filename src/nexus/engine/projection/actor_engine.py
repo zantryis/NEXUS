@@ -21,7 +21,6 @@ from nexus.engine.knowledge.events import Event
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.engine.projection.forecasting import (
     ForecastEngineInput,
-    ForecastEngine,
     _clip_probability,
 )
 from nexus.engine.projection.models import (

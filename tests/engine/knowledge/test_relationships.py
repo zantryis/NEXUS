@@ -3,7 +3,7 @@
 import json
 import pytest
 from datetime import date
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 from nexus.engine.knowledge.store import KnowledgeStore
 
@@ -216,7 +216,7 @@ class TestInvalidation:
 
         # Active relationships for Iran should no longer include Hamas
         rels = await store.get_active_relationships_for_entity(entities["Iran"])
-        rel_targets = {
+        _rel_targets = {  # noqa: F841
             (r["relation_type"], r.get("target_entity_name") or r.get("target_entity_id"))
             for r in rels
         }

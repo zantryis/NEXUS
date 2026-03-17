@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import json
-from datetime import date, datetime
-from unittest.mock import AsyncMock, MagicMock
+from datetime import date
+from unittest.mock import AsyncMock
 
 import pytest
 
 from nexus.engine.knowledge.store import KnowledgeStore
-from nexus.engine.knowledge.events import Event
 from nexus.engine.projection.kalshi_resolution import (
     resolve_kalshi_forecasts,
     kalshi_scoring_report,
