@@ -1204,3 +1204,189 @@ async def test_get_historical_calibration_respects_as_of_cutoff(store):
     scoped = await store.get_historical_calibration(as_of=date(2026, 3, 12))
     assert len(scoped) == 1
     assert scoped[0]["probability"] == 0.55
+
+
+# ── Thread merging cascades ────────────────────────────────────────
+
+
+async def _setup_two_threads_with_events(store):
+    """Create two threads with overlapping events for merge tests."""
+    e1 = _make_event(summary="Sanctions filing", d="2026-03-01")
+    e2 = _make_event(summary="Naval deployment", d="2026-03-05")
+    e3 = _make_event(summary="Ceasefire talks", d="2026-03-08")
+    ids = await store.add_events([e1, e2, e3], "iran-us")
+
+    keep_id = await store.upsert_thread("keep-thread", "Keep Thread", 8, "active")
+    absorb_id = await store.upsert_thread("absorb-thread", "Absorb Thread", 5, "active")
+
+    await store.link_thread_events(keep_id, [ids[0]])
+    await store.link_thread_events(absorb_id, [ids[1], ids[2]])
+    await store.link_thread_topic(keep_id, "iran-us")
+    await store.link_thread_topic(absorb_id, "iran-us")
+
+    return keep_id, absorb_id, ids
+
+
+async def test_merge_threads_snapshots_migrated(store):
+    """Snapshots from absorbed thread should move to kept thread."""
+    keep_id, absorb_id, _ = await _setup_two_threads_with_events(store)
+
+    # Create snapshots on both threads
+    await store.upsert_thread_snapshot(ThreadSnapshot(
+        thread_id=keep_id, snapshot_date=date(2026, 3, 1),
+        status="active", significance=8, event_count=1,
+        latest_event_date=date(2026, 3, 1),
+    ))
+    await store.upsert_thread_snapshot(ThreadSnapshot(
+        thread_id=absorb_id, snapshot_date=date(2026, 3, 5),
+        status="active", significance=5, event_count=2,
+        latest_event_date=date(2026, 3, 5),
+    ))
+
+    await store.merge_threads(keep_id, absorb_id)
+
+    # Absorbed thread's snapshot should now belong to kept thread
+    cursor = await store.db.execute(
+        "SELECT thread_id FROM thread_snapshots WHERE snapshot_date = '2026-03-05'"
+    )
+    row = await cursor.fetchone()
+    assert row[0] == keep_id
+
+    # No snapshots remain on absorbed thread
+    cursor = await store.db.execute(
+        "SELECT COUNT(*) FROM thread_snapshots WHERE thread_id = ?", (absorb_id,)
+    )
+    assert (await cursor.fetchone())[0] == 0
+
+
+async def test_merge_threads_snapshot_date_conflict(store):
+    """When both threads have a snapshot on the same date, handle via OR IGNORE."""
+    keep_id, absorb_id, _ = await _setup_two_threads_with_events(store)
+
+    # Both threads have a snapshot on the same date
+    await store.upsert_thread_snapshot(ThreadSnapshot(
+        thread_id=keep_id, snapshot_date=date(2026, 3, 5),
+        status="active", significance=8, event_count=3,
+        latest_event_date=date(2026, 3, 5),
+    ))
+    await store.upsert_thread_snapshot(ThreadSnapshot(
+        thread_id=absorb_id, snapshot_date=date(2026, 3, 5),
+        status="active", significance=5, event_count=1,
+        latest_event_date=date(2026, 3, 5),
+    ))
+
+    await store.merge_threads(keep_id, absorb_id)
+
+    # Only one snapshot per date should remain on kept thread
+    cursor = await store.db.execute(
+        "SELECT COUNT(*) FROM thread_snapshots WHERE thread_id = ? AND snapshot_date = '2026-03-05'",
+        (keep_id,),
+    )
+    assert (await cursor.fetchone())[0] == 1
+
+    # No snapshots on absorbed thread
+    cursor = await store.db.execute(
+        "SELECT COUNT(*) FROM thread_snapshots WHERE thread_id = ?", (absorb_id,)
+    )
+    assert (await cursor.fetchone())[0] == 0
+
+
+async def test_merge_threads_projection_items_json_updated(store):
+    """evidence_thread_ids_json in projection_items should be rewritten."""
+    keep_id, absorb_id, _ = await _setup_two_threads_with_events(store)
+
+    # Create a projection with items referencing the absorbed thread
+    projection = TopicProjection(
+        topic_slug="iran-us", topic_name="Iran-US",
+        generated_for=date(2026, 3, 10),
+        items=[ProjectionItem(
+            claim="Test claim",
+            signpost="Test signpost",
+            review_after=date(2026, 3, 17),
+            evidence_thread_ids=[absorb_id, 999],
+        )],
+    )
+    await store.save_projection(projection)
+
+    await store.merge_threads(keep_id, absorb_id)
+
+    # Check the JSON was rewritten
+    cursor = await store.db.execute(
+        "SELECT evidence_thread_ids_json FROM projection_items"
+    )
+    row = await cursor.fetchone()
+    import json
+    ids = json.loads(row[0])
+    assert keep_id in ids
+    assert absorb_id not in ids
+    assert 999 in ids  # other IDs preserved
+
+
+async def test_merge_threads_forecast_questions_json_updated(store):
+    """evidence_thread_ids_json in forecast_questions should be rewritten."""
+    keep_id, absorb_id, _ = await _setup_two_threads_with_events(store)
+
+    run = ForecastRun(
+        topic_slug="iran-us", topic_name="Iran-US",
+        generated_for=date(2026, 3, 10),
+        questions=[ForecastQuestion(
+            question="Will Iran escalate?",
+            target_variable="iran_escalation",
+            probability=0.6,
+            resolution_criteria="Military action observed",
+            resolution_date=date(2026, 3, 17),
+            signpost="Troop movement",
+            evidence_thread_ids=[absorb_id, 777],
+        )],
+    )
+    await store.save_forecast_run(run)
+
+    await store.merge_threads(keep_id, absorb_id)
+
+    cursor = await store.db.execute(
+        "SELECT evidence_thread_ids_json FROM forecast_questions"
+    )
+    row = await cursor.fetchone()
+    import json
+    ids = json.loads(row[0])
+    assert keep_id in ids
+    assert absorb_id not in ids
+    assert 777 in ids
+
+
+async def test_merge_threads_idempotent(store):
+    """Merging an already-resolved thread should not crash."""
+    keep_id, absorb_id, _ = await _setup_two_threads_with_events(store)
+
+    # First merge
+    await store.merge_threads(keep_id, absorb_id)
+
+    # Second merge — should be a no-op, not an error
+    await store.merge_threads(keep_id, absorb_id)
+
+    # Absorbed thread still resolved
+    cursor = await store.db.execute(
+        "SELECT status FROM threads WHERE id = ?", (absorb_id,)
+    )
+    assert (await cursor.fetchone())[0] == "resolved"
+
+
+async def test_merge_threads_duplicate_events_deduplicated(store):
+    """If both threads link to the same event, it appears once after merge."""
+    e1 = _make_event(summary="Shared event", d="2026-03-01")
+    ids = await store.add_events([e1], "iran-us")
+
+    keep_id = await store.upsert_thread("keep", "Keep", 8, "active")
+    absorb_id = await store.upsert_thread("absorb", "Absorb", 5, "active")
+
+    # Both threads link to the same event
+    await store.link_thread_events(keep_id, ids)
+    await store.link_thread_events(absorb_id, ids)
+
+    await store.merge_threads(keep_id, absorb_id)
+
+    cursor = await store.db.execute(
+        "SELECT COUNT(*) FROM thread_events WHERE thread_id = ? AND event_id = ?",
+        (keep_id, ids[0]),
+    )
+    assert (await cursor.fetchone())[0] == 1

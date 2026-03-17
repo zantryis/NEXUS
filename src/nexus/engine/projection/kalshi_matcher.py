@@ -12,6 +12,7 @@ One LLM call per matched market for graph-informed probability generation.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date, timedelta
 
 from nexus.engine.projection.models import ForecastQuestion
@@ -53,19 +54,18 @@ def _score_market_against_entities(
     topic_name: str,
 ) -> tuple[int, list[str]]:
     """Score a market's text against our entities. Returns (score, matched_entities)."""
-    text_lower = market_text.lower()
     matched = []
     score = 0
 
     for entity in entity_names:
-        if entity.lower() in text_lower:
+        if re.search(r"\b" + re.escape(entity) + r"\b", market_text, re.IGNORECASE):
             matched.append(entity)
             score += 2  # Entity match is strong signal
 
-    # Also check topic name words
+    # Also check topic name words (word-boundary safe)
     topic_words = [w for w in topic_name.lower().replace("-", " ").split() if len(w) > 3]
     for word in topic_words:
-        if word in text_lower:
+        if re.search(r"\b" + re.escape(word) + r"\b", market_text, re.IGNORECASE):
             score += 1
 
     return score, matched
@@ -147,11 +147,14 @@ async def generate_aligned_forecasts(
     *,
     topic_slug: str,
     run_date: date,
+    engine: str = "actor",
+    ledger=None,
 ) -> list[ForecastQuestion]:
     """Generate OUR probability for each matched Kalshi market question.
 
-    Uses the actor engine for per-actor reasoning (Phase 2 rewire).
-    Falls back to market implied probability when actor engine unavailable.
+    engine="actor": per-actor reasoning (original path).
+    engine="structural": 3-call reasoning-first prediction (base rate + contrarian + supervisor).
+    Falls back to market implied probability when LLM unavailable.
     """
     from nexus.engine.projection.forecasting import _clip_probability
 
@@ -159,7 +162,15 @@ async def generate_aligned_forecasts(
 
     for market in matched_markets:
         ticker = market["ticker"]
-        market_title = market.get("event_title") or market["title"]
+        event_title = market.get("event_title", "")
+        contract_title = market.get("title", "")
+        subtitle = market.get("subtitle", "")
+        # Build a descriptive question: prefer "Event: Contract" for multi-option markets
+        if contract_title and event_title and contract_title.lower() != event_title.lower():
+            contract_clean = contract_title.rstrip("?")
+            market_title = f"{event_title}: {contract_clean}"
+        else:
+            market_title = event_title or contract_title
         raw_implied = market.get("implied_probability") or 0.5
         implied = max(0.05, min(0.95, raw_implied))
         matched_entities = market.get("matched_entities", [])
@@ -168,23 +179,87 @@ async def generate_aligned_forecasts(
         resolution_date = run_date + timedelta(days=horizon_days)
 
         our_probability = implied  # Default: trust market
+        verdict = None
+        confidence = None
+        evidence_entities: list[str] = []
 
         if llm is not None:
             try:
-                from nexus.engine.projection.actor_engine import predict
-                prediction = await predict(
-                    store, llm, market_title,
-                    run_date=run_date,
-                    market_prob=implied,
-                    max_actors=4,
-                )
-                our_probability = prediction.calibrated_probability
+                if engine == "structural":
+                    from nexus.engine.projection.evidence import assemble_evidence_package
+                    from nexus.engine.projection.structural_engine import predict_structural
+
+                    evidence = await assemble_evidence_package(store, market_title, as_of=run_date)
+                    assessment = await predict_structural(llm, evidence)
+                    our_probability = assessment.implied_probability
+                    verdict = assessment.verdict
+                    confidence = assessment.confidence
+                    evidence_entities = [
+                        e.get("name", "") for e in evidence.entities if e.get("name")
+                    ]
+                elif engine == "actor":
+                    from nexus.engine.projection.actor_engine import predict
+                    prediction = await predict(
+                        store, llm, market_title,
+                        run_date=run_date,
+                        market_prob=implied,
+                        max_actors=4,
+                    )
+                    our_probability = prediction.calibrated_probability
+                    verdict = prediction.verdict
+                    confidence = prediction.confidence
+                    evidence_entities = [a.actor for a in prediction.actors]
+                elif engine in ("naked", "graphrag", "perspective", "debate"):
+                    # BenchmarkEngine protocol: predict_probability() → float
+                    if engine == "naked":
+                        from nexus.engine.projection.naked_engine import NakedBenchmarkEngine
+                        eng = NakedBenchmarkEngine()
+                    elif engine == "graphrag":
+                        from nexus.engine.projection.graphrag_engine import GraphRAGBenchmarkEngine
+                        eng = GraphRAGBenchmarkEngine()
+                    elif engine == "perspective":
+                        from nexus.engine.projection.perspective_engine import PerspectiveBenchmarkEngine
+                        eng = PerspectiveBenchmarkEngine()
+                    else:
+                        from nexus.engine.projection.debate_engine import DebateBenchmarkEngine
+                        eng = DebateBenchmarkEngine()
+                    our_probability = await eng.predict_probability(
+                        market_title, llm=llm, store=store,
+                        market_prob=implied, as_of=run_date,
+                    )
+                    # Derive verdict for KG-using engines (not naked/strawman)
+                    if engine not in ("naked",):
+                        from nexus.engine.projection.swarm import derive_verdict
+                        verdict, confidence = derive_verdict(our_probability)
             except (ImportError, Exception) as exc:
                 logger.warning(
                     "Kalshi aligned forecast failed for %s: %s", ticker, exc,
                 )
 
         our_probability = _clip_probability(our_probability)
+
+        metadata = {
+            "kalshi_ticker": ticker,
+            "kalshi_implied": implied,
+            "matched_entities": matched_entities,
+        }
+        if verdict is not None:
+            metadata["verdict"] = verdict
+            metadata["confidence"] = confidence
+        if evidence_entities:
+            metadata["evidence_entities"] = evidence_entities
+
+        # Snapshot market price in ledger if available
+        if ledger is not None:
+            try:
+                from datetime import datetime, timezone
+                from nexus.engine.projection.kalshi import _snapshot_from_market_payload
+                snapshot = _snapshot_from_market_payload(
+                    market, captured_at=datetime.now(tz=timezone.utc),
+                )
+                await ledger.insert_snapshot(ticker, snapshot)
+            except Exception as exc:
+                logger.debug("Ledger snapshot failed for %s: %s", ticker, exc)
 
         questions.append(ForecastQuestion(
             question=market_title,
@@ -197,11 +272,7 @@ async def generate_aligned_forecasts(
             horizon_days=horizon_days,
             signpost=f"Kalshi market: {market['title']}",
             external_ref=ticker,
-            target_metadata={
-                "kalshi_ticker": ticker,
-                "kalshi_implied": implied,
-                "matched_entities": matched_entities,
-            },
+            target_metadata=metadata,
             signals_cited=[
                 f"kalshi:implied={implied:.3f}",
                 f"kalshi:our={our_probability:.3f}",

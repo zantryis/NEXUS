@@ -4,9 +4,11 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
 
-from nexus.config.models import NexusConfig, UserConfig, BreakingNewsConfig
+from nexus.config.models import (
+    FutureProjectionConfig, NexusConfig, UserConfig, BreakingNewsConfig,
+)
 from nexus.scheduler.jobs import (
-    daily_pipeline_job, breaking_news_job, schedule_jobs,
+    daily_pipeline_job, daily_prediction_job, breaking_news_job, schedule_jobs,
 )
 
 
@@ -160,3 +162,63 @@ async def test_daily_pipeline_job_forwards_max_ingest(config, tmp_path):
         )
         call_kwargs = mock_pipeline.call_args.kwargs
         assert call_kwargs["max_ingest"] == 20
+
+
+def test_schedule_jobs_with_predictions():
+    """When future_projection is enabled, prediction job should be registered."""
+    config = NexusConfig(
+        user=UserConfig(name="Tristan", timezone="America/Denver"),
+        breaking_news=BreakingNewsConfig(enabled=False),
+        future_projection=FutureProjectionConfig(enabled=True),
+    )
+    scheduler = MagicMock()
+
+    schedule_jobs(scheduler, config, MagicMock(), Path("/tmp"), MagicMock())
+
+    # Should have 2 jobs: daily pipeline + daily predictions
+    assert scheduler.add_job.call_count == 2
+    call_ids = [c.kwargs["id"] for c in scheduler.add_job.call_args_list]
+    assert "daily_pipeline" in call_ids
+    assert "daily_predictions" in call_ids
+
+
+def test_schedule_jobs_prediction_offset():
+    """Prediction job should be offset from pipeline time."""
+    config = NexusConfig(
+        user=UserConfig(name="Tristan", timezone="America/Denver"),
+        future_projection=FutureProjectionConfig(
+            enabled=True, prediction_schedule_offset_minutes=45,
+        ),
+        breaking_news=BreakingNewsConfig(enabled=False),
+    )
+    config.briefing.schedule = "06:00"
+    scheduler = MagicMock()
+
+    schedule_jobs(scheduler, config, MagicMock(), Path("/tmp"), MagicMock())
+
+    # Find the prediction job call
+    pred_call = None
+    for call in scheduler.add_job.call_args_list:
+        if call.kwargs.get("id") == "daily_predictions":
+            pred_call = call
+            break
+    assert pred_call is not None
+    # 06:00 + 45min = 06:45
+    assert pred_call.kwargs["hour"] == 6
+    assert pred_call.kwargs["minute"] == 45
+
+
+async def test_daily_prediction_job_kg_native(config, tmp_path):
+    """Daily prediction job should call KG-native predictions."""
+    config.future_projection = FutureProjectionConfig(
+        enabled=True, kg_native_enabled=True,
+    )
+    mock_store = AsyncMock()
+
+    with patch(
+        "nexus.engine.projection.service.generate_kg_native_predictions",
+        new_callable=AsyncMock,
+    ) as mock_kg:
+        mock_kg.return_value = {"total_generated": 3, "topics": []}
+        await daily_prediction_job(config, AsyncMock(), mock_store, tmp_path)
+        mock_kg.assert_called_once()

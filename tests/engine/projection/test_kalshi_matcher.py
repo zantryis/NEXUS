@@ -331,3 +331,97 @@ class TestDivergenceBriefingSection:
 
         section = render_divergence_section([])
         assert section == ""
+
+
+# ── Structural Engine Path ─────────────────────────────────────────
+
+
+class TestStructuralEnginePath:
+
+    async def test_structural_engine_generates_forecast(self):
+        """generate_aligned_forecasts(engine='structural') should use structural engine."""
+        from nexus.engine.projection.kalshi_matcher import generate_aligned_forecasts
+
+        matched_markets = [
+            {
+                "ticker": "AI-REG-EU-2026-Y",
+                "title": "EU AI regulation before July 2026",
+                "event_title": "Will the EU pass AI regulation before July 2026?",
+                "implied_probability": 0.63,
+                "match_score": 3,
+                "matched_entities": ["EU"],
+            },
+        ]
+
+        mock_llm = AsyncMock()
+        # Structural engine makes 3 LLM calls (base rate, contrarian, supervisor)
+        mock_llm.complete = AsyncMock(side_effect=[
+            json.dumps({
+                "verdict": "yes", "confidence": "medium",
+                "factors": [{"factor": "Regulatory momentum", "direction": "supports_yes",
+                             "weight": "strong", "source_type": "world_knowledge"}],
+                "reasoning": "EU has strong regulatory momentum",
+                "base_rate_reasoning": "Major regulatory bodies pass ~60% of proposed bills",
+                "key_uncertainties": ["Political will"], "signposts": ["EU summit"],
+            }),
+            json.dumps({
+                "verdict": "no", "confidence": "low",
+                "contrarian_argument": "Political gridlock possible",
+                "wildcards": ["Elections"], "base_rate_critique": "Overweighting momentum",
+            }),
+            json.dumps({
+                "verdict": "yes", "confidence": "medium",
+                "factors": [{"factor": "Regulatory push", "direction": "supports_yes",
+                             "weight": "strong", "source_type": "world_knowledge"}],
+                "reasoning": "Reconciled: momentum favors passage",
+                "contrarian_view": "Gridlock risk noted but low",
+                "key_uncertainties": ["Timeline"], "signposts": ["Summit outcome"],
+            }),
+        ])
+
+        mock_store = AsyncMock()
+        mock_store.get_all_entities = AsyncMock(return_value=[])
+        mock_store.get_cross_topic_signals_as_of = AsyncMock(return_value=[])
+
+        questions = await generate_aligned_forecasts(
+            mock_llm, mock_store, matched_markets,
+            topic_slug="ai-ml-research",
+            run_date=date(2026, 3, 16),
+            engine="structural",
+        )
+        assert len(questions) == 1
+        q = questions[0]
+        assert isinstance(q, ForecastQuestion)
+        assert q.external_ref == "AI-REG-EU-2026-Y"
+        # Structural yes+medium → implied_probability = 0.75
+        assert q.probability == pytest.approx(0.75, abs=0.01)
+        # Verdict and confidence should be in target_metadata
+        assert q.target_metadata["verdict"] == "yes"
+        assert q.target_metadata["confidence"] == "medium"
+
+    async def test_structural_falls_back_without_llm(self):
+        """engine='structural' without LLM should fall back to market implied."""
+        from nexus.engine.projection.kalshi_matcher import generate_aligned_forecasts
+
+        matched_markets = [
+            {
+                "ticker": "TEST-Y",
+                "title": "Test market",
+                "event_title": "Will test happen?",
+                "implied_probability": 0.40,
+                "match_score": 2,
+                "matched_entities": [],
+            },
+        ]
+
+        mock_store = AsyncMock()
+
+        questions = await generate_aligned_forecasts(
+            None, mock_store, matched_markets,
+            topic_slug="test",
+            run_date=date(2026, 3, 16),
+            engine="structural",
+        )
+        assert len(questions) == 1
+        # Without LLM, should use implied probability
+        assert questions[0].probability == pytest.approx(0.40, abs=0.01)

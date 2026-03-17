@@ -12,6 +12,19 @@ if TYPE_CHECKING:
     from nexus.engine.synthesis.knowledge import NarrativeThread
 
 
+# Trajectory classification thresholds.
+# Tuned empirically against historical thread progressions.
+BREAK_MIN_EVENTS = 3
+BREAK_MIN_SIGNIFICANCE = 7
+BREAK_MIN_VELOCITY = 2.0
+ACCEL_VELOCITY_THRESHOLD = 1.0
+ACCEL_ACCEL_THRESHOLD = 0.5
+ACCEL_SIG_TREND_THRESHOLD = 1.0
+DECEL_VELOCITY_THRESHOLD = -0.5
+DECEL_ACCEL_THRESHOLD = -0.5
+DECEL_SIG_TREND_THRESHOLD = -1.0
+
+
 def classify_trajectory(
     velocity_7d: float,
     acceleration_7d: float,
@@ -20,11 +33,24 @@ def classify_trajectory(
     significance: int,
 ) -> str:
     """Assign a simple, interpretable trajectory label."""
-    if event_count >= 3 and significance >= 7 and velocity_7d >= 2 and acceleration_7d > 0:
+    if (
+        event_count >= BREAK_MIN_EVENTS
+        and significance >= BREAK_MIN_SIGNIFICANCE
+        and velocity_7d >= BREAK_MIN_VELOCITY
+        and acceleration_7d > 0
+    ):
         return "about_to_break"
-    if velocity_7d > 1 or acceleration_7d > 0.5 or significance_trend_7d > 1:
+    if (
+        velocity_7d > ACCEL_VELOCITY_THRESHOLD
+        or acceleration_7d > ACCEL_ACCEL_THRESHOLD
+        or significance_trend_7d > ACCEL_SIG_TREND_THRESHOLD
+    ):
         return "accelerating"
-    if velocity_7d < -0.5 or acceleration_7d < -0.5 or significance_trend_7d < -1:
+    if (
+        velocity_7d < DECEL_VELOCITY_THRESHOLD
+        or acceleration_7d < DECEL_ACCEL_THRESHOLD
+        or significance_trend_7d < DECEL_SIG_TREND_THRESHOLD
+    ):
         return "decelerating"
     return "steady"
 

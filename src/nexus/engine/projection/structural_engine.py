@@ -120,6 +120,7 @@ Respond ONLY with valid JSON:
 {{
   "verdict": "yes" | "no" | "uncertain",
   "confidence": "high" | "medium" | "low",
+  "numeric_probability": <float 0.05-0.95, your best calibrated probability>,
   "factors": [
     {{"factor": "...", "direction": "supports_yes" | "supports_no" | "ambiguous",
       "weight": "strong" | "moderate" | "weak", "source_type": "..."}}
@@ -259,6 +260,15 @@ async def predict_structural(
         except Exception:
             logger.debug("Skipping malformed factor: %s", f)
 
+    # Parse numeric probability from supervisor
+    raw_numeric = final.get("numeric_probability")
+    numeric_prob = None
+    if raw_numeric is not None:
+        try:
+            numeric_prob = max(0.05, min(0.95, float(raw_numeric)))
+        except (TypeError, ValueError):
+            logger.debug("Could not parse numeric_probability: %s", raw_numeric)
+
     return StructuralAssessment(
         question=evidence.question,
         verdict=final.get("verdict", "uncertain"),
@@ -270,6 +280,7 @@ async def predict_structural(
         signposts=final.get("signposts", []),
         base_rate_reasoning=analyst1.get("base_rate_reasoning", ""),
         has_kg_evidence=has_kg,
+        numeric_probability=numeric_prob,
     )
 
 

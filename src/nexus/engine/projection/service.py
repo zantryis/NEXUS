@@ -218,8 +218,6 @@ async def load_historical_topic_state(
     min_thread_snapshots_override: int | None = None,
 ) -> HistoricalTopicState | None:
     """Load cutoff-bounded topic state for leakage-safe replay."""
-    if profile == "signal-rich" and topic_slug == "formula-1":
-        return None
 
     raw = await store.get_synthesis(topic_slug, cutoff)
     if not raw:
@@ -554,10 +552,14 @@ async def run_kalshi_loop(
     run_date: date,
     kalshi_client,
     kalshi_config,
+    engine: str = "actor",
+    topic_configs: list | None = None,
+    ledger=None,
 ) -> dict:
     """Daily Kalshi loop: scan markets, match to topics, predict, track divergence.
 
     Called after run_projection_pass() if kalshi_config.auto_scan=True.
+    When syntheses have no entities, falls back to topic_configs keywords.
     Returns {matched, questions_generated, divergences}.
     """
     from nexus.engine.projection.kalshi_matcher import (
@@ -570,28 +572,42 @@ async def run_kalshi_loop(
     all_divergences = []
     seen_tickers: set[str] = set()
 
-    for synthesis in syntheses:
-        slug = topic_slug_from_name(synthesis.topic_name)
+    # Build scan targets: list of (topic_name, slug, entity_names)
+    scan_targets: list[tuple[str, str, list[str]]] = []
 
-        # Collect entity names from threads
+    for synthesis in syntheses:
         entity_names: list[str] = []
         for thread in synthesis.threads:
             for entity in thread.key_entities or []:
                 if entity not in entity_names:
                     entity_names.append(entity)
+        if entity_names:
+            slug = topic_slug_from_name(synthesis.topic_name)
+            scan_targets.append((synthesis.topic_name, slug, entity_names))
 
-        if not entity_names:
-            continue
+    # Fallback: extract keywords from topic configs when syntheses have no entities
+    if not scan_targets and topic_configs:
+        for tc in topic_configs:
+            keywords: list[str] = []
+            for word in tc.name.replace("-", " ").replace("/", " ").split():
+                if len(word) > 2 and word not in keywords:
+                    keywords.append(word)
+            for sub in getattr(tc, "subtopics", None) or []:
+                for word in sub.replace("-", " ").split():
+                    if len(word) > 2 and word not in keywords:
+                        keywords.append(word)
+            if keywords:
+                slug = topic_slug_from_name(tc.name)
+                scan_targets.append((tc.name, slug, keywords))
 
-        # Scan Kalshi markets for this topic's entities
+    for topic_name, slug, entity_names in scan_targets:
         matched = await scan_kalshi_markets(
             kalshi_client,
             entity_names=entity_names,
-            topic_name=synthesis.topic_name,
+            topic_name=topic_name,
             max_markets=kalshi_config.max_markets_per_topic,
         )
 
-        # Filter by minimum match score and deduplicate across topics
         matched = [
             m for m in matched
             if m["match_score"] >= kalshi_config.auto_match_min_score
@@ -603,28 +619,24 @@ async def run_kalshi_loop(
         if not matched:
             continue
 
-        # Generate our probability for each matched market
         questions = await generate_aligned_forecasts(
-            llm,
-            store,
-            matched,
+            llm, store, matched,
             topic_slug=slug,
             run_date=run_date,
+            engine=engine,
+            ledger=ledger,
         )
 
         all_questions.extend(questions)
-
-        # Compute divergences
         divergences = compute_divergences(questions)
         all_divergences.extend(divergences)
 
-    # Save aligned forecast questions to store
     if all_questions:
         from nexus.engine.projection.models import ForecastRun
         kalshi_run = ForecastRun(
             topic_slug="kalshi-aligned",
             topic_name="Kalshi Market Alignment",
-            engine="actor",
+            engine=engine,
             generated_for=run_date,
             summary=f"Kalshi-aligned forecasts: {len(all_questions)} markets matched.",
             questions=all_questions,
@@ -637,6 +649,133 @@ async def run_kalshi_loop(
         "questions_generated": len(all_questions),
         "divergences": all_divergences,
         "top_divergence": all_divergences[0] if all_divergences else None,
+    }
+
+
+async def generate_kg_native_predictions(
+    store: KnowledgeStore,
+    llm: LLMClient | None,
+    *,
+    config: NexusConfig,
+    run_date: date,
+    max_per_topic: int = 5,
+) -> dict:
+    """Generate predictions from KG data alone — no Kalshi market required.
+
+    For each projection-eligible topic with fresh synthesis:
+    1. Pick top entities by recent event activity
+    2. Generate prediction questions from entity + thread trajectory
+    3. Run structural engine with evidence assembly
+    4. Store as ForecastRun with target_variable="kg_native"
+    """
+    from nexus.engine.projection.evidence import assemble_evidence_package
+    from nexus.engine.projection.models import ForecastQuestion, ForecastRun
+    from nexus.engine.projection.structural_engine import predict_structural
+
+    total_generated = 0
+    topic_results: list[dict] = []
+
+    for topic in config.topics:
+        slug = topic_slug_from_name(topic.name)
+        if not getattr(topic, "projection_eligible", True):
+            continue
+
+        # Need a recent synthesis
+        synthesis_dates = [
+            date.fromisoformat(raw) for raw in await store.get_synthesis_dates(slug)
+        ]
+        if not synthesis_dates:
+            continue
+        latest_synthesis = synthesis_dates[0]
+        if (run_date - latest_synthesis).days > 3:
+            continue  # stale synthesis
+
+        # Get most active entities for this topic
+        events = await store.get_recent_events(slug, days=14, limit=50, reference_date=run_date)
+        if not events:
+            continue
+
+        entity_counts: dict[str, int] = {}
+        for event in events:
+            for entity_name in event.entities:
+                entity_counts[entity_name] = entity_counts.get(entity_name, 0) + 1
+
+        top_entities = sorted(entity_counts.items(), key=lambda x: x[1], reverse=True)
+        top_entities = top_entities[:max_per_topic]
+
+        questions: list[ForecastQuestion] = []
+        for entity_name, event_count in top_entities:
+            question_text = (
+                f"Will {entity_name} be involved in significant new developments "
+                f"related to {topic.name} within the next 7 days?"
+            )
+
+            try:
+                evidence = await assemble_evidence_package(store, question_text, as_of=run_date)
+                if llm is not None:
+                    assessment = await predict_structural(llm, evidence)
+                    probability = assessment.implied_probability
+                    verdict = assessment.verdict
+                    confidence = assessment.confidence
+                else:
+                    probability = 0.5
+                    verdict = "uncertain"
+                    confidence = "low"
+
+                evidence_entities = [
+                    e.get("name", "") for e in evidence.entities if e.get("name")
+                ]
+
+                questions.append(ForecastQuestion(
+                    question=question_text,
+                    forecast_type="binary",
+                    target_variable="kg_native",
+                    probability=max(0.05, min(0.95, probability)),
+                    base_rate=0.5,
+                    resolution_criteria=(
+                        f"Resolves true if significant events involving "
+                        f"{entity_name} occur within 7 days."
+                    ),
+                    resolution_date=run_date + timedelta(days=7),
+                    horizon_days=7,
+                    signpost=f"Activity involving {entity_name} in {topic.name}",
+                    signals_cited=[f"kg:entity_events={event_count}"],
+                    evidence_event_ids=[
+                        e.event_id for e in events
+                        if e.event_id and entity_name in e.entities
+                    ][:8],
+                    target_metadata={
+                        "topic_slug": slug,
+                        "kg_native": True,
+                        "verdict": verdict,
+                        "confidence": confidence,
+                        "evidence_entities": evidence_entities,
+                    },
+                ))
+            except Exception as exc:
+                logger.warning("KG-native prediction failed for %s: %s", entity_name, exc)
+
+        if questions:
+            kg_run = ForecastRun(
+                topic_slug=slug,
+                topic_name=topic.name,
+                engine=config.future_projection.daily_engine,
+                generated_for=run_date,
+                summary=f"KG-native predictions for {topic.name}: {len(questions)} questions.",
+                questions=questions,
+                metadata={"kg_native": True},
+            )
+            await store.save_forecast_run(kg_run)
+            total_generated += len(questions)
+
+        topic_results.append({
+            "topic": topic.name,
+            "questions_generated": len(questions),
+        })
+
+    return {
+        "total_generated": total_generated,
+        "topics": topic_results,
     }
 
 
@@ -654,7 +793,7 @@ async def backfill_signal_rich_profile(
 
     for topic in config.topics:
         slug = topic_slug_from_name(topic.name)
-        if slug == "formula-1":
+        if not getattr(topic, "projection_eligible", True):
             continue
         dates = [date.fromisoformat(raw) for raw in await store.get_synthesis_dates(slug)]
         if not dates:

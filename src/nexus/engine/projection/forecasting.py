@@ -57,31 +57,27 @@ def _clip_probability(value: float) -> float:
     return round(max(0.05, min(0.95, value)), 3)
 
 
-def _empirical_adjusted_base_rate(
-    hardcoded_rate: float,
-    historical_rows: list[dict],
-    *,
-    min_samples: int = 10,
-) -> float:
-    """Bayesian shrinkage: blend hardcoded prior with empirical hit rate.
-
-    Below min_samples, returns prior unchanged.
-    Otherwise, weight = min(n / 50, 0.7) and blended = weight * empirical + (1 - weight) * prior.
-    """
-    n = len(historical_rows)
-    if n < min_samples:
-        return hardcoded_rate
-    empirical = sum(1 for r in historical_rows if r["resolved_bool"]) / n
-    weight = min(n / 50.0, 0.7)
-    return round(weight * empirical + (1.0 - weight) * hardcoded_rate, 4)
-
-
 def get_forecast_engine(engine_name: str) -> ForecastEngine:
     """Resolve a quantified forecast engine by name."""
     normalized = engine_name.strip().lower()
     if normalized in {"actor", "native"}:
         from nexus.engine.projection.actor_engine import ActorForecastEngine
         return ActorForecastEngine()
+    if normalized == "graphrag":
+        from nexus.engine.projection.graphrag_engine import GraphRAGForecastEngine
+        return GraphRAGForecastEngine()
+    if normalized == "perspective":
+        from nexus.engine.projection.perspective_engine import PerspectiveForecastEngine
+        return PerspectiveForecastEngine()
+    if normalized == "debate":
+        from nexus.engine.projection.debate_engine import DebateBenchmarkEngine
+        return DebateBenchmarkEngine()
+    if normalized == "naked":
+        from nexus.engine.projection.naked_engine import NakedForecastEngine
+        return NakedForecastEngine()
+    # structural: only has StructuralBenchmarkEngine (no ForecastEngine protocol impl).
+    # Use get_forecast_engine() for protocol-compatible engines; for structural,
+    # use StructuralBenchmarkEngine directly via hindcast or benchmark dispatch.
     raise ValueError(f"Unknown forecast engine: {engine_name}")
 
 

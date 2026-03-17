@@ -90,6 +90,87 @@ async def daily_pipeline_job(
         logger.error(f"Daily pipeline failed: {e}", exc_info=True)
 
 
+async def daily_prediction_job(
+    config: NexusConfig,
+    llm: LLMClient,
+    store: KnowledgeStore,
+    data_dir: Path,
+) -> None:
+    """Run daily predictions: Kalshi-aligned + KG-native + resolution checks."""
+    from nexus.engine.projection.service import (
+        generate_kg_native_predictions,
+    )
+
+    today = _user_today(config)
+    proj_config = config.future_projection
+
+    logger.info("=== Daily prediction job starting ===")
+    results: dict = {"date": today.isoformat()}
+
+    # 1. Kalshi-aligned predictions (if enabled)
+    if proj_config.kalshi.enabled:
+        try:
+            from nexus.engine.projection.kalshi import build_kalshi_client
+            from nexus.engine.projection.service import run_kalshi_loop
+            from nexus.engine.synthesis.knowledge import TopicSynthesis
+
+            kalshi_client = build_kalshi_client(proj_config.kalshi)
+
+            # Load latest syntheses
+            syntheses = []
+            for topic in config.topics:
+                slug = topic.name.lower().replace(" ", "-").replace("/", "-")
+                raw = await store.get_synthesis(slug, today)
+                if raw:
+                    syntheses.append(TopicSynthesis(**raw))
+
+            if syntheses:
+                kalshi_result = await run_kalshi_loop(
+                    store, llm, syntheses,
+                    run_date=today,
+                    kalshi_client=kalshi_client,
+                    kalshi_config=proj_config.kalshi,
+                    engine=proj_config.daily_engine,
+                    topic_configs=config.topics,
+                )
+                results["kalshi"] = kalshi_result
+                logger.info("Kalshi predictions: %d markets", kalshi_result.get("markets_matched", 0))
+        except Exception as exc:
+            logger.error("Kalshi prediction loop failed: %s", exc, exc_info=True)
+            results["kalshi_error"] = str(exc)
+
+    # 2. KG-native predictions
+    if proj_config.kg_native_enabled:
+        try:
+            kg_result = await generate_kg_native_predictions(
+                store, llm,
+                config=config,
+                run_date=today,
+                max_per_topic=proj_config.max_kg_questions_per_topic,
+            )
+            results["kg_native"] = kg_result
+            logger.info("KG-native predictions: %d generated", kg_result.get("total_generated", 0))
+        except Exception as exc:
+            logger.error("KG-native predictions failed: %s", exc, exc_info=True)
+            results["kg_native_error"] = str(exc)
+
+    # 3. Resolve settled Kalshi markets
+    if proj_config.kalshi.enabled:
+        try:
+            from nexus.engine.projection.kalshi import build_kalshi_client
+            from nexus.engine.projection.kalshi_resolution import resolve_kalshi_forecasts
+
+            kalshi_client = build_kalshi_client(proj_config.kalshi)
+            resolution_result = await resolve_kalshi_forecasts(store, kalshi_client)
+            results["resolution"] = resolution_result
+            logger.info("Resolution check: %s", resolution_result)
+        except Exception as exc:
+            logger.error("Kalshi resolution failed: %s", exc, exc_info=True)
+            results["resolution_error"] = str(exc)
+
+    logger.info("=== Daily prediction job complete: %s ===", results)
+
+
 async def breaking_news_job(
     config: NexusConfig,
     llm: LLMClient,
@@ -154,6 +235,32 @@ def schedule_jobs(
         replace_existing=True,
     )
     logger.info(f"Scheduled daily pipeline at {hour:02d}:{minute:02d} {timezone}")
+
+    # Daily predictions (if future projection enabled)
+    if config.future_projection.enabled:
+        offset = config.future_projection.prediction_schedule_offset_minutes
+        pred_hour = hour
+        pred_minute = minute + offset
+        if pred_minute >= 60:
+            pred_hour += pred_minute // 60
+            pred_minute = pred_minute % 60
+        if pred_hour >= 24:
+            pred_hour = pred_hour % 24
+        scheduler.add_job(
+            daily_prediction_job,
+            "cron",
+            hour=pred_hour,
+            minute=pred_minute,
+            timezone=timezone,
+            args=[config, llm, store, data_dir],
+            id="daily_predictions",
+            name="Daily Predictions",
+            replace_existing=True,
+        )
+        logger.info(
+            f"Scheduled daily predictions at {pred_hour:02d}:{pred_minute:02d} "
+            f"{timezone} ({offset}min after pipeline)"
+        )
 
     # Breaking news (if enabled)
     if config.breaking_news.enabled:

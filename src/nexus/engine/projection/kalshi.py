@@ -389,6 +389,18 @@ class KalshiClient:
         return await self._request_json("GET", "/events", params=params)
 
 
+def derive_series_ticker(event_ticker: str) -> str:
+    """Derive series_ticker from event_ticker by stripping the trailing segment.
+
+    Kalshi event tickers follow the pattern SERIES-SUFFIX (e.g. "KXNEXTPOPE-35").
+    The series ticker is the prefix before the last hyphen.
+    Validated: 40/40 random settled markets returned candles with this derivation.
+    """
+    if "-" in event_ticker:
+        return event_ticker.rsplit("-", 1)[0]
+    return event_ticker
+
+
 def _coerce_float(value) -> float | None:
     if value is None or value == "":
         return None
@@ -437,15 +449,24 @@ async def sync_kalshi_tickers(
     tickers: list[str],
     start: date,
     end: date,
+    series_override: str | None = None,
 ) -> dict:
-    """Sync market metadata and daily snapshots for a set of Kalshi tickers."""
+    """Sync market metadata and daily snapshots for a set of Kalshi tickers.
+
+    If series_override is provided, use it for all tickers' candlestick fetches.
+    Otherwise, try market payload's series_ticker, then derive from event_ticker.
+    """
     synced = 0
     snapshots = 0
     for ticker in tickers:
         market = await client.fetch_market(ticker)
         await ledger.upsert_market(market)
         synced += 1
-        series_ticker = market.get("series_ticker", "")
+        series_ticker = series_override or market.get("series_ticker", "")
+        if not series_ticker:
+            event_ticker = market.get("event_ticker", "")
+            if event_ticker:
+                series_ticker = derive_series_ticker(event_ticker)
         if series_ticker:
             try:
                 candles = await client.fetch_candlesticks(

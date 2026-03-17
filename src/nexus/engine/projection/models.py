@@ -186,6 +186,7 @@ class StructuralAssessment(BaseModel):
     signposts: list[str] = Field(default_factory=list)
     base_rate_reasoning: str = ""
     has_kg_evidence: bool = False
+    numeric_probability: float | None = None
 
     # Tunable mapping — values calibrated after benchmark runs.
     _PROBABILITY_TABLE: dict = {
@@ -202,8 +203,16 @@ class StructuralAssessment(BaseModel):
 
     @property
     def implied_probability(self) -> float:
-        """Mechanical mapping for backward-compatible Brier scoring only."""
-        return self._PROBABILITY_TABLE.get((self.verdict, self.confidence), 0.50)
+        """Return numeric_probability if available and consistent, else table lookup."""
+        table_prob = self._PROBABILITY_TABLE.get((self.verdict, self.confidence), 0.50)
+        if self.numeric_probability is None:
+            return table_prob
+        num = self.numeric_probability
+        # Consistency check: flag if verdict direction contradicts numeric
+        if (self.verdict == "no" and num > 0.6) or (self.verdict == "yes" and num < 0.4):
+            # Split the difference when verdict/numeric disagree
+            return round((table_prob + num) / 2, 4)
+        return round(num, 4)
 
     @property
     def binary_prediction(self) -> bool | None:

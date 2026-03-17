@@ -37,10 +37,15 @@ async def resolve_kalshi_forecasts(
 
     Returns: {resolved, still_open, errors, brier_scores, mean_brier}
     """
-    pending = await store.get_pending_forecast_questions(until=as_of)
+    # Get ALL unresolved Kalshi-aligned forecasts (don't filter by resolution_date,
+    # since our resolution_date is artificial — Kalshi markets settle on their own schedule)
+    all_questions = await store.get_forecast_questions_between(
+        start=date(2020, 1, 1), end=as_of or date.today(),
+    )
     kalshi_questions = [
-        q for q in pending
+        q for q in all_questions
         if q.get("target_variable") == "kalshi_aligned"
+        and q.get("outcome_status") != "resolved"
     ]
 
     resolved = 0
@@ -57,8 +62,11 @@ async def resolve_kalshi_forecasts(
         metadata = q.get("target_metadata") or {}
         ticker = metadata.get("kalshi_ticker")
         if not ticker:
-            # Try external_ref from the question itself — but pending questions
-            # may not have it readily available. Skip if no ticker.
+            logger.warning(
+                "No kalshi_ticker in metadata for question %s (%s) — skipping resolution",
+                question_id,
+                q.get("question", "")[:80],
+            )
             errors += 1
             continue
 

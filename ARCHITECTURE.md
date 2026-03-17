@@ -7,24 +7,25 @@ An agentic news intelligence compiler that polls 52+ RSS feeds across 8 language
 | Metric | Value |
 |--------|-------|
 | Source files | ~89 Python modules |
-| Tests passing | 547 |
+| Tests passing | 1081+ |
 | Source feeds | 52 global + per-topic registries, 8 languages |
 | LLM providers | Gemini, OpenAI, Anthropic, DeepSeek, Ollama |
 | TTS backends | Gemini native, OpenAI, ElevenLabs |
-| Knowledge store | SQLite, 17 tables, WAL mode, schema v7 |
+| Knowledge store | SQLite, 30 tables, WAL mode, schema v13 |
 | Delivery | Telegram bot + Web dashboard + Podcast RSS |
 
 ---
 
-## Three Runtime Flows
+## Four Runtime Flows
 
-The system has three independent code flows, all sharing the same SQLite knowledge store and LLM client:
+The system has four independent code flows, all sharing the same SQLite knowledge store and LLM client:
 
 1. **Daily Pipeline** — Scheduled batch job. Polls feeds → extracts events → builds knowledge graph → generates briefing + audio.
 2. **Telegram Bot** — Long-polling bot. Delivers briefings, handles Q&A (knowledge-grounded + web search), collects feedback.
 3. **Breaking News** — Interval job. Polls wire feeds → LLM scores significance → sends alerts for threshold-exceeding headlines.
+4. **Future Projection** — Post-synthesis pass. Captures thread snapshots, detects cross-topic signals, runs multi-engine forecasting with calibration.
 
-All three run on a single asyncio event loop via `runner.py`.
+All four run on a single asyncio event loop via `runner.py`.
 
 ---
 
@@ -60,7 +61,7 @@ Runs for each topic in config, then renders cross-topic briefing and audio.
 
 **Pass 1 — Relevance (batch, cheap model):**
 - Scores each article 1-10 against topic name + subtopics
-- Threshold: `topic.filter_threshold` (default 6.0)
+- Threshold: `topic.filter_threshold` (default 4.0)
 - Batch size: 10 articles per LLM call
 
 **Pass 2 — Significance + Novelty (individual, cheap model):**
@@ -208,6 +209,79 @@ Runs every `poll_interval_hours` (default 3) via APScheduler.
 
 ---
 
+## Flow 4: Future Projection Pipeline
+
+**Entry point:** `run_projection_pass()` — `src/nexus/engine/projection/service.py:370`
+
+Runs after synthesis completes, when enough historical data exists. Captures deterministic thread metrics, detects cross-topic entity bridges, and optionally generates quantified forecasts.
+
+### Eligibility Check
+**`projection_eligibility()`** — `src/nexus/engine/projection/service.py:149`
+
+A topic qualifies for projection when:
+- `min_history_days >= 7` — at least 7 days of event data exist
+- `min_thread_snapshots >= 2` — at least one thread has 2+ snapshots
+- `topic.projection_eligible` is not set to `false`
+
+### Step 1: Thread Snapshot Capture
+**`capture_thread_snapshots()`** — `src/nexus/engine/projection/service.py:98`
+
+Persists one `ThreadSnapshot` per thread per run date with event count, latest event date, and derived trajectory metrics (velocity, acceleration, significance trend, momentum score, trajectory label).
+
+### Step 2: Causal Link Reconstruction
+**`rebuild_thread_causal_links()`** — `src/nexus/engine/projection/service.py:128`
+
+Builds within-thread causal chains from event ordering. Each consecutive event pair gets a `follow_on` link with strength 0.8 (when `relation_to_prior` exists) or 0.5 (fallback).
+
+### Step 3: Cross-Topic Signal Detection
+**`detect_cross_topic_signals()`** — `src/nexus/engine/projection/analytics.py:98`
+
+Identifies shared-entity bridges: when the same entity appears in events from different topics within 48 hours, a `CrossTopicSignal` is emitted and persisted.
+
+### Step 4: Evidence Assembly
+**`assemble_evidence_package()`** — `src/nexus/engine/projection/evidence.py`
+
+Gathers thread trajectories, recent events, entity activity, convergence/divergence data, and cross-topic signals into a structured evidence package for engine consumption.
+
+### Step 5: Multi-Engine Forecasting
+**`get_forecast_engine()`** — `src/nexus/engine/projection/forecasting.py`
+
+Six forecast engines implement the `ForecastEngine` protocol:
+- **actor** (default) — Multi-actor reasoning with perspective diversity
+- **structural** — Deterministic structural analysis from evidence
+- **graphrag** — Graph-based retrieval-augmented generation
+- **debate** — Multi-perspective debate synthesis
+- **perspective** — Single-perspective focused analysis
+- **naked** — Minimal/baseline engine for benchmarking
+
+Each engine produces a `ForecastRun` with `ForecastQuestion` objects containing calibrated probabilities.
+
+### Step 6: Calibration
+**`extremize()`** — `src/nexus/engine/projection/swarm.py:51`
+
+Raw LLM probabilities are corrected for overconfidence:
+- `extremize(p, gamma=0.8)` compresses probabilities toward 0.5 (gamma < 1 = compress, gamma > 1 = extremize)
+- `anchor_blend(swarm_p, anchor_p, swarm_weight=0.4)` blends LLM estimate with a deterministic anchor (e.g., Kalshi market price)
+- `geometric_mean_of_odds()` aggregates multiple probability estimates via log-odds
+
+### Step 7: Hindcast Backtesting
+**`HindcastRunner`** — `src/nexus/engine/projection/hindcast.py`
+
+Backtesting framework for evaluating engine accuracy against known outcomes:
+- Generates `HindcastCase` objects from historical events with leakage-safe cutoff dates
+- Includes both positive cases (events that happened) and negative cases (entity+window where nothing happened)
+- Produces `BacktestReport` with Brier scores and calibration metrics per engine
+
+### Step 8: Kalshi Market Integration
+**`run_kalshi_loop()`** — `src/nexus/engine/projection/service.py:547`
+
+Optional external benchmarking against Kalshi prediction markets:
+- `kalshi_matcher.py` — Scans markets, matches to topics by entity overlap
+- `kalshi_benchmark.py` — Tracks forecast-vs-market divergences
+- `kalshi_resolution.py` — Resolves settled markets and computes accuracy scores
+
+---
+
 ## LLM Client
 
 **`LLMClient`** — `src/nexus/llm/client.py:88`
@@ -243,7 +317,9 @@ Each pipeline stage has a `config_key` mapping to a model:
 | `openai-cheap` | gpt-4.1-nano | gpt-5-mini | ~$0.03 |
 | `openai-balanced` | gpt-4.1-mini | gpt-5.4 | ~$0.10 |
 | `openai-quality` | gpt-5-mini | gpt-5.4 | ~$0.25 |
-| `anthropic` | claude-haiku-4-5 | claude-sonnet-4-6 | ~$0.10 |
+| `anthropic` | claude-haiku-4-5-20251001 | claude-sonnet-4-6 | ~$0.10 |
+| `cloud-balanced` | litellm/claude-sonnet-4-6 | litellm/gpt-5.4 | ~$0.50 |
+| `cloud-quality` | litellm/claude-sonnet-4-6 | litellm/claude-opus-4-6 | ~$2.00 |
 
 ---
 
@@ -265,26 +341,34 @@ NexusConfig
 ├── telegram: TelegramConfig {enabled, chat_id}
 ├── sources: SourcesConfig {global_feeds, blocked_sources, discover_new_sources}
 ├── budget: BudgetConfig {daily_limit_usd, warning_threshold_usd, degradation_strategy}
+├── future_projection: FutureProjectionConfig {enabled, engine, min_history_days,
+│                       min_thread_snapshots, horizons, max_items_per_topic, critic_pass,
+│                       prediction_schedule_offset_minutes, daily_engine, kg_native_enabled,
+│                       max_kg_questions_per_topic, graph_sidecars: GraphSidecarConfig,
+│                       kalshi: KalshiBenchmarkConfig}
+├── demo_mode: bool
 └── preset: Optional[str]
 ```
 
 ---
 
-## SQLite Schema (v7)
+## SQLite Schema (v13)
 
-17 tables with WAL mode and foreign keys enabled.
+30 tables with WAL mode and foreign keys enabled.
+
+**Database files:** `knowledge.db` is the main data store used by the pipeline, dashboard, and Telegram bot. `nexus.db` exists only as an alternative path used by the setup wizard (`__main__.py:513`). All production code paths use `knowledge.db`.
 
 ### Core Tables
 
 **events** — Primary knowledge unit
 ```sql
-id, date, summary, significance (1-10), relation_to_prior, topic_slug, created_at
+id, date, summary, significance (1-10), relation_to_prior, raw_entities (JSON), topic_slug, created_at
 ```
 
 **entities** — Graph nodes (canonical names)
 ```sql
 id, canonical_name (UNIQUE), entity_type (person|org|country|treaty|concept|unknown),
-aliases (JSON array), first_seen, last_seen
+aliases (JSON array), first_seen, last_seen, thumbnail_url, wikipedia_url
 ```
 
 **event_entities** — Many-to-many with role
@@ -294,7 +378,7 @@ event_id, entity_id, role (subject|object|mentioned)
 
 **event_sources** — Normalized source attribution
 ```sql
-id, event_id, url, outlet, affiliation, country, language
+id, event_id, url, outlet, affiliation, country, language, framing
 ```
 
 ### Thread Tables
@@ -334,8 +418,9 @@ id, topic_slug, period_type, period_start, period_end, text, event_count
 
 **pages** — Cached LLM-generated narrative pages with TTL
 ```sql
-id, slug (UNIQUE), title, page_type, topic_slug, content_md, generated_at,
-stale_after, prompt_hash
+id, slug (UNIQUE), title,
+page_type (backstory|entity_profile|thread_deepdive|weekly_recap|projection),
+topic_slug, content_md, generated_at, stale_after, prompt_hash
 ```
 
 **syntheses** — Daily synthesis snapshots
@@ -351,9 +436,10 @@ is_novel, significance_reason, passed_pass2, final_score,
 outcome (accepted|rejected_relevance|rejected_significance|rejected_diversity)
 ```
 
-**breaking_alerts** — Dedup for breaking news
+**breaking_alerts** — Dedup for breaking news (topic-scoped)
 ```sql
-id, headline_hash (UNIQUE), headline, source_url, significance_score, alerted_at
+id, headline_hash, headline, source_url, significance_score, topic_slug,
+alerted_at, UNIQUE(headline_hash, topic_slug)
 ```
 
 **feedback** — User briefing ratings
@@ -369,6 +455,93 @@ id, date, provider, model, config_key, input_tokens, output_tokens, cost_usd
 **schema_version** — Migration tracking
 ```sql
 version, applied_at
+```
+
+### Pipeline Run Tracking (v8)
+
+**pipeline_runs** — Pipeline execution tracking
+```sql
+id, started_at, completed_at, status (running|completed|failed),
+topics (JSON), article_count, event_count, cost_usd, error,
+trigger (manual|scheduled|auto_run|smoke)
+```
+
+### Projection Substrate (v10)
+
+**thread_snapshots** — Per-thread daily trajectory metrics
+```sql
+id, thread_id, snapshot_date, status, significance, event_count,
+latest_event_date, velocity_7d, acceleration_7d, significance_trend_7d,
+momentum_score, trajectory_label
+```
+
+**causal_links** — Within-thread event causal chains
+```sql
+id, source_event_id, target_event_id, relation_type, evidence_text, strength
+```
+
+**cross_topic_signals** — Shared-entity bridges across topics
+```sql
+id, topic_slug, related_topic_slug, shared_entity, signal_type,
+observed_at, event_ids_json, related_event_ids_json, note
+```
+
+**projections** — Generated projection artifacts
+```sql
+id, topic_slug, topic_name, engine, generated_for, status, summary, metadata_json
+```
+
+**projection_items** — Individual projection claims
+```sql
+id, projection_id, claim, confidence, horizon_days, signpost,
+signals_cited_json, evidence_event_ids_json, evidence_thread_ids_json,
+review_after, external_ref
+```
+
+**projection_outcomes** — Projection resolution tracking
+```sql
+id, projection_item_id, outcome_status, score, notes, reviewed_at, external_ref
+```
+
+### Quantified Forecast Substrate (v11)
+
+**forecast_runs** — Forecast generation runs
+```sql
+id, topic_slug, topic_name, engine, generated_for, summary, metadata_json
+```
+
+**forecast_questions** — Individual forecast questions with calibrated probabilities
+```sql
+id, forecast_run_id, forecast_key, question, forecast_type, target_variable,
+target_metadata_json, probability, base_rate, resolution_criteria, resolution_date,
+horizon_days, signpost, expected_direction, signals_cited_json,
+evidence_event_ids_json, evidence_thread_ids_json, cross_topic_signal_ids_json,
+status, external_ref
+```
+
+**forecast_scenarios** — Multi-outcome scenario forecasts
+```sql
+id, forecast_run_id, scenario_key, label, probability, description,
+signposts_json, status
+```
+
+**forecast_resolutions** — Forecast resolution with scoring
+```sql
+id, forecast_question_id, outcome_status, resolved_bool, realized_direction,
+actual_value, brier_score, log_loss, notes, resolved_at, external_ref
+```
+
+**forecast_mappings** — External reference mappings (e.g., Kalshi tickers)
+```sql
+id, forecast_question_id, forecast_key, mapping_type, external_ref, metadata_json
+```
+
+### Entity Relationships (v13)
+
+**entity_relationships** — Entity-entity relationships with bi-temporal validity
+```sql
+id, source_entity_id, target_entity_id, relation_type, evidence_text,
+source_event_id, strength, valid_from, valid_until
 ```
 
 ---
@@ -427,6 +600,63 @@ period_start, period_end, text, event_count
 ```
 id, name, url, language, tier (A|B|C),
 tags: list[str], affiliation (state|public|private|nonprofit|academic), country
+```
+
+### ForecastRun (`src/nexus/engine/projection/models.py`)
+```
+topic_slug, topic_name, engine, generated_for (date), summary,
+questions: list[ForecastQuestion], scenarios: list[ForecastScenario], metadata: dict
+```
+
+### ForecastQuestion (`src/nexus/engine/projection/models.py`)
+```
+question, forecast_type (binary|directional|scenario), target_variable,
+probability (0.0-1.0), base_rate, resolution_criteria, resolution_date,
+horizon_days, signpost, expected_direction, signals_cited, evidence_event_ids,
+evidence_thread_ids, cross_topic_signal_ids, status, external_ref
+```
+
+### ForecastResolution (`src/nexus/engine/projection/models.py`)
+```
+forecast_question_id, outcome_status (pending|resolved_yes|resolved_no|cancelled),
+resolved_bool, realized_direction, actual_value, brier_score, log_loss, notes
+```
+
+### ForecastMapping (`src/nexus/engine/projection/models.py`)
+```
+forecast_question_id, forecast_key, mapping_type (external_ref|kalshi_ticker),
+external_ref, metadata
+```
+
+### TopicProjection (`src/nexus/engine/projection/models.py`)
+```
+topic_slug, topic_name, engine, generated_for, status, summary,
+items: list[ProjectionItem], cross_topic_signals: list[CrossTopicSignal], metadata
+```
+
+### CrossTopicSignal (`src/nexus/engine/projection/models.py`)
+```
+topic_slug, related_topic_slug, shared_entity, signal_type,
+observed_at, event_ids, related_event_ids, note
+```
+
+### ThreadSnapshot (`src/nexus/engine/projection/models.py`)
+```
+thread_id, snapshot_date, status, significance, event_count,
+latest_event_date, velocity_7d, acceleration_7d, significance_trend_7d,
+momentum_score, trajectory_label
+```
+
+### HindcastCase (`src/nexus/engine/projection/hindcast.py`)
+```
+case_id, topic_slug, question, cutoff_date, resolution_date,
+horizon_days, outcome (bool), source_event_id, source_entity,
+case_type (positive|negative)
+```
+
+### BacktestReport (`src/nexus/engine/projection/hindcast.py`)
+```
+total_cases, positive_cases, negative_cases, engines: list[str]
 ```
 
 ---
@@ -532,8 +762,8 @@ src/nexus/
 ├── __main__.py              CLI entry point
 ├── runner.py                Unified runner (dashboard + scheduler + bot)
 ├── config/
-│   ├── models.py            Pydantic config models (9 sub-models)
-│   ├── presets.py           Model preset definitions (8 presets)
+│   ├── models.py            Pydantic config models (10 sub-models)
+│   ├── presets.py           Model preset definitions (10 presets)
 │   ├── loader.py            YAML config loader + preset resolution
 │   └── writer.py            Config/env file writer (setup wizard)
 ├── llm/
@@ -558,7 +788,7 @@ src/nexus/
 │   │   └── filter.py        Two-pass LLM filter + perspective diversity
 │   ├── knowledge/
 │   │   ├── store.py         KnowledgeStore (all SQLite CRUD)
-│   │   ├── schema.py        DDL for 17 tables + migrations
+│   │   ├── schema.py        DDL for 30 tables + migrations (v13)
 │   │   ├── events.py        Event model, extraction, dedup/merge
 │   │   ├── entities.py      Entity resolution (LLM canonicalization)
 │   │   ├── pages.py         Cached narrative pages with TTL
@@ -572,9 +802,32 @@ src/nexus/
 │   │   ├── script.py        Dialogue script generation
 │   │   ├── tts.py           TTS backends (Gemini, OpenAI, ElevenLabs)
 │   │   └── concat.py        Audio concatenation (pydub → MP3)
-│   └── evaluation/
-│       ├── judge.py         LLM-based synthesis evaluation
-│       └── metrics.py       Pipeline run metrics
+│   ├── evaluation/
+│   │   ├── judge.py         LLM-based synthesis evaluation
+│   │   └── metrics.py       Pipeline run metrics
+│   └── projection/
+│       ├── actor_engine.py      Multi-actor reasoning engine (default)
+│       ├── structural_engine.py Deterministic structural analysis engine
+│       ├── graphrag_engine.py   Graph-RAG forecast engine
+│       ├── debate_engine.py     Multi-perspective debate engine
+│       ├── perspective_engine.py Single-perspective focused engine
+│       ├── naked_engine.py      Minimal baseline engine
+│       ├── hindcast.py          Backtesting framework (HindcastCase, BacktestReport)
+│       ├── forecasting.py       Engine registry + ForecastEngine protocol
+│       ├── evidence.py          Evidence assembly from knowledge graph
+│       ├── fact_evaluation.py   Fact-based evaluation of evidence
+│       ├── analytics.py         Trajectory classification + cross-topic signals
+│       ├── kalshi.py            Kalshi API client
+│       ├── kalshi_benchmark.py  Forecast-vs-market divergence tracking
+│       ├── kalshi_matcher.py    Market-to-topic matching + aligned forecasts
+│       ├── kalshi_resolution.py Market settlement and accuracy scoring
+│       ├── service.py           Orchestration (run_projection_pass, eligibility)
+│       ├── models.py            Data structures (ForecastRun, TopicProjection, etc.)
+│       ├── swarm.py             Calibration math (extremize, anchor_blend, GMO)
+│       ├── engines.py           ProjectionEngineInput protocol
+│       ├── graph.py             Graph snapshot builder
+│       ├── evaluation.py        Projection evaluation metrics
+│       └── historical.py        Historical topic state for replay
 ├── agent/
 │   ├── bot.py               Telegram bot (commands + Q&A)
 │   ├── qa.py                Knowledge-grounded Q&A + web search

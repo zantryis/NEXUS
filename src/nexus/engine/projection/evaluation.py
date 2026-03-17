@@ -1,13 +1,21 @@
-"""Budget-safe deterministic evaluation for stored projections."""
+"""Budget-safe deterministic evaluation for stored projections.
+
+Includes both a cheap LLM-based judge (preferred) and a deterministic keyword
+fallback for when no LLM client is available or the LLM call fails.
+"""
 
 from __future__ import annotations
 
+import json
+import logging
 import re
+from dataclasses import dataclass, field
 from math import log
 from collections import defaultdict
 from datetime import date, timedelta
 from pathlib import Path
 from statistics import mean
+from typing import Literal
 
 from nexus.config.models import NexusConfig
 from nexus.engine.knowledge.store import KnowledgeStore
@@ -24,6 +32,10 @@ from nexus.engine.projection.service import (
 )
 from nexus.engine.synthesis.knowledge import TopicSynthesis
 
+logger = logging.getLogger(__name__)
+
+
+# ── Keyword fallback (deterministic, no LLM) ────────────────────────
 
 _STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "for", "from", "in", "into", "is", "it",
@@ -38,14 +50,178 @@ def _keywords(text: str) -> set[str]:
     }
 
 
+# ── LLM-based projection judge ──────────────────────────────────────
+
+VerdictLabel = Literal["confirms", "partially_confirms", "contradicts", "irrelevant"]
+
+_VERDICT_SCORES: dict[VerdictLabel, float | None] = {
+    "confirms": 1.0,
+    "partially_confirms": 0.5,
+    "contradicts": 0.0,
+    "irrelevant": None,  # excluded from scoring
+}
+
+_JUDGE_SYSTEM_PROMPT = (
+    "You are a precise evaluator of forward-looking intelligence claims.\n"
+    "Given a CLAIM (a prediction about the future) and its SIGNPOST (the observable\n"
+    "indicator that would confirm it), judge whether each subsequent real-world EVENT\n"
+    "confirms, partially confirms, contradicts, or is irrelevant to the claim.\n\n"
+    "## Verdict definitions\n"
+    "- **confirms**: The event provides direct evidence that the claim is happening or has happened.\n"
+    "- **partially_confirms**: The event provides indirect or partial evidence. The claim may be\n"
+    "  partially true but the evidence is incomplete or the scope differs.\n"
+    "- **contradicts**: The event provides evidence AGAINST the claim. The opposite of what was\n"
+    "  predicted is occurring. Pay close attention to NEGATION: 'withdraws from talks' is the\n"
+    "  opposite of 'enters talks' even though they share the same keywords.\n"
+    "- **irrelevant**: The event has no meaningful bearing on the claim.\n\n"
+    "## Critical instructions\n"
+    "- Focus on MEANING, not keyword overlap. Two events can share every keyword but have\n"
+    "  opposite meanings (e.g., 'bans exports' vs 'lifts export ban').\n"
+    "- Consider the DIRECTION of actions: escalation vs de-escalation, increase vs decrease,\n"
+    "  joining vs leaving, starting vs stopping.\n"
+    "- Be conservative with 'confirms' — only use it when the event directly supports the\n"
+    "  specific claim, not just a vaguely related topic.\n\n"
+    "Respond with JSON:\n"
+    '{"verdicts": [\n'
+    '  {"event_index": 0, "verdict": "confirms|partially_confirms|contradicts|irrelevant",\n'
+    '   "rationale": "One sentence explaining why"}\n'
+    "]}\n"
+)
+
+
+@dataclass
+class EventVerdict:
+    """LLM judgment for a single event against a projection claim."""
+
+    event_index: int
+    verdict: VerdictLabel
+    rationale: str = ""
+
+
+@dataclass
+class ProjectionJudgment:
+    """Aggregate judgment for a projection item against future events."""
+
+    score: float
+    outcome_status: Literal["hit", "mixed", "miss"]
+    verdicts: list[EventVerdict] = field(default_factory=list)
+    relevant_count: int = 0
+    used_fallback: bool = False
+
+
+def _format_judge_prompt(claim: str, signpost: str, events: list) -> str:
+    """Build the user prompt for the projection judge."""
+    lines = [
+        f"## CLAIM\n{claim}\n",
+        f"## SIGNPOST\n{signpost}\n",
+        "## EVENTS\n",
+    ]
+    for i, event in enumerate(events):
+        event_date = getattr(event, "date", "?")
+        summary = getattr(event, "summary", str(event))
+        entities = getattr(event, "entities", [])
+        entity_str = f" [{', '.join(entities)}]" if entities else ""
+        lines.append(f"[{i}] ({event_date}){entity_str} {summary}")
+    return "\n".join(lines)
+
+
+def _score_to_status(score: float) -> Literal["hit", "mixed", "miss"]:
+    if score >= 0.6:
+        return "hit"
+    if score >= 0.3:
+        return "mixed"
+    return "miss"
+
+
+def _parse_verdicts(raw: str, event_count: int) -> list[EventVerdict]:
+    """Parse LLM JSON response into EventVerdict list. Raises on failure."""
+    parsed = json.loads(raw)
+    if "verdicts" not in parsed:
+        raise KeyError("Missing 'verdicts' key in LLM response")
+
+    verdicts = []
+    for item in parsed["verdicts"]:
+        idx = item.get("event_index", -1)
+        verdict_str = item.get("verdict", "irrelevant")
+        if verdict_str not in _VERDICT_SCORES:
+            verdict_str = "irrelevant"
+        if idx < 0 or idx >= event_count:
+            continue
+        verdicts.append(EventVerdict(
+            event_index=idx,
+            verdict=verdict_str,
+            rationale=item.get("rationale", ""),
+        ))
+    return verdicts
+
+
+def _compute_score(verdicts: list[EventVerdict]) -> tuple[float, int]:
+    """Compute aggregate score from verdicts. Returns (score, relevant_count)."""
+    relevant_scores = []
+    for v in verdicts:
+        s = _VERDICT_SCORES.get(v.verdict)
+        if s is not None:
+            relevant_scores.append(s)
+    if not relevant_scores:
+        return 0.0, 0
+    return round(sum(relevant_scores) / len(relevant_scores), 3), len(relevant_scores)
+
+
+async def judge_projection_item(
+    claim: str,
+    signpost: str,
+    future_events: list,
+    llm,
+) -> ProjectionJudgment:
+    """Evaluate a projection claim against subsequent events using an LLM judge.
+
+    Uses a single cheap LLM call (filtering-tier model) to classify each event as
+    confirms/partially_confirms/contradicts/irrelevant. Falls back to keyword
+    matching if the LLM call fails.
+    """
+    if not future_events:
+        return ProjectionJudgment(score=0.0, outcome_status="miss")
+
+    try:
+        user_prompt = _format_judge_prompt(claim, signpost, future_events)
+        response = await llm.complete(
+            config_key="filtering",
+            system_prompt=_JUDGE_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            json_response=True,
+        )
+        verdicts = _parse_verdicts(response, len(future_events))
+        score, relevant_count = _compute_score(verdicts)
+        return ProjectionJudgment(
+            score=score,
+            outcome_status=_score_to_status(score),
+            verdicts=verdicts,
+            relevant_count=relevant_count,
+        )
+    except Exception as exc:
+        logger.warning("LLM judge failed, falling back to keyword matching: %s", exc)
+        score = evaluate_projection_item(claim, signpost, future_events)
+        return ProjectionJudgment(
+            score=score,
+            outcome_status=_score_to_status(score),
+            used_fallback=True,
+        )
+
+
 async def auto_evaluate_projections(
     store: KnowledgeStore,
     *,
     start: date,
     end: date,
     engine: str | None = None,
+    llm=None,
 ) -> dict:
-    """Evaluate stored projections against subsequent events without LLM judge calls."""
+    """Evaluate stored projections against subsequent events.
+
+    If an LLM client is provided, uses the semantic LLM judge for accurate
+    evaluation (handles negation, paraphrases, conceptual matches). Falls back
+    to deterministic keyword matching when no LLM is available.
+    """
     due_items = await store.get_pending_projection_items(until=end, engine=engine)
     summary: dict[str, dict[str, float]] = defaultdict(lambda: {"total": 0, "hit": 0, "miss": 0, "mixed": 0})
 
@@ -59,13 +235,18 @@ async def auto_evaluate_projections(
             since=generated_for + timedelta(days=1),
             until=review_after,
         )
-        score = evaluate_projection_item(item["claim"], item["signpost"], future_events)
-        if score >= 0.6:
-            outcome_status = "hit"
-        elif score >= 0.3:
-            outcome_status = "mixed"
+
+        if llm is not None:
+            judgment = await judge_projection_item(
+                item["claim"], item["signpost"], future_events, llm,
+            )
+            score = judgment.score
+            outcome_status = judgment.outcome_status
+            method = "llm_judge" if not judgment.used_fallback else "keyword_fallback"
         else:
-            outcome_status = "miss"
+            score = evaluate_projection_item(item["claim"], item["signpost"], future_events)
+            outcome_status = _score_to_status(score)
+            method = "keyword"
 
         summary[item["engine"]]["total"] += 1
         summary[item["engine"]][outcome_status] += 1
@@ -73,7 +254,7 @@ async def auto_evaluate_projections(
             projection_item_id=item["projection_item_id"],
             outcome_status=outcome_status,
             score=score,
-            notes=f"Auto-evaluated against {len(future_events)} future events.",
+            notes=f"Auto-evaluated ({method}) against {len(future_events)} future events.",
             reviewed_at=end,
         ))
 
@@ -152,8 +333,12 @@ async def compare_projection_engines(
     start: date,
     end: date,
     engines: list[str],
+    llm=None,
 ) -> dict:
-    """Run deterministic engine comparisons on historical synthesis cutoffs."""
+    """Run engine comparisons on historical synthesis cutoffs.
+
+    Uses LLM judge when available, keyword matching otherwise.
+    """
     topic_stats = await store.get_topic_stats()
     results: dict[str, dict[str, float]] = {}
     for engine_name in engines:
@@ -192,7 +377,13 @@ async def compare_projection_engines(
                     until=cutoff + timedelta(days=14),
                 )
                 for item in projection.items:
-                    scores.append(evaluate_projection_item(item.claim, item.signpost, future_events))
+                    if llm is not None:
+                        judgment = await judge_projection_item(
+                            item.claim, item.signpost, future_events, llm,
+                        )
+                        scores.append(judgment.score)
+                    else:
+                        scores.append(evaluate_projection_item(item.claim, item.signpost, future_events))
                     item_count += 1
         results[engine_name] = {
             "avg_score": round(sum(scores) / len(scores), 3) if scores else 0.0,
@@ -281,10 +472,13 @@ async def audit_forecast_leakage(
     topics_audited: set[str] = set()
     thread_state_leak_cutoffs = 0
     future_signal_leak_cutoffs = 0
+    recent_events_leak_cutoffs = 0
     examples: list[dict] = []
     cutoffs_audited = 0
 
     for topic in config.topics:
+        if not getattr(topic, "projection_eligible", True):
+            continue
         topic_slug = topic_slug_from_name(topic.name)
         synthesis_dates = sorted(
             date.fromisoformat(raw)
@@ -361,12 +555,36 @@ async def audit_forecast_leakage(
                         "entities": [signal.shared_entity for signal in future_signals],
                     })
 
+            # Check recent_events cutoff — events fed to evidence assembly
+            # must not include anything after the cutoff date
+            recent_events = await store.get_recent_events(
+                topic_slug, days=14, limit=40, reference_date=cutoff,
+            )
+            leaked_events = [e for e in recent_events if e.date > cutoff]
+            if leaked_events:
+                recent_events_leak_cutoffs += 1
+                if len(examples) < 10:
+                    examples.append({
+                        "type": "recent_events",
+                        "topic_slug": topic_slug,
+                        "cutoff": cutoff.isoformat(),
+                        "leaked_event_dates": [
+                            e.date.isoformat() if hasattr(e.date, "isoformat") else str(e.date)
+                            for e in leaked_events[:5]
+                        ],
+                    })
+
     return {
         "cutoffs_audited": cutoffs_audited,
         "topics_audited": sorted(topics_audited),
         "thread_state_leak_cutoffs": thread_state_leak_cutoffs,
         "future_signal_leak_cutoffs": future_signal_leak_cutoffs,
-        "passes_strict_gate": thread_state_leak_cutoffs == 0 and future_signal_leak_cutoffs == 0,
+        "recent_events_leak_cutoffs": recent_events_leak_cutoffs,
+        "passes_strict_gate": (
+            thread_state_leak_cutoffs == 0
+            and future_signal_leak_cutoffs == 0
+            and recent_events_leak_cutoffs == 0
+        ),
         "examples": examples,
     }
 
@@ -384,6 +602,8 @@ async def export_graph_bundles(
     target_dir.mkdir(parents=True, exist_ok=True)
     exported_paths: list[str] = []
     for topic in config.topics:
+        if not getattr(topic, "projection_eligible", True):
+            continue
         topic_slug = topic_slug_from_name(topic.name)
         synthesis_dates = sorted([
             date.fromisoformat(raw)

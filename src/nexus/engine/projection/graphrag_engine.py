@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
@@ -141,10 +142,13 @@ async def extract_entities_from_question(
     # Keyword fallback if no LLM results
     if not entity_names:
         all_entities = await store.get_all_entities()
-        question_lower = question.lower()
         for entity in all_entities:
             name = entity.get("canonical_name", "")
-            if name.lower() in question_lower and entity["id"] not in seen_ids:
+            if (
+                name
+                and re.search(r"\b" + re.escape(name) + r"\b", question, re.IGNORECASE)
+                and entity["id"] not in seen_ids
+            ):
                 seen_ids.add(entity["id"])
                 results.append({
                     "name": name,

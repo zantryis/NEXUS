@@ -6,6 +6,7 @@ Zero LLM calls. Pure store queries with leakage-safe date filtering.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -39,6 +40,17 @@ class EvidencePackage:
     coverage: dict = field(default_factory=dict)
 
 
+# ── Word-boundary matching ───────────────────────────────────────────
+
+
+def _word_match(term: str, text: str) -> bool:
+    """Check if *term* appears as a whole word/phrase in *text* (case-insensitive).
+
+    Uses regex word boundaries to avoid false positives like "US" matching "discuss".
+    """
+    return bool(re.search(r"\b" + re.escape(term) + r"\b", text, re.IGNORECASE))
+
+
 # ── Entity resolution (adapted from actor_engine.identify_actors) ────
 
 
@@ -51,14 +63,13 @@ async def _resolve_entities(store, question: str) -> list[dict]:
     if not all_entities:
         return []
 
-    question_lower = question.lower()
     scored: list[tuple[int, dict]] = []
 
     for entity in all_entities:
         name = entity.get("canonical_name") or entity.get("name", "")
         if not name or len(name) < 2:
             continue
-        if name.lower() in question_lower:
+        if _word_match(name, question):
             scored.append((2, {
                 "name": name,
                 "entity_id": entity.get("id"),
@@ -74,7 +85,7 @@ async def _resolve_entities(store, question: str) -> list[dict]:
             except (json.JSONDecodeError, TypeError):
                 aliases = [aliases]
         for alias in aliases:
-            if isinstance(alias, str) and alias.lower() in question_lower:
+            if isinstance(alias, str) and _word_match(alias, question):
                 scored.append((1, {
                     "name": name,
                     "entity_id": entity.get("id"),
@@ -348,12 +359,20 @@ def format_evidence_section(pkg: EvidencePackage) -> str:
             sections.append(line)
         sections.append("")
 
-    # Recent events
+    # Recent events (with temporal markers so LLM can weight recency)
     if pkg.recent_events:
         sections.append("### Recent Events")
         for ev in pkg.recent_events:
             sig = ev.get("significance", "?")
-            sections.append(f"- [{ev.get('date', '?')}] (sig={sig}) {ev.get('summary', '')}")
+            ev_date_str = ev.get("date", "?")
+            age_tag = ""
+            try:
+                ev_date = date.fromisoformat(str(ev_date_str))
+                days = (pkg.as_of - ev_date).days
+                age_tag = f", {days}d ago" if days > 0 else ", today"
+            except (ValueError, TypeError):
+                pass
+            sections.append(f"- [{ev_date_str}{age_tag}] (sig={sig}) {ev.get('summary', '')}")
         sections.append("")
 
     # Convergence (multi-source confirmed facts)

@@ -29,6 +29,7 @@ class TopicConfig(BaseModel):
     filter_threshold: float = Field(default=4.0, ge=0.0, le=10.0)
     scope: Literal["narrow", "medium", "broad"] = "medium"
     max_events: Optional[int] = None  # override auto-calculated event cap
+    projection_eligible: bool = True  # set False to skip future-projection pipeline
 
 
 class ModelsConfig(BaseModel):
@@ -105,12 +106,18 @@ class KalshiBenchmarkConfig(BaseModel):
 
 class FutureProjectionConfig(BaseModel):
     enabled: bool = False
-    engine: Literal["actor", "native"] = "actor"
+    # "actor" = multi-actor swarm engine, "native" = single-pass LLM engine
+    engine: Literal["actor", "native", "graphrag", "perspective", "debate", "naked", "structural"] = "actor"
     min_history_days: int = Field(default=7, ge=1)
     min_thread_snapshots: int = Field(default=2, ge=1)
-    horizons: list[int] = Field(default_factory=lambda: [3, 7, 14])
+    horizons: list[int] = Field(default_factory=lambda: [3, 7, 14])  # reserved for future use
     max_items_per_topic: int = Field(default=3, ge=1, le=5)
     critic_pass: bool = True
+    # Daily prediction scheduling
+    prediction_schedule_offset_minutes: int = Field(default=30, ge=0)
+    daily_engine: str = "structural"
+    kg_native_enabled: bool = True
+    max_kg_questions_per_topic: int = Field(default=5, ge=1, le=10)
     graph_sidecars: GraphSidecarConfig = Field(default_factory=GraphSidecarConfig)
     kalshi: KalshiBenchmarkConfig = Field(default_factory=KalshiBenchmarkConfig)
 

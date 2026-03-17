@@ -510,7 +510,7 @@ def run_benchmark():
             i += 1
 
     async def _run():
-        store = KnowledgeStore(data_dir / "nexus.db")
+        store = KnowledgeStore(data_dir / "knowledge.db")
         await store.initialize()
 
         if do_capture:
@@ -798,11 +798,38 @@ def run_projection():
                 print(json.dumps(result, indent=2))
                 return
 
+            if subcommand in ("evaluate", "compare"):
+                # Create LLM client for semantic judge if any provider is configured
+                eval_llm = None
+                if config is not None:
+                    api_key = os.getenv("GEMINI_API_KEY")
+                    anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+                    deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
+                    openai_api_key = os.getenv("OPENAI_API_KEY")
+                    ollama_base_url = os.getenv("OLLAMA_BASE_URL")
+                    litellm_base_url = os.getenv("LITELLM_BASE_URL") or os.getenv("LITELLM_PROXY_URL")
+                    litellm_api_key = os.getenv("LITELLM_API_KEY") or os.getenv("LITELLM_PROXY_API_KEY")
+                    has_provider = any([
+                        api_key, anthropic_api_key, deepseek_api_key, openai_api_key,
+                        ollama_base_url, litellm_base_url and litellm_api_key,
+                    ])
+                    if has_provider or config.preset == "free":
+                        eval_llm = LLMClient(
+                            config.models, api_key=api_key,
+                            anthropic_api_key=anthropic_api_key,
+                            deepseek_api_key=deepseek_api_key,
+                            openai_api_key=openai_api_key,
+                            ollama_base_url=ollama_base_url,
+                            budget_config=config.budget,
+                            litellm_base_url=litellm_base_url,
+                            litellm_api_key=litellm_api_key,
+                        )
+
             if subcommand == "evaluate":
                 if start is None or end is None:
                     raise SystemExit("Usage: python -m nexus projection evaluate --start YYYY-MM-DD --end YYYY-MM-DD [--engine native]")
                 report = {
-                    "projection_hit_rate": await auto_evaluate_projections(store, start=start, end=end, engine=engine),
+                    "projection_hit_rate": await auto_evaluate_projections(store, start=start, end=end, engine=engine, llm=eval_llm),
                     "trajectory_lift": await trajectory_lift_report(store, start=start, end=end),
                     "cross_topic_bridge_utility": await cross_topic_bridge_report(store, start=start, end=end),
                 }
@@ -814,12 +841,76 @@ def run_projection():
                     raise SystemExit(
                         "Usage: python -m nexus projection compare --engines actor,native --start YYYY-MM-DD --end YYYY-MM-DD"
                     )
-                report = await compare_projection_engines(store, start=start, end=end, engines=engines)
+                report = await compare_projection_engines(store, start=start, end=end, engines=engines, llm=eval_llm)
                 print(json.dumps(report, indent=2, default=str))
                 return
 
+            if subcommand == "consolidate":
+                from nexus.engine.synthesis.threads import find_merge_candidates
+                dry_run = "--dry-run" in sys.argv
+                jaccard_only = "--jaccard-only" in sys.argv
+                threshold = 0.5
+                for idx, arg in enumerate(args):
+                    if arg == "--threshold" and idx + 1 < len(args):
+                        threshold = float(args[idx + 1])
+
+                all_threads = await store.get_active_threads(topic_slug_filter)
+                print(f"Found {len(all_threads)} active/emerging threads" +
+                      (f" for {topic_slug_filter}" if topic_slug_filter else ""))
+
+                # Build LLM for ambiguous pairs if config available
+                consolidate_llm = None
+                if config is not None:
+                    api_key = os.getenv("GEMINI_API_KEY")
+                    anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+                    deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
+                    openai_api_key = os.getenv("OPENAI_API_KEY")
+                    ollama_base_url = os.getenv("OLLAMA_BASE_URL")
+                    litellm_base_url = os.getenv("LITELLM_BASE_URL") or os.getenv("LITELLM_PROXY_URL")
+                    litellm_api_key = os.getenv("LITELLM_API_KEY") or os.getenv("LITELLM_PROXY_API_KEY")
+                    has_provider = any([
+                        api_key, anthropic_api_key, deepseek_api_key, openai_api_key,
+                        ollama_base_url, litellm_base_url and litellm_api_key,
+                    ])
+                    if has_provider or config.preset == "free":
+                        consolidate_llm = LLMClient(
+                            config.models, api_key=api_key,
+                            anthropic_api_key=anthropic_api_key,
+                            deepseek_api_key=deepseek_api_key,
+                            openai_api_key=openai_api_key,
+                            ollama_base_url=ollama_base_url,
+                            budget_config=config.budget,
+                            litellm_base_url=litellm_base_url,
+                            litellm_api_key=litellm_api_key,
+                        )
+
+                pairs = await find_merge_candidates(
+                    all_threads, None if jaccard_only else consolidate_llm,
+                    high_threshold=threshold,
+                )
+                if not pairs:
+                    print("No merge candidates found.")
+                    return
+
+                thread_map = {t["id"]: t for t in all_threads}
+                for keep_id, absorb_id in pairs:
+                    k = thread_map.get(keep_id, {})
+                    a = thread_map.get(absorb_id, {})
+                    print(f"  MERGE: \"{a.get('headline', '?')}\" (id={absorb_id}) "
+                          f"→ \"{k.get('headline', '?')}\" (id={keep_id})")
+
+                if dry_run:
+                    print(f"\nDry run: {len(pairs)} pairs would be merged.")
+                    return
+
+                for keep_id, absorb_id in pairs:
+                    result = await store.merge_threads(keep_id, absorb_id)
+                    print(f"  Merged {absorb_id} → {keep_id}: {result}")
+                print(f"\nConsolidated {len(pairs)} thread pairs.")
+                return
+
             raise SystemExit(
-                "Usage: python -m nexus projection <generate|backfill|evaluate|compare> [args...]"
+                "Usage: python -m nexus projection <generate|backfill|evaluate|compare|consolidate> [args...]"
             )
         finally:
             await store.close()
@@ -870,6 +961,9 @@ def run_forecast():
     mapping_file = None
     cred_file = None
     key_path = None
+    horizon_days = 7
+    max_cases = 30
+    min_significance = 7
 
     args = sys.argv[3:]
     i = 0
@@ -915,6 +1009,15 @@ def run_forecast():
             i += 2
         elif args[i] == "--key-path" and i + 1 < len(args):
             key_path = args[i + 1]
+            i += 2
+        elif args[i] == "--horizon" and i + 1 < len(args):
+            horizon_days = int(args[i + 1])
+            i += 2
+        elif args[i] == "--max-cases" and i + 1 < len(args):
+            max_cases = int(args[i + 1])
+            i += 2
+        elif args[i] == "--min-significance" and i + 1 < len(args):
+            min_significance = int(args[i + 1])
             i += 2
         elif args[i] == "--strict":
             strict = True
@@ -1158,13 +1261,31 @@ def run_forecast():
             if subcommand == "kalshi-loop":
                 if config is None:
                     raise SystemExit(
-                        "Usage: python -m nexus forecast kalshi-loop [--date YYYY-MM-DD] [--topic topic-slug]"
+                        "Usage: python -m nexus forecast kalshi-loop [--date YYYY-MM-DD] "
+                        "[--engine structural|actor|naked|graphrag|perspective|debate] "
+                        "[--engines all|structural,actor,...] [--topic topic-slug]"
                     )
                 from nexus.engine.projection.service import run_kalshi_loop
                 from nexus.engine.synthesis.knowledge import TopicSynthesis
+
+                ALL_ENGINES = ["structural", "actor", "naked", "graphrag", "perspective", "debate"]
+                engine_list = engines if engines != ["actor", "native"] else None  # default wasn't changed
+                if engine_list and "all" in engine_list:
+                    engine_list = ALL_ENGINES
+                elif engine_list:
+                    pass  # use as-is from --engines arg
+                elif engine:
+                    engine_list = [engine]
+                else:
+                    engine_list = ["structural"]
+
                 kalshi_client = KalshiClient(kalshi_config)
-                loop_llm = _optional_llm(config, "actor")
+                loop_llm = _optional_llm(config, "structural")
                 loop_date = target_date or date.today()
+
+                # Initialize Kalshi ledger for price snapshots
+                kalshi_ledger = KalshiLedger(Path(kalshi_config.ledger_path))
+                await kalshi_ledger.initialize()
 
                 # Load latest syntheses for each topic
                 loop_syntheses = []
@@ -1181,20 +1302,98 @@ def run_forecast():
                             await hydrate_synthesis_threads(store, TopicSynthesis(**raw_syn), topic_slug=slug)
                         )
 
-                result = await run_kalshi_loop(
-                    store,
-                    loop_llm,
-                    loop_syntheses,
-                    run_date=loop_date,
-                    kalshi_client=kalshi_client,
-                    kalshi_config=kalshi_config,
-                )
+                all_results = {}
+                for engine_name in engine_list:
+                    print(f"\n{'='*60}")
+                    print(f"Running engine: {engine_name}")
+                    print(f"{'='*60}")
+                    result = await run_kalshi_loop(
+                        store,
+                        loop_llm,
+                        loop_syntheses,
+                        run_date=loop_date,
+                        kalshi_client=kalshi_client,
+                        kalshi_config=kalshi_config,
+                        engine=engine_name,
+                        topic_configs=config.topics,
+                        ledger=kalshi_ledger if engine_name == engine_list[0] else None,  # snapshot once
+                    )
+                    all_results[engine_name] = result
+                    print(f"  Matched: {result['markets_matched']}, Generated: {result['questions_generated']}")
+
+                # Print comparison if multiple engines
+                if len(engine_list) > 1:
+                    print(f"\n{'='*60}")
+                    print("ENGINE COMPARISON")
+                    print(f"{'='*60}")
+                    # Collect all tickers across engines
+                    all_tickers: dict[str, dict] = {}
+                    for eng_name, res in all_results.items():
+                        for div in res.get("divergences", []):
+                            ticker = div["ticker"]
+                            if ticker not in all_tickers:
+                                all_tickers[ticker] = {"question": div["question"][:60], "market": div["kalshi_probability"]}
+                            all_tickers[ticker][eng_name] = div["our_probability"]
+
+                    header = f"{'Ticker':>30s}  {'Market':>6s}"
+                    for eng_name in engine_list:
+                        header += f"  {eng_name:>10s}"
+                    print(header)
+                    print("-" * len(header))
+                    for ticker, data in all_tickers.items():
+                        row = f"{ticker:>30s}  {data['market']:>5.0%}"
+                        for eng_name in engine_list:
+                            prob = data.get(eng_name)
+                            row += f"  {prob:>9.0%}" if prob is not None else f"  {'—':>10s}"
+                        print(row)
+
                 out_dir = data_dir / "benchmarks"
                 out_dir.mkdir(parents=True, exist_ok=True)
                 out_path = out_dir / f"forecast-kalshi-loop-{loop_date.isoformat()}.json"
-                out_path.write_text(json.dumps(result, indent=2, default=str))
-                print(json.dumps(result, indent=2, default=str))
+                output = all_results if len(engine_list) > 1 else all_results[engine_list[0]]
+                out_path.write_text(json.dumps(output, indent=2, default=str))
                 print(f"\nSaved: {out_path}")
+                return
+
+            if subcommand == "resolve":
+                if config is None:
+                    raise SystemExit("Usage: python -m nexus forecast resolve [--date YYYY-MM-DD]")
+                from nexus.engine.projection.kalshi_resolution import resolve_kalshi_forecasts
+                kalshi_client = KalshiClient(kalshi_config)
+                resolve_date = target_date or date.today()
+                result = await resolve_kalshi_forecasts(
+                    store, kalshi_client, as_of=resolve_date,
+                )
+                print(json.dumps(result, indent=2, default=str))
+                if result["resolved"]:
+                    print(f"\nResolved {result['resolved']} predictions, mean Brier: {result['mean_brier']}")
+                else:
+                    print(f"\nNo settled markets yet ({result['still_open']} still open, {result['errors']} errors)")
+                return
+
+            if subcommand == "calibrate":
+                from nexus.engine.projection.swarm import fit_calibration_params
+                calibration_data = await store.get_historical_calibration()
+                # Reshape: store returns {probability, resolved_bool}, we need {raw_probability, ...}
+                samples = []
+                for row in calibration_data:
+                    samples.append({
+                        "raw_probability": row["probability"],
+                        "resolved_bool": row["resolved_bool"],
+                        "market_probability": row.get("base_rate"),
+                    })
+                result = fit_calibration_params(samples)
+                print(json.dumps(result, indent=2, default=str))
+                if result["improved"]:
+                    print(
+                        f"\nRecommended: gamma={result['gamma']}, "
+                        f"swarm_weight={result['swarm_weight']} "
+                        f"(Brier: {result['baseline_brier']} → {result['mean_brier']})"
+                    )
+                elif result.get("reason"):
+                    print(f"\n{result['reason']}")
+                else:
+                    print(f"\nCurrent defaults are optimal (Brier={result['mean_brier']}, n={result['n_samples']})")
                 return
 
             if subcommand == "kalshi-scan":
@@ -1385,7 +1584,7 @@ def run_forecast():
 
                     from nexus.engine.projection.kalshi_benchmark import MarketBaselineEngine
                     from nexus.engine.projection.naked_engine import NakedBenchmarkEngine
-                    from nexus.engine.projection.actor_engine import ActorBenchmarkEngine
+                    from nexus.engine.projection.actor_engine import ActorForecastEngine
                     from nexus.engine.projection.graphrag_engine import GraphRAGBenchmarkEngine
                     from nexus.engine.projection.perspective_engine import PerspectiveBenchmarkEngine
                     from nexus.engine.projection.debate_engine import DebateBenchmarkEngine
@@ -1394,7 +1593,7 @@ def run_forecast():
                     engine_map = {
                         "market": MarketBaselineEngine,
                         "naked": NakedBenchmarkEngine,
-                        "actor": ActorBenchmarkEngine,
+                        "actor": ActorForecastEngine,
                         "graphrag": GraphRAGBenchmarkEngine,
                         "perspective": PerspectiveBenchmarkEngine,
                         "debate": DebateBenchmarkEngine,
@@ -1454,8 +1653,61 @@ def run_forecast():
                     "  --report             Display saved benchmark results"
                 )
 
+            if subcommand == "hindcast":
+                from nexus.engine.projection.hindcast import backtest_forecasts, serialize_report
+                from datetime import timedelta as _td
+
+                llm = _optional_llm(config, "structural")
+
+                hindcast_start = start or (date.today() - _td(days=30))
+                hindcast_end = end or date.today()
+                engine_list = engines if engines != ["actor", "native"] else ["structural"]
+
+                # Build topic list from config
+                topic_pairs = [
+                    (topic_slug_from_name(t.name), t.name)
+                    for t in config.topics
+                ]
+                if topic_slug_filter:
+                    topic_pairs = [(s, n) for s, n in topic_pairs if s == topic_slug_filter]
+
+                if not topic_pairs:
+                    raise SystemExit("No topics matched. Check --topic filter or config.")
+
+                print(f"Hindcast benchmark: {hindcast_start} → {hindcast_end}")
+                print(f"  Engines: {engine_list}")
+                print(f"  Topics: {[s for s, _ in topic_pairs]}")
+                print(f"  Horizon: {horizon_days}d, max cases/topic: {max_cases}, min significance: {min_significance}")
+
+                report = await backtest_forecasts(
+                    store, llm,
+                    topics=topic_pairs,
+                    start=hindcast_start,
+                    end=hindcast_end,
+                    engines=engine_list,
+                    horizon_days=horizon_days,
+                    min_significance=min_significance,
+                    max_cases_per_topic=max_cases,
+                    persist="--no-persist" not in sys.argv,
+                )
+
+                report_data = serialize_report(report)
+                report_path = data_dir / "benchmarks" / f"hindcast-{hindcast_start.isoformat()}-{hindcast_end.isoformat()}.json"
+                report_path.parent.mkdir(parents=True, exist_ok=True)
+                report_path.write_text(json.dumps(report_data, indent=2, default=str))
+
+                print(f"\nResults ({report.total_cases} cases: {report.positive_cases}+ / {report.negative_cases}-):")
+                for eng, results in report.engine_results.items():
+                    if results.get("mean_brier") is not None:
+                        print(f"  {eng}: mean_brier={results['mean_brier']:.4f}, "
+                              f"median={results['median_brier']:.4f}, n={results['n']}")
+                    else:
+                        print(f"  {eng}: no results")
+                print(f"\nReport saved to {report_path}")
+                return
+
             raise SystemExit(
-                "Usage: python -m nexus forecast <generate|replay|resolve|benchmark|audit-leakage|audit-predictions|backfill|backfill-keys|backfill-syntheses|export-graph|readiness|kalshi-bootstrap|kalshi-auth-check|kalshi-sync|kalshi-compare|kalshi-scan|kalshi-loop|kalshi-benchmark> [args...]"
+                "Usage: python -m nexus forecast <generate|replay|resolve|benchmark|audit-leakage|audit-predictions|backfill|backfill-keys|backfill-syntheses|export-graph|readiness|kalshi-bootstrap|kalshi-auth-check|kalshi-sync|kalshi-compare|kalshi-scan|kalshi-loop|kalshi-benchmark|hindcast> [args...]"
             )
         finally:
             if store is not None:

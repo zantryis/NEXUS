@@ -28,7 +28,7 @@ from nexus.engine.projection.models import (
     ForecastQuestion,
     ForecastRun,
 )
-from nexus.engine.projection.swarm import anchor_blend, extremize
+from nexus.engine.projection.swarm import anchor_blend, derive_verdict, extremize
 from nexus.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -75,6 +75,8 @@ class ActorPrediction:
     reasoning_chain: str = ""
     key_uncertainties: list[str] = field(default_factory=list)
     signposts: list[str] = field(default_factory=list)
+    verdict: str | None = None
+    confidence: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -161,14 +163,16 @@ async def identify_actors(
     if not all_entities:
         return []
 
-    question_lower = question.lower()
     scored: list[tuple[int, dict]] = []
+
+    def _word_match(term: str) -> bool:
+        return bool(re.search(r"\b" + re.escape(term) + r"\b", question, re.IGNORECASE))
 
     for entity in all_entities:
         name = entity.get("canonical_name") or entity.get("name", "")
         if not name or len(name) < 2:
             continue
-        if name.lower() in question_lower:
+        if _word_match(name):
             scored.append((2, {
                 "name": name,
                 "entity_id": entity.get("id"),
@@ -183,7 +187,7 @@ async def identify_actors(
             except (json.JSONDecodeError, TypeError):
                 aliases = [aliases]
         for alias in aliases:
-            if isinstance(alias, str) and alias.lower() in question_lower:
+            if isinstance(alias, str) and _word_match(alias):
                 scored.append((1, {
                     "name": name,
                     "entity_id": entity.get("id"),
@@ -395,14 +399,16 @@ async def synthesize_prediction(
         raw_prob = float(data.get("probability", 0.5))
         raw_prob = max(0.05, min(0.95, raw_prob))
 
-        # Calibration: compress toward 0.5 (LLMs are overconfident)
+        # Canonical calibration path: compress then anchor.
+        # gamma<1 compresses overconfident LLM outputs toward 0.5.
+        # anchor_blend then blends with market price (market-anchored).
         calibrated = extremize(raw_prob, gamma=0.8)
 
-        # If market probability available, anchor-blend
         if market_prob is not None:
             calibrated = anchor_blend(calibrated, market_prob, swarm_weight=0.45)
 
         calibrated = max(0.05, min(0.95, round(calibrated, 3)))
+        verdict, confidence = derive_verdict(calibrated)
 
         return ActorPrediction(
             question=question,
@@ -412,19 +418,26 @@ async def synthesize_prediction(
             reasoning_chain=str(data.get("reasoning", "")),
             key_uncertainties=data.get("key_uncertainties", []),
             signposts=data.get("signposts", []),
+            verdict=verdict,
+            confidence=confidence,
         )
     except Exception as exc:
         logger.warning("Synthesis failed for '%s': %s", question[:80], exc)
-        # Fallback: average the shifts from base 0.5
+        # Fallback path (no calibration math): raw shift sum from base.
+        # Less accurate than canonical path above — only used when LLM
+        # synthesis JSON parsing fails.
         base = market_prob if market_prob is not None else 0.5
         shift_sum = sum(a.probability_shift for a in analyses)
         fallback = max(0.05, min(0.95, round(base + shift_sum, 3)))
+        verdict, confidence = derive_verdict(fallback)
         return ActorPrediction(
             question=question,
             actors=analyses,
             raw_probability=fallback,
             calibrated_probability=fallback,
             reasoning_chain=f"Synthesis unavailable: {exc}",
+            verdict=verdict,
+            confidence=confidence,
         )
 
 
@@ -600,7 +613,6 @@ class ActorForecastEngine:
             questions=questions,
             metadata={"actor_based": bool(store)},
         )
-
     def _thread_heuristic_questions(
         self, payload: ForecastEngineInput, max_questions: int,
     ) -> list[ForecastQuestion]:
@@ -659,3 +671,33 @@ class ActorForecastEngine:
                 },
             ))
         return questions
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkEngine adapter
+# ---------------------------------------------------------------------------
+
+
+class ActorBenchmarkEngine:
+    """Adapter satisfying the BenchmarkEngine protocol for Kalshi benchmarks."""
+
+    engine_name = "actor"
+
+    async def predict_probability(
+        self,
+        question: str,
+        *,
+        llm=None,
+        store=None,
+        market_prob: float | None = None,
+        as_of: date | None = None,
+    ) -> float:
+        if llm is None or store is None:
+            return 0.50
+        pred = await predict(
+            store, llm, question,
+            run_date=as_of or date.today(),
+            market_prob=market_prob,
+            as_of=as_of,
+        )
+        return pred.calibrated_probability

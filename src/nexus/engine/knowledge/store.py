@@ -598,14 +598,13 @@ class KnowledgeStore:
 
         return {"nodes": nodes, "links": links}
 
-    async def merge_threads(self, keep_id: int, absorb_id: int) -> None:
-        """Merge absorb_id thread into keep_id. Reassign events, topics, analysis."""
+    async def merge_threads(self, keep_id: int, absorb_id: int) -> dict:
+        """Merge absorb_id thread into keep_id. Reassign events, topics, analysis, snapshots, evidence refs."""
         # Reassign thread_events (ignore duplicates)
         await self.db.execute(
             "UPDATE OR IGNORE thread_events SET thread_id = ? WHERE thread_id = ?",
             (keep_id, absorb_id),
         )
-        # Remove any remaining (duplicate) rows for absorbed thread
         await self.db.execute(
             "DELETE FROM thread_events WHERE thread_id = ?", (absorb_id,),
         )
@@ -626,11 +625,48 @@ class KnowledgeStore:
             "UPDATE divergence SET thread_id = ? WHERE thread_id = ?",
             (keep_id, absorb_id),
         )
+        # Move thread_snapshots (OR IGNORE handles date conflicts)
+        await self.db.execute(
+            "UPDATE OR IGNORE thread_snapshots SET thread_id = ? WHERE thread_id = ?",
+            (keep_id, absorb_id),
+        )
+        await self.db.execute(
+            "DELETE FROM thread_snapshots WHERE thread_id = ?", (absorb_id,),
+        )
+        # Rewrite evidence_thread_ids_json in projection_items
+        items_updated = await self._rewrite_thread_id_json(
+            "projection_items", "evidence_thread_ids_json", keep_id, absorb_id,
+        )
+        # Rewrite evidence_thread_ids_json in forecast_questions
+        questions_updated = await self._rewrite_thread_id_json(
+            "forecast_questions", "evidence_thread_ids_json", keep_id, absorb_id,
+        )
         # Mark absorbed thread as resolved
         await self.db.execute(
             "UPDATE threads SET status = 'resolved' WHERE id = ?", (absorb_id,),
         )
         await self.db.commit()
+        return {"items_updated": items_updated, "questions_updated": questions_updated}
+
+    async def _rewrite_thread_id_json(
+        self, table: str, column: str, keep_id: int, absorb_id: int,
+    ) -> int:
+        """Replace absorb_id with keep_id in a JSON array column. Returns rows updated."""
+        cursor = await self.db.execute(
+            f"SELECT id, {column} FROM {table} WHERE {column} LIKE ?",  # noqa: S608
+            (f"%{absorb_id}%",),
+        )
+        updated = 0
+        for row in await cursor.fetchall():
+            ids = json.loads(row[1])
+            if absorb_id in ids:
+                ids = list(dict.fromkeys(keep_id if x == absorb_id else x for x in ids))
+                await self.db.execute(
+                    f"UPDATE {table} SET {column} = ? WHERE id = ?",  # noqa: S608
+                    (json.dumps(ids), row[0]),
+                )
+                updated += 1
+        return updated
 
     async def link_thread_topic(self, thread_id: int, topic_slug: str) -> None:
         """Link a thread to a topic."""

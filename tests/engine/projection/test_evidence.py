@@ -10,6 +10,7 @@ import pytest
 
 from nexus.engine.projection.evidence import (
     EvidencePackage,
+    _word_match,
     assemble_evidence_package,
     format_evidence_section,
 )
@@ -226,3 +227,42 @@ class TestFormatEvidenceSection:
         assert "Iran nuclear talks" in sections
         assert "Talks resumed" in sections
         assert "Iran resumed enrichment" in sections
+
+    def test_temporal_markers_in_events(self):
+        """Recent events should include '5d ago' style markers."""
+        pkg = EvidencePackage(
+            question="Will Iran do X?",
+            as_of=date(2026, 3, 15),
+            entities=[], threads=[], convergence=[], divergence=[],
+            causal_chains=[], relationships=[], relationship_changes=[],
+            cross_topic_signals=[],
+            recent_events=[
+                {"date": "2026-03-15", "summary": "Today event", "significance": 8},
+                {"date": "2026-03-10", "summary": "Older event", "significance": 6},
+            ],
+            coverage={"entities_found": 0, "threads_found": 0, "events_found": 2},
+        )
+        sections = format_evidence_section(pkg)
+        assert "today" in sections.lower()
+        assert "5d ago" in sections
+
+
+class TestWordMatch:
+    def test_exact_word(self):
+        assert _word_match("Iran", "Will Iran develop nuclear weapons?")
+
+    def test_no_substring_false_positive(self):
+        assert not _word_match("US", "We must discuss this issue")
+        assert not _word_match("EU", "The queue is long")
+
+    def test_short_entity_at_boundary(self):
+        assert _word_match("US", "The US imposed sanctions")
+        assert _word_match("EU", "EU trade policy is changing")
+
+    def test_case_insensitive(self):
+        assert _word_match("iran", "Will IRAN do X?")
+        assert _word_match("IRAN", "iran is important")
+
+    def test_multi_word_entity(self):
+        assert _word_match("United States", "The United States of America")
+        assert not _word_match("United States", "United Kingdom states")

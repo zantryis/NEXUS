@@ -229,6 +229,11 @@ def test_future_projection_defaults():
     assert cfg.max_items_per_topic == 3
     assert cfg.graph_sidecars.adapters == ["kuzu", "graphiti"]
     assert cfg.kalshi.ledger_path == "data/benchmarks/kalshi.sqlite"
+    # Daily prediction scheduling
+    assert cfg.prediction_schedule_offset_minutes == 30
+    assert cfg.daily_engine == "structural"
+    assert cfg.kg_native_enabled is True
+    assert cfg.max_kg_questions_per_topic == 5
 
 
 def test_budget_negative_warning():

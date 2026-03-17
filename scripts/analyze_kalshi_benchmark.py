@@ -13,9 +13,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from nexus.engine.projection.evaluation import statistical_significance_test
 
+from nexus.engine.projection.swarm import extremize
+
 BENCH_DIR = Path("data/benchmarks")
-DATASET_PATH = BENCH_DIR / "kalshi_benchmark_dataset.json"
-REPORT_PATH = BENCH_DIR / "kalshi_engine_comparison.json"
+# Support both old and new paths — prefer v2 if it exists
+_V2_DATASET = BENCH_DIR / "kalshi_benchmark_full.json"
+_V2_REPORT = BENCH_DIR / "kalshi_engine_comparison_v2_independent.json"
+DATASET_PATH = _V2_DATASET if _V2_DATASET.exists() else BENCH_DIR / "kalshi_benchmark_dataset.json"
+REPORT_PATH = _V2_REPORT if _V2_REPORT.exists() else BENCH_DIR / "kalshi_engine_comparison.json"
 OUTPUT_PATH = Path("docs/benchmark-results.md")
 
 # ── Knowledge coverage mapping ────────────────────────────────────────
@@ -167,6 +172,61 @@ def analyze():
     lines.append("- **Knowledge coverage**:")
     for topic, n in cov_counts.most_common():
         lines.append(f"  - {topic}: {n}")
+
+    # ── Gamma sweep ──
+    # For engines that apply extremize(gamma=0.8) internally, undo it and re-apply
+    # with a range of gammas to find the optimal calibration.
+    # structural engine uses numeric_probability (no gamma), so it's swept raw.
+    GAMMA_ENGINES = {"naked", "actor", "graphrag", "perspective", "debate"}  # engines with gamma=0.8
+    GAMMA_VALUES = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.2, 1.5, 1.73, 2.0, 2.5]
+
+    lines.extend(["", "## Gamma Sweep (post-hoc recalibration)", ""])
+    lines.append("For each engine, undo the production gamma (0.8) and reapply with candidate gammas.")
+    lines.append("")
+
+    for name in engines:
+        if name == "market":
+            continue
+        has_gamma = any(name.startswith(g) for g in GAMMA_ENGINES)
+        if not has_gamma:
+            # For structural/other engines without gamma: apply gamma directly to output
+            lines.append(f"### {name} (no production gamma — sweep applied raw)")
+        else:
+            lines.append(f"### {name} (production gamma=0.8)")
+        lines.append("")
+        lines.append(f"| Gamma | Mean Brier | vs Market |")
+        lines.append(f"|-------|-----------|-----------|")
+
+        market_mean = mean([r.get("market_brier", 0) for r in per_question]) if per_question else 0
+
+        for gamma in GAMMA_VALUES:
+            recal_briers = []
+            for r in per_question:
+                engine_prob = r.get(f"{name}_prob")
+                if engine_prob is None:
+                    continue
+                outcome = r.get("outcome", False)
+                target = 1.0 if outcome else 0.0
+
+                if has_gamma:
+                    # Undo gamma=0.8, then apply new gamma
+                    raw = extremize(engine_prob, 1.0 / 0.8)  # undo
+                    recal = extremize(raw, gamma)
+                else:
+                    # Apply gamma directly
+                    recal = extremize(engine_prob, gamma)
+
+                recal = max(0.05, min(0.95, recal))
+                brier = (recal - target) ** 2
+                recal_briers.append(brier)
+
+            if recal_briers:
+                m = mean(recal_briers)
+                delta = m - market_mean
+                sign = "+" if delta > 0 else ""
+                lines.append(f"| {gamma:.2f} | {m:.4f} | {sign}{delta:.4f} |")
+
+        lines.append("")
 
     # ── Caveats ──
     lines.extend([

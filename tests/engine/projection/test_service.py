@@ -355,3 +355,75 @@ async def test_backfill_syntheses_never_sees_future_events(store):
     # But should see Day1 and Day5
     assert "Day1" in day5_prompt
     assert "Day5" in day5_prompt
+
+
+# ── Kalshi Loop Topic-Keyword Fallback ────────────────────────────
+
+
+class TestKalshiLoopKeywordFallback:
+
+    async def test_extracts_keywords_from_topic_config(self):
+        """run_kalshi_loop with topic_configs should match markets using topic keywords."""
+        from unittest.mock import AsyncMock, patch
+        from nexus.engine.projection.service import run_kalshi_loop
+
+        mock_store = AsyncMock()
+        mock_store.save_forecast_run = AsyncMock()
+
+        mock_client = AsyncMock()
+        mock_client.list_events = AsyncMock(return_value={
+            "events": [{
+                "event_ticker": "IRAN-DEAL",
+                "title": "Will Iran nuclear deal happen?",
+                "markets": [{
+                    "ticker": "IRAN-DEAL-Y",
+                    "title": "Iran nuclear deal before June 2026",
+                    "subtitle": "Resolves Yes if deal signed",
+                    "status": "open",
+                    "last_price": 0.25,
+                    "volume": 5000,
+                }],
+            }],
+        })
+
+        mock_config = type("Config", (), {
+            "max_markets_per_topic": 10,
+            "auto_match_min_score": 1,
+        })()
+
+        topic_configs = [
+            TopicConfig(
+                name="Iran-US Relations",
+                subtopics=["sanctions", "nuclear program", "diplomacy"],
+            ),
+        ]
+
+        result = await run_kalshi_loop(
+            mock_store, None, [],  # empty syntheses
+            run_date=date(2026, 3, 16),
+            kalshi_client=mock_client,
+            kalshi_config=mock_config,
+            topic_configs=topic_configs,
+        )
+        # Should have matched the Iran market using topic keywords
+        assert result["markets_matched"] >= 1
+
+    async def test_empty_syntheses_and_no_topics_matches_nothing(self):
+        """With empty syntheses and no topic_configs, should match nothing."""
+        from unittest.mock import AsyncMock
+        from nexus.engine.projection.service import run_kalshi_loop
+
+        mock_store = AsyncMock()
+        mock_client = AsyncMock()
+        mock_config = type("Config", (), {
+            "max_markets_per_topic": 10,
+            "auto_match_min_score": 1,
+        })()
+
+        result = await run_kalshi_loop(
+            mock_store, None, [],
+            run_date=date(2026, 3, 16),
+            kalshi_client=mock_client,
+            kalshi_config=mock_config,
+        )
+        assert result["markets_matched"] == 0
