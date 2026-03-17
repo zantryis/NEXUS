@@ -208,7 +208,7 @@
         <div class="sidebar">
             {% if breaking_alerts %}
             <div class="sidebar-section">
-                <div class="sidebar-title">&#128680; Breaking Alerts</div>
+                <div class="sidebar-title">&#128680; Breaking Alerts{% if breaking_fp_rate is defined and breaking_fp_rate > 0 %} <span class="fp-rate-badge" title="User-reported false positive rate">FP {{ (breaking_fp_rate * 100) | round(0) | int }}%</span>{% endif %}</div>
                 {% for slug, alerts in breaking_alerts.items() %}
                 <div class="sidebar-breaking-topic">
                     <span class="sidebar-breaking-topic-name">{{ topic_emoji(slug) | safe }} {{ slug | replace('-', ' ') | title }}</span>

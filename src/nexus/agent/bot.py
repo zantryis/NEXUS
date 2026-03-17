@@ -14,10 +14,41 @@ from nexus.agent.delivery import (
     deliver_briefing, md_to_telegram_html_light, split_message,
     format_breaking_digest,
 )
-from nexus.agent.feedback import build_feedback_keyboard, handle_feedback_callback
+from nexus.agent.feedback import (
+    build_feedback_keyboard, handle_feedback_callback,
+    handle_breaking_feedback,
+)
 from nexus.utils.health import build_health_snapshot, health_summary_lines
 
 logger = logging.getLogger(__name__)
+
+
+class CooldownTracker:
+    """In-memory per-chat, per-command cooldown tracker."""
+
+    def __init__(self):
+        self._timestamps: dict[int, dict[str, float]] = {}
+
+    def check(self, chat_id: int, command: str, cooldown_secs: float) -> float | None:
+        """Check if command is on cooldown. Returns None if allowed, else remaining seconds."""
+        import time
+        now = time.monotonic()
+        chat_ts = self._timestamps.setdefault(chat_id, {})
+        last = chat_ts.get(command)
+        if last is not None:
+            elapsed = now - last
+            if elapsed < cooldown_secs:
+                return cooldown_secs - elapsed
+        chat_ts[command] = now
+        return None
+
+
+# Cooldown durations per command (seconds)
+COOLDOWNS = {
+    "briefing": 30,
+    "breaking": 60,
+    "status": 10,
+}
 
 
 def user_today(timezone: str = "UTC") -> date:
@@ -45,6 +76,7 @@ class NexusBot:
         self._store = store
         self._data_dir = data_dir
         self._application = None
+        self._cooldowns = CooldownTracker()
 
     def _is_authorized(self, chat_id: int) -> bool:
         """Check if the chat is authorized."""
@@ -139,6 +171,11 @@ class NexusBot:
             await update.message.reply_text("Unauthorized.")
             return
 
+        remaining = self._cooldowns.check(chat_id, "briefing", COOLDOWNS["briefing"])
+        if remaining is not None:
+            await update.message.reply_text(f"Please wait {int(remaining)}s before requesting another briefing.")
+            return
+
         today = user_today(self._config.user.timezone).isoformat()
         briefing_path = self._data_dir / "artifacts" / "briefings" / f"{today}.md"
         audio_path = self._data_dir / "artifacts" / "audio" / f"{today}.mp3"
@@ -175,6 +212,11 @@ class NexusBot:
         logger.info(f"Telegram /breaking received from chat {chat_id}")
         if not self._is_authorized(chat_id):
             await update.message.reply_text("Unauthorized.")
+            return
+
+        remaining = self._cooldowns.check(chat_id, "breaking", COOLDOWNS["breaking"])
+        if remaining is not None:
+            await update.message.reply_text(f"Please wait {int(remaining)}s before checking breaking news again.")
             return
 
         # Phase 1: initial status message
@@ -318,6 +360,11 @@ class NexusBot:
             await update.message.reply_text("Unauthorized.")
             return
 
+        remaining = self._cooldowns.check(chat_id, "status", COOLDOWNS["status"])
+        if remaining is not None:
+            await update.message.reply_text(f"Please wait {int(remaining)}s before checking status again.")
+            return
+
         stats = await self._store.get_topic_stats()
         lines = ["<b>Nexus Status</b>\n"]
         for s in stats:
@@ -440,11 +487,13 @@ class NexusBot:
                 pass
 
     async def _handle_callback(self, update, context):
-        """Handle inline keyboard callbacks (feedback)."""
+        """Handle inline keyboard callbacks (briefing feedback + breaking feedback)."""
         query = update.callback_query
         await query.answer()
 
-        response = await handle_feedback_callback(
-            self._store, query.data,
-        )
+        data = query.data
+        if data.startswith("breaking_fb:"):
+            response = await handle_breaking_feedback(self._store, data)
+        else:
+            response = await handle_feedback_callback(self._store, data)
         await query.edit_message_text(response)

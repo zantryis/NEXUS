@@ -1085,6 +1085,15 @@ a.entity-tag:hover {
     font-weight: 600;
     white-space: nowrap;
 }
+.fp-rate-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--nx-surface);
+    color: var(--nx-muted);
+    margin-left: 0.3rem;
+}
 
 .sidebar-topic {
     display: flex;

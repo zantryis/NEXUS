@@ -310,6 +310,8 @@ async def homepage(request: Request):
         slug = a["topic_slug"] or "general"
         breaking_alerts.setdefault(slug, []).append(a)
 
+    breaking_fp_rate = await store.get_breaking_fp_rate()
+
     # Audio data
     audio_info = _find_audio(data_dir, briefing_date)
 
@@ -362,6 +364,7 @@ async def homepage(request: Request):
         "total_events": total_events,
         "total_sources": len(source_stats),
         "breaking_alerts": breaking_alerts,
+        "breaking_fp_rate": breaking_fp_rate,
         "kalshi_sidebar": kalshi_sidebar,
         "audio": audio_info,
         "setup_complete": is_setup_complete,
