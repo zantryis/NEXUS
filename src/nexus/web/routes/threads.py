@@ -21,11 +21,22 @@ async def thread_list(request: Request):
 
     clusters = cluster_threads(threads)
 
+    # Fetch available topics with thread counts for the filter bar
+    cursor = await store.db.execute(
+        "SELECT tt.topic_slug, COUNT(DISTINCT tt.thread_id) "
+        "FROM thread_topics tt "
+        "JOIN threads t ON tt.thread_id = t.id "
+        "WHERE t.status NOT IN ('resolved') "
+        "GROUP BY tt.topic_slug ORDER BY COUNT(DISTINCT tt.thread_id) DESC",
+    )
+    topic_counts = await cursor.fetchall()
+
     return templates.TemplateResponse(request, "thread_list.html", {
         "threads": threads,
         "clusters": clusters,
         "filter_status": status,
         "filter_topic": topic,
+        "topic_counts": topic_counts,
     })
 
 

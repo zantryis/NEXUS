@@ -1,0 +1,1145 @@
+{% extends "base.html" %}
+{% block title %}Pipeline — Nexus{% endblock %}
+{% block main_class %}full-bleed{% endblock %}
+
+{% block content %}
+<style>
+/* ── Base ─────────────────────────────────────────────────────────── */
+.fg {
+    min-height: calc(100vh - 56px);
+    background: var(--nx-bg);
+    position: relative;
+}
+.fg::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+        linear-gradient(var(--nx-glass-border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--nx-glass-border) 1px, transparent 1px);
+    background-size: 60px 60px;
+    opacity: 0.18;
+    mask-image: radial-gradient(ellipse 80% 50% at 50% 30%, black 10%, transparent 70%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 50% at 50% 30%, black 10%, transparent 70%);
+}
+
+/* ── HUD ──────────────────────────────────────────────────────────── */
+.fg-hud {
+    position: sticky;
+    top: 56px;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 24px;
+    background: var(--nx-bg-raised);
+    border-bottom: 1px solid var(--nx-border);
+    backdrop-filter: blur(12px);
+    font-family: 'Share Tech Mono', monospace;
+}
+.fg-hud-title {
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--nx-accent);
+}
+.fg-hud-right {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+.fg-hud-stats {
+    display: flex;
+    gap: 20px;
+    font-size: 0.66rem;
+    color: var(--nx-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.fg-hud-stats strong {
+    color: var(--nx-text);
+    font-variant-numeric: tabular-nums;
+}
+.fg-hud-hint {
+    font-size: 0.58rem;
+    color: var(--nx-text-dim);
+    opacity: 0.6;
+    letter-spacing: 0.04em;
+}
+
+/* ── Canvas ────────────────────────────────────────────────────────── */
+.fg-canvas {
+    position: relative;
+    z-index: 2;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 36px 24px 60px;
+}
+.fg-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 1;
+    overflow: visible;
+}
+.fg-edge {
+    fill: none;
+    stroke: var(--nx-accent);
+    stroke-width: 1.5;
+    opacity: 0.28;
+    stroke-dasharray: 6 4;
+    animation: fgFlow 18s linear infinite;
+}
+.fg-edge-fork {
+    stroke-width: 2;
+    opacity: 0.35;
+}
+.fg-edge-deliver { stroke: #10b981; }
+.fg-edge-predict { stroke: #f59e0b; }
+@keyframes fgFlow {
+    to { stroke-dashoffset: -200; }
+}
+
+/* ── Zone headers ──────────────────────────────────────────────────── */
+.fg-zone { margin-bottom: 8px; position: relative; z-index: 2; }
+.fg-zone-hdr {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+.fg-zone-hdr span {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    background: var(--nx-bg);
+    padding: 0 6px 0 0;
+    position: relative;
+    z-index: 3;
+}
+.fg-zone-hdr::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+}
+.fg-zone-hdr.z-intake span { color: #3b82f6; }
+.fg-zone-hdr.z-intake::after { background: linear-gradient(90deg, rgba(59,130,246,0.3), transparent 80%); }
+.fg-zone-hdr.z-understand span { color: var(--nx-accent-light); }
+.fg-zone-hdr.z-understand::after { background: linear-gradient(90deg, rgba(99,102,241,0.3), transparent 80%); }
+.fg-zone-hdr.z-predict span { color: #f59e0b; }
+.fg-zone-hdr.z-predict::after { background: linear-gradient(90deg, rgba(245,158,11,0.3), transparent 80%); }
+.fg-zone-hdr.z-deliver span { color: #10b981; }
+.fg-zone-hdr.z-deliver::after { background: linear-gradient(90deg, rgba(16,185,129,0.3), transparent 80%); }
+
+/* ── Rows ──────────────────────────────────────────────────────────── */
+.fg-row {
+    display: flex;
+    justify-content: center;
+    gap: 36px;
+    position: relative;
+    z-index: 2;
+}
+.fg-vspace { height: 40px; }
+
+/* ── Nodes ─────────────────────────────────────────────────────────── */
+.fg-node {
+    width: 168px;
+    background: var(--nx-bg-card);
+    border: 1px solid var(--nx-border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    flex-shrink: 0;
+}
+.fg-node::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 14px;
+    right: 14px;
+    height: 2.5px;
+    border-radius: 0 0 2px 2px;
+}
+/* Zone accent bars */
+.fg-z-intake .fg-node::before { background: #3b82f6; }
+.fg-z-understand .fg-node::before { background: var(--nx-accent); }
+.fg-z-predict .fg-node::before { background: #f59e0b; }
+.fg-z-deliver .fg-node::before { background: #10b981; }
+
+.fg-node:hover {
+    border-color: var(--nx-border-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+}
+.fg-node.active {
+    border-color: var(--nx-accent);
+    box-shadow: 0 0 0 1px var(--nx-accent), 0 8px 32px rgba(99,102,241,0.15);
+}
+.fg-node-num {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.08em;
+    color: var(--nx-text-dim);
+    margin-bottom: 2px;
+}
+.fg-node-name {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--nx-text-heading);
+    line-height: 1.25;
+    margin-bottom: 3px;
+}
+.fg-node-stat {
+    font-size: 0.6rem;
+    color: var(--nx-text-secondary);
+    line-height: 1.3;
+}
+
+/* Tier badges */
+.fg-tier {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: 0.5rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-transform: uppercase;
+    border: 2px solid var(--nx-bg-card);
+    z-index: 3;
+}
+.fg-tier-f { background: rgba(59,130,246,0.35); color: #60a5fa; }
+.fg-tier-s { background: rgba(129,120,248,0.35); color: #a5b4fc; }
+.fg-tier-x { background: rgba(16,185,129,0.3); color: #34d399; }
+
+/* ── Hub ───────────────────────────────────────────────────────────── */
+.fg-hub-wrap {
+    display: flex;
+    justify-content: center;
+    position: relative;
+    z-index: 2;
+    padding: 4px 0;
+}
+.fg-hub {
+    background: var(--nx-bg-card);
+    border: 1.5px solid var(--nx-accent);
+    border-radius: 16px;
+    padding: 16px 36px;
+    text-align: center;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s;
+    box-shadow: 0 0 24px rgba(99,102,241,0.08), inset 0 0 20px rgba(99,102,241,0.03);
+    animation: hubGlow 4s ease-in-out infinite;
+}
+.fg-hub:hover {
+    transform: scale(1.03);
+    box-shadow: 0 0 36px rgba(99,102,241,0.18), inset 0 0 24px rgba(99,102,241,0.06);
+}
+@keyframes hubGlow {
+    0%, 100% { box-shadow: 0 0 24px rgba(99,102,241,0.08), inset 0 0 20px rgba(99,102,241,0.03); }
+    50% { box-shadow: 0 0 32px rgba(99,102,241,0.14), inset 0 0 24px rgba(99,102,241,0.05); }
+}
+.fg-hub-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--nx-accent-light);
+    letter-spacing: -0.01em;
+}
+.fg-hub-sub {
+    font-size: 0.6rem;
+    color: var(--nx-text-secondary);
+    margin-top: 3px;
+}
+
+/* ── Branches ──────────────────────────────────────────────────────── */
+.fg-branches {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    position: relative;
+    z-index: 2;
+    max-width: 540px;
+    margin: 0 auto;
+    align-items: start;
+}
+.fg-branch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+/* ── Engine grid ───────────────────────────────────────────────────── */
+.fg-engines {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    margin-top: 6px;
+}
+.fg-engine {
+    background: var(--nx-glass-subtle);
+    border: 1px solid var(--nx-glass-border);
+    border-radius: 5px;
+    padding: 5px 6px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.fg-engine:hover { border-color: var(--nx-border-hover); background: var(--nx-glass); }
+.fg-engine.active { border-color: #f59e0b; }
+.fg-engine-name { font-weight: 600; color: var(--nx-text-heading); font-size: 0.64rem; }
+.fg-engine-sub { color: var(--nx-text-dim); font-family: 'Share Tech Mono', monospace; font-size: 0.5rem; }
+
+/* ── Panel ─────────────────────────────────────────────────────────── */
+.fg-panel {
+    position: fixed;
+    top: 56px;
+    right: 0;
+    bottom: 0;
+    width: 420px;
+    max-width: 92vw;
+    background: var(--nx-bg-raised);
+    border-left: 1px solid var(--nx-border);
+    z-index: 40;
+    overflow-y: auto;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    padding: 20px;
+}
+.fg-panel.open { transform: translateX(0); }
+.fg-panel-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: var(--nx-glass);
+    border: 1px solid var(--nx-border);
+    border-radius: 6px;
+    color: var(--nx-text-secondary);
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.15s;
+}
+.fg-panel-close:hover { background: var(--nx-bg-hover); color: var(--nx-text); }
+.fg-p-num {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    color: var(--nx-text-dim);
+}
+.fg-p-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--nx-text-heading);
+    margin: 2px 0 12px;
+    padding-right: 32px;
+}
+.fg-p-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 14px;
+}
+.fg-b {
+    font-size: 0.57rem;
+    font-family: 'Share Tech Mono', monospace;
+    padding: 2px 7px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.fg-b-fast { background: rgba(59,130,246,0.12); color: #60a5fa; }
+.fg-b-smart { background: rgba(129,120,248,0.12); color: #a5b4fc; }
+.fg-b-none { background: rgba(16,185,129,0.12); color: #34d399; }
+.fg-b-key { background: rgba(245,158,11,0.10); color: #fbbf24; }
+.fg-b-param { background: var(--nx-glass); color: var(--nx-text-secondary); }
+
+.fg-p-section { margin-bottom: 14px; }
+.fg-p-label {
+    font-size: 0.58rem;
+    font-family: 'Share Tech Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--nx-text-dim);
+    margin-bottom: 6px;
+}
+.fg-p-io {
+    display: flex;
+    align-items: stretch;
+    margin-bottom: 12px;
+    gap: 0;
+}
+.fg-p-io-half {
+    flex: 1;
+    padding: 8px 10px;
+    font-size: 0.72rem;
+    color: var(--nx-text-secondary);
+    line-height: 1.45;
+    background: var(--nx-glass-subtle);
+    border: 1px solid var(--nx-glass-border);
+}
+.fg-p-io-in {
+    border-radius: 6px 0 0 6px;
+    border-right: none;
+}
+.fg-p-io-out {
+    border-radius: 0 6px 6px 0;
+}
+.fg-p-io-tag {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.46rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--nx-text-dim);
+    margin-bottom: 3px;
+    display: block;
+}
+.fg-p-io-mid {
+    display: flex;
+    align-items: center;
+    color: var(--nx-text-dim);
+    font-size: 0.7rem;
+    padding: 0 2px;
+    background: var(--nx-glass-subtle);
+    border-top: 1px solid var(--nx-glass-border);
+    border-bottom: 1px solid var(--nx-glass-border);
+}
+.fg-p-decs { list-style: none; padding: 0; margin: 0; }
+.fg-p-decs li {
+    font-size: 0.76rem;
+    color: var(--nx-text);
+    line-height: 1.5;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--nx-glass-border);
+}
+.fg-p-decs li:last-child { border-bottom: none; }
+.fg-p-decs strong { color: var(--nx-text-heading); }
+
+.fg-p-params { width: 100%; font-size: 0.72rem; border-collapse: collapse; }
+.fg-p-params td { padding: 3px 6px; border-bottom: 1px solid var(--nx-glass-border); }
+.fg-p-params td:first-child { font-family: 'Share Tech Mono', monospace; color: var(--nx-text-secondary); white-space: nowrap; }
+
+.fg-p-formula {
+    background: var(--nx-glass-subtle);
+    border: 1px solid var(--nx-glass-border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--nx-accent-light);
+    margin: 4px 0;
+    overflow-x: auto;
+}
+
+/* ── Overlay ───────────────────────────────────────────────────────── */
+.fg-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: 35;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+}
+.fg-overlay.open { opacity: 1; pointer-events: auto; }
+
+/* ── Responsive ────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+    .fg-branches { grid-template-columns: 1fr; max-width: 240px; }
+    .fg-row { flex-wrap: wrap; gap: 16px; }
+    .fg-node { width: 140px; }
+    .fg-panel { width: 100%; }
+    .fg-hud { flex-wrap: wrap; gap: 6px; }
+    .fg-svg { display: none; }
+    .fg-hud-hint { display: none; }
+}
+</style>
+
+<div class="fg">
+    <div class="fg-hud">
+        <span class="fg-hud-title">&#9670; Intelligence Pipeline</span>
+        <div class="fg-hud-right">
+            <div class="fg-hud-stats">
+                <span><strong>20</strong> stages</span>
+                <span><strong>7</strong> config keys</span>
+                <span><strong>6</strong> forecast engines</span>
+            </div>
+            <span class="fg-hud-hint">click any stage</span>
+        </div>
+    </div>
+
+    <div class="fg-canvas" id="fgCanvas">
+        <svg class="fg-svg" id="fgSvg">
+            <defs>
+                <marker id="fgArr" viewBox="0 0 8 6" refX="7" refY="3"
+                        markerWidth="7" markerHeight="5" orient="auto">
+                    <path d="M0,0.8 L6.5,3 L0,5.2" fill="none"
+                          stroke="rgba(99,102,241,0.5)" stroke-width="0.8"/>
+                </marker>
+                <marker id="fgArrG" viewBox="0 0 8 6" refX="7" refY="3"
+                        markerWidth="7" markerHeight="5" orient="auto">
+                    <path d="M0,0.8 L6.5,3 L0,5.2" fill="none"
+                          stroke="rgba(16,185,129,0.5)" stroke-width="0.8"/>
+                </marker>
+                <marker id="fgArrA" viewBox="0 0 8 6" refX="7" refY="3"
+                        markerWidth="7" markerHeight="5" orient="auto">
+                    <path d="M0,0.8 L6.5,3 L0,5.2" fill="none"
+                          stroke="rgba(245,158,11,0.5)" stroke-width="0.8"/>
+                </marker>
+            </defs>
+        </svg>
+
+        {# ═══════ INTAKE ═══════ #}
+        <div class="fg-zone fg-z-intake">
+            <div class="fg-zone-hdr z-intake"><span>Intake</span></div>
+            <div class="fg-row">
+                <div class="fg-node" id="n01" onclick="FG.show('01')">
+                    <span class="fg-tier fg-tier-x">&times;</span>
+                    <div class="fg-node-num">01</div>
+                    <div class="fg-node-name">Sources</div>
+                    <div class="fg-node-stat">RSS feeds &bull; multi-language</div>
+                </div>
+                <div class="fg-node" id="n02" onclick="FG.show('02')">
+                    <span class="fg-tier fg-tier-x">&times;</span>
+                    <div class="fg-node-num">02</div>
+                    <div class="fg-node-name">Ingestion</div>
+                    <div class="fg-node-stat">dedup &bull; 250/topic</div>
+                </div>
+                <div class="fg-node" id="n03" onclick="FG.show('03')">
+                    <span class="fg-tier fg-tier-f">F</span>
+                    <div class="fg-node-num">03</div>
+                    <div class="fg-node-name">Two-Pass Filter</div>
+                    <div class="fg-node-stat">250 &rarr; ~30 articles</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="fg-vspace"></div>
+
+        {# ═══════ UNDERSTANDING ═══════ #}
+        <div class="fg-zone fg-z-understand">
+            <div class="fg-zone-hdr z-understand"><span>Understanding</span></div>
+            <div class="fg-row">
+                <div class="fg-node" id="n04" onclick="FG.show('04')">
+                    <span class="fg-tier fg-tier-f">F</span>
+                    <div class="fg-node-num">04</div>
+                    <div class="fg-node-name">Event Extraction</div>
+                    <div class="fg-node-stat">editorial analysis &bull; sem=5</div>
+                </div>
+                <div class="fg-node" id="n05" onclick="FG.show('05')">
+                    <span class="fg-tier fg-tier-f">F</span>
+                    <div class="fg-node-num">05</div>
+                    <div class="fg-node-name">Entity Resolution</div>
+                    <div class="fg-node-stat">LLM canonicalization</div>
+                </div>
+                <div class="fg-node" id="n06" onclick="FG.show('06')">
+                    <span class="fg-tier fg-tier-x">&times;</span>
+                    <div class="fg-node-num">06</div>
+                    <div class="fg-node-name">Knowledge Store</div>
+                    <div class="fg-node-stat">SQLite WAL &bull; 30+ tables</div>
+                </div>
+            </div>
+            <div class="fg-vspace" style="height:24px"></div>
+            <div class="fg-row">
+                <div class="fg-node" id="n07" onclick="FG.show('07')">
+                    <span class="fg-tier fg-tier-f">F</span>
+                    <div class="fg-node-num">07</div>
+                    <div class="fg-node-name">Synthesis</div>
+                    <div class="fg-node-stat">convergence &bull; divergence</div>
+                </div>
+                <div class="fg-node" id="n08" onclick="FG.show('08')">
+                    <span class="fg-tier fg-tier-f">F</span>
+                    <div class="fg-node-num">08</div>
+                    <div class="fg-node-name">Thread Persistence</div>
+                    <div class="fg-node-stat">Jaccard &bull; lifecycle</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="fg-vspace"></div>
+
+        {# ═══════ HUB ═══════ #}
+        <div class="fg-hub-wrap">
+            <div class="fg-hub" id="nhub" onclick="FG.show('hub')">
+                <div class="fg-hub-name">TopicSynthesis (X)</div>
+                <div class="fg-hub-sub">Central object &mdash; all downstream renders from here</div>
+            </div>
+        </div>
+
+        <div class="fg-vspace" style="height:28px"></div>
+
+        {# ═══════ BRANCHES ═══════ #}
+        <div class="fg-branches">
+            {# ── Delivery ── #}
+            <div class="fg-branch fg-z-deliver">
+                <div class="fg-zone-hdr z-deliver" style="width:100%"><span>Delivery</span></div>
+                <div class="fg-node" id="n09" onclick="FG.show('09')">
+                    <span class="fg-tier fg-tier-s">S</span>
+                    <div class="fg-node-num">09</div>
+                    <div class="fg-node-name">Briefing</div>
+                    <div class="fg-node-stat">smart model &bull; &lt;800 words</div>
+                </div>
+                <div class="fg-node" id="n10" onclick="FG.show('10')">
+                    <span class="fg-tier fg-tier-s">S</span>
+                    <div class="fg-node-num">10</div>
+                    <div class="fg-node-name">Audio / Podcast</div>
+                    <div class="fg-node-stat">script &rarr; TTS &rarr; MP3</div>
+                </div>
+                <div class="fg-node" id="n19" onclick="FG.show('19')">
+                    <span class="fg-tier fg-tier-x">&times;</span>
+                    <div class="fg-node-num">19</div>
+                    <div class="fg-node-name">Telegram Bot</div>
+                    <div class="fg-node-stat">push &bull; breaking 3h</div>
+                </div>
+                <div class="fg-node" id="n20" onclick="FG.show('20')">
+                    <span class="fg-tier fg-tier-s">S</span>
+                    <div class="fg-node-num">20</div>
+                    <div class="fg-node-name">Q&amp;A Agent</div>
+                    <div class="fg-node-stat">two-stage &bull; web fallback</div>
+                </div>
+            </div>
+
+            {# ── Prediction ── #}
+            <div class="fg-branch fg-z-predict">
+                <div class="fg-zone-hdr z-predict" style="width:100%"><span>Prediction</span></div>
+                <div class="fg-node" id="n11" onclick="FG.show('11')">
+                    <span class="fg-tier fg-tier-x">&times;</span>
+                    <div class="fg-node-num">11</div>
+                    <div class="fg-node-name">Eligibility Gate</div>
+                    <div class="fg-node-stat">&ge;7 days &bull; &ge;2 snapshots</div>
+                </div>
+                <div class="fg-node" id="n12" onclick="FG.show('12')">
+                    <span class="fg-tier fg-tier-x">&times;</span>
+                    <div class="fg-node-num">12</div>
+                    <div class="fg-node-name">Snapshots + Trajectory</div>
+                    <div class="fg-node-stat">velocity &bull; momentum</div>
+                </div>
+                <div class="fg-node" id="n13" onclick="FG.show('13')">
+                    <span class="fg-tier fg-tier-x">&times;</span>
+                    <div class="fg-node-num">13</div>
+                    <div class="fg-node-name">Causal Links</div>
+                    <div class="fg-node-stat">cross-topic &bull; 48h window</div>
+                </div>
+                <div class="fg-node" id="n14" onclick="FG.show('14')">
+                    <span class="fg-tier fg-tier-x">&times;</span>
+                    <div class="fg-node-num">14</div>
+                    <div class="fg-node-name">Evidence Assembly</div>
+                    <div class="fg-node-stat">zero LLM &bull; leakage-safe</div>
+                </div>
+                <div class="fg-node" id="n15" onclick="FG.show('15')" style="width:200px">
+                    <div class="fg-node-num">15</div>
+                    <div class="fg-node-name" style="margin-bottom:6px">Multi-Engine Forecast</div>
+                    <div class="fg-engines">
+                        <div class="fg-engine" onclick="event.stopPropagation();FG.show('15a')">
+                            <div class="fg-engine-name">Actor</div>
+                            <div class="fg-engine-sub">3-6 &bull; default</div>
+                        </div>
+                        <div class="fg-engine" onclick="event.stopPropagation();FG.show('15b')">
+                            <div class="fg-engine-name">GraphRAG</div>
+                            <div class="fg-engine-sub">2 calls</div>
+                        </div>
+                        <div class="fg-engine" onclick="event.stopPropagation();FG.show('15c')">
+                            <div class="fg-engine-name">Structural</div>
+                            <div class="fg-engine-sub">3 calls</div>
+                        </div>
+                        <div class="fg-engine" onclick="event.stopPropagation();FG.show('15d')">
+                            <div class="fg-engine-name">Perspective</div>
+                            <div class="fg-engine-sub">4-6 calls</div>
+                        </div>
+                        <div class="fg-engine" onclick="event.stopPropagation();FG.show('15e')">
+                            <div class="fg-engine-name">Debate</div>
+                            <div class="fg-engine-sub">11 calls</div>
+                        </div>
+                        <div class="fg-engine" onclick="event.stopPropagation();FG.show('15f')">
+                            <div class="fg-engine-name">Naked</div>
+                            <div class="fg-engine-sub">1 &bull; baseline</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="fg-node" id="n16" onclick="FG.show('16')">
+                    <span class="fg-tier fg-tier-x">&times;</span>
+                    <div class="fg-node-num">16</div>
+                    <div class="fg-node-name">Calibration</div>
+                    <div class="fg-node-stat">&gamma;=0.8 &bull; anchor blend</div>
+                </div>
+                <div class="fg-node" id="n17" onclick="FG.show('17')">
+                    <span class="fg-tier fg-tier-f">F</span>
+                    <div class="fg-node-num">17</div>
+                    <div class="fg-node-name">Kalshi Integration</div>
+                    <div class="fg-node-stat">flipped match &bull; Brier</div>
+                </div>
+                <div class="fg-node" id="n18" onclick="FG.show('18')">
+                    <span class="fg-tier fg-tier-f">F</span>
+                    <div class="fg-node-num">18</div>
+                    <div class="fg-node-name">Eval + Hindcast</div>
+                    <div class="fg-node-stat">LLM judge &bull; backtest</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="fg-overlay" id="fgOverlay" onclick="FG.close()"></div>
+    <div class="fg-panel" id="fgPanel">
+        <button class="fg-panel-close" onclick="FG.close()">&times;</button>
+        <div id="fgBody"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+'use strict';
+
+/* ── Stage data ──────────────────────────────────────────────────── */
+var D = {
+'01': {
+    t:'Source Polling', n:'01',
+    badges:['none:No LLM','param:48h recency','param:per-topic registries'],
+    io:['Topic config + source registries (YAML, git-committed)','Raw RSS items: title, url, snippet, source metadata'],
+    decs:[
+        'Each topic owns its source list, version-controlled in git. You can always trace why a particular outlet appeared.',
+        'Anything older than 48 hours gets dropped before any LLM sees it. Cheapest cost cut there is.',
+        'Every feed carries metadata: who runs it (state, private, nonprofit, academic), what country, how reliable. This is what makes perspective diversity possible downstream.'
+    ]
+},
+'02': {
+    t:'Ingestion', n:'02',
+    badges:['none:No LLM','param:cap 250/topic','param:2/domain rate limit'],
+    io:['Raw RSS items','Enriched ContentItems + full_text + detected_language'],
+    decs:[
+        'URLs get normalized and deduplicated before we fetch anything. No point downloading the same article twice with different tracking params.',
+        '<strong>Trafilatura</strong> handles HTML-to-text. Best quality/speed ratio we found for news content.',
+        'Rate limiting is two layers: 10 concurrent fetches globally, max 2 per domain. Keeps us from getting blocked by publishers.',
+        'Hard cap at 250 articles per topic. Past that, you\u2019re paying LLM costs for diminishing returns. Most recent items get priority.'
+    ]
+},
+'03': {
+    t:'Two-Pass Filtering', n:'03',
+    badges:['fast:Fast Model','key:config: filtering','param:threshold 4.0'],
+    io:['~250 articles/topic','~30 articles with perspective diversity'],
+    decs:[
+        'Pass 1 can\u2019t judge significance without knowing what already happened. That\u2019s why there are two passes.',
+        '<strong>Pass 1</strong> scores relevance in batches of 10. That\u2019s 25\u00d7 fewer LLM calls than scoring one at a time. Threshold is configurable per topic.',
+        '<strong>Pass 2</strong> sees the last 7 days of events as context, so it can tell novelty from noise. An article passes if significance \u2265 4 or it\u2019s genuinely novel.',
+        'Perspective diversity enforcement keeps the final set from being dominated by any single media affiliation. "High" means at least 20% from each affiliation type.',
+        'Every filtering decision is logged with scores and reasons. Full audit trail, no black boxes.'
+    ],
+    params:[['BATCH_PASS1','10'],['BATCH_PASS2','5'],['MAX_OUT','30'],['relevance_w','0.40'],['significance_w','0.60']]
+},
+'04': {
+    t:'Event Extraction', n:'04',
+    badges:['fast:Fast Model','key:config: knowledge_summary','param:parallel sem=5'],
+    io:['~30 filtered articles','15-35 structured events with entities, dates, editorial framing'],
+    decs:[
+        'Each event gets structured fields: date, summary, entities, significance (1-10), and editorial analysis (tone, focus, how actors are framed).',
+        'The editorial analysis matters because it\u2019s how we detect divergence later. Same event reported with different tone or focus across outlets is a signal, not noise.',
+        'No future dates allowed. Hard rule. If an article says "next week," the event date is today.',
+        'Events that share \u226560% of entities within \u00b11 day get merged automatically. Combines source lists, keeps the higher significance.',
+        'Topic scope controls the cap: 15 events for narrow topics, 20 for medium, 35 for broad.'
+    ]
+},
+'05': {
+    t:'Entity Resolution', n:'05',
+    badges:['fast:Fast Model','key:config: knowledge_summary','param:5 types'],
+    io:['Raw entity strings + known entities from store','Canonical graph nodes: person | org | country | treaty | concept'],
+    decs:[
+        'String matching can\u2019t do this. "MBS," "Mohammed bin Salman," and "Crown Prince of Saudi Arabia" are the same person. The LLM resolves these into one canonical entity.',
+        'Merging is deliberately conservative. "Iran" and "Iran Air" stay separate. A false merge corrupts the knowledge graph permanently.',
+        'The LLM sees up to 200 known entities as context so it doesn\u2019t create duplicates of people already in the graph.',
+        'Wikipedia URLs and thumbnails are fetched in the background. Non-blocking, just enrichment.'
+    ]
+},
+'06': {
+    t:'Knowledge Store', n:'06',
+    badges:['none:No LLM (storage)','param:SQLite WAL','param:30+ tables'],
+    io:['Events, entities, relationships, summaries','Queryable SQLite store: single source of truth'],
+    decs:[
+        'SQLite, not Postgres. This is a single-user self-hosted system. One file, zero config, totally portable.',
+        '<strong>WAL mode</strong> lets the dashboard serve reads while the pipeline is writing. No locking conflicts.',
+        'Events older than 7 days get compressed into weekly narrative summaries. Keeps storage bounded without losing context.',
+        'Generated pages (backstories, entity profiles, thread deep-dives) are cached with TTLs. Regenerated when stale, not on every request.'
+    ]
+},
+'07': {
+    t:'Synthesis', n:'07',
+    badges:['fast:Fast Model','key:config: knowledge_summary','param:convergence','param:divergence'],
+    io:['Events + knowledge context + thread history','NarrativeThreads with convergence & divergence \u2192 TopicSynthesis'],
+    decs:[
+        '<strong>Convergence</strong> means 2+ independent sources confirm the same fact. Independent means different affiliation or country, not just a different outlet name. This is the trust signal.',
+        '<strong>Divergence</strong> is the opposite: same event, different editorial framing. Four flavors: tone contrast, focus divergence, actor framing, omission. This is what makes Nexus different from a news aggregator.',
+        'Narrow topics get granular thread prompting. Broad topics get subfield-specific prompts so "AI agents" doesn\u2019t merge with "protein folding."',
+        'TopicSynthesis is the single object everything downstream renders from. Briefing, audio, predictions, dashboard. Change the renderer without re-running the pipeline.'
+    ]
+},
+'08': {
+    t:'Thread Persistence', n:'08',
+    badges:['fast:Fast (ambiguous only)','param:Jaccard matching','param:4 lifecycle states'],
+    io:['NarrativeThreads from synthesis','Persisted threads: emerging \u2192 active \u2192 stale \u2192 resolved'],
+    decs:[
+        'New threads get matched to existing ones using entity overlap (Jaccard similarity). High overlap auto-matches. Low overlap starts a new thread. The ambiguous middle range gets LLM confirmation.',
+        'Threads have a lifecycle: emerging (0-3 days), active (4-20 days), stale (21+ days, no new events), resolved. This is what feeds trajectory analysis in the prediction pipeline.'
+    ]
+},
+'hub': {
+    t:'TopicSynthesis (X)', n:'\u2666',
+    badges:['param:Central Object'],
+    io:['All upstream intelligence','threads, background, source_balance, cross-topic signals, projection'],
+    decs:[
+        'One object holds all the intelligence for a topic. Briefings, podcasts, predictions, the dashboard: they all render from this single representation.',
+        'This decoupling is intentional. You can swap renderers, A/B test output formats, or add new delivery channels without touching the extraction pipeline.',
+        'Inside: NarrativeThreads (with convergence and divergence), compressed background context, source balance metrics, cross-topic signals, and an optional projection.'
+    ]
+},
+'09': {
+    t:'Briefing', n:'09',
+    badges:['smart:Smart Model','key:config: synthesis','param:<800 words'],
+    io:['All TopicSynthesis objects','Markdown briefing: executive summary + per-topic sections'],
+    decs:[
+        'Hard cap at 800 words. Executive summary up top, then per-topic sections. Readable in under 5 minutes.',
+        'Key claims are attributed to specific outlets. A source tally at the end shows how broad the coverage was.',
+        'Uses the smart model tier because this is the primary thing the user reads. Quality matters more than speed here.'
+    ]
+},
+'10': {
+    t:'Audio / Podcast', n:'10',
+    badges:['smart:Smart Model','key:config: dialogue_script','param:configurable TTS'],
+    io:['TopicSynthesis objects','Two-host podcast episode (MP3)'],
+    decs:[
+        'A smart model writes a two-host dialogue script (Nova and Atlas). Every factual claim gets verbally attributed: "According to Reuters..."',
+        'The TTS backend and voices are both configurable. Each turn gets 3 retry attempts with exponential backoff if the call fails.',
+        'Turns get concatenated into a single MP3 with 300ms silence gaps between them. Simple and reliable, done with pydub.'
+    ]
+},
+'19': {
+    t:'Telegram Bot', n:'19',
+    badges:['none:No LLM (delivery)','param:long-polling','param:breaking every 3h'],
+    io:['Artifacts: briefings, audio, predictions','Telegram messages with inline keyboard'],
+    decs:[
+        'Telegram because users actually check it. Push delivery beats hoping someone visits a dashboard.',
+        'Commands: /start (authenticate), /briefing (today\u2019s content + audio), /status (topic stats).',
+        'Each briefing comes with a thumbs up/down keyboard. Feedback gets stored for future improvement.',
+        'Breaking news checks run every 3 hours. Only events with significance \u2265 7/10 get pushed. Deduplicated by headline hash so you never get the same alert twice.'
+    ]
+},
+'20': {
+    t:'Q&A Agent', n:'20',
+    badges:['fast:Fast','smart:+ Smart Model','key:config: filtering \u2192 agent','param:web search fallback'],
+    io:['User text message (Telegram or web)','Researched answer with citations'],
+    decs:[
+        'Two stages to prevent hallucination. The fast model extracts entities and classifies intent. The smart model queries the knowledge store and synthesizes an answer.',
+        'If the store doesn\u2019t have enough context on a topic, it falls back to web search before answering.',
+        'Smart model for the answer because when a user asks a question, the quality of the response is everything.'
+    ]
+},
+'11': {
+    t:'Eligibility Gate', n:'11',
+    badges:['none:No LLM','param:\u22657 days history','param:\u22652 snapshots'],
+    io:['Topic synthesis + store history','Eligible/ineligible decision with metadata'],
+    decs:[
+        'A topic needs at least 7 days of event history before predictions are allowed. You need temporal patterns, not a single snapshot.',
+        'At least 2 thread snapshots required. One data point isn\u2019t a trajectory.',
+        'This gate exists to prevent the system from hallucinating predictions on topics it barely knows anything about.'
+    ]
+},
+'12': {
+    t:'Snapshots + Trajectory', n:'12',
+    badges:['none:No LLM','param:4 labels','param:7d window'],
+    io:['Active threads with events','ThreadSnapshot: velocity, acceleration, momentum, trajectory label'],
+    decs:[
+        'Each thread gets daily metrics: how fast it\u2019s growing (velocity), whether it\u2019s speeding up or slowing down (acceleration), and whether events are getting more significant (significance trend). Combined into a single momentum score.',
+        'Four trajectory labels, all deterministic: <strong>about_to_break</strong> (\u22653 events, significance \u22657, velocity \u22652.0), <strong>accelerating</strong>, <strong>decelerating</strong>, <strong>steady</strong>.',
+        'Threads labeled "about to break" get shorter prediction horizons (3 days instead of 7). The trajectory classification directly feeds evidence assembly and question generation.'
+    ]
+},
+'13': {
+    t:'Causal Links + Cross-Topic Signals', n:'13',
+    badges:['none:No LLM','param:48h bridge window','param:relation strength'],
+    io:['Thread events + entity graph','Causal chains + cross-topic signal records'],
+    decs:[
+        'Causal links trace how events within a thread relate to each other. Explicit references get strength 0.8, implicit ordering gets 0.5.',
+        'When the same entity shows up in 2+ different topics within 48 hours, that\u2019s a cross-topic signal. Geopolitical events cascade across domains, and this is how we catch it.',
+        'All of this is captured before any forecasting runs. That\u2019s what makes leakage-free replay (hindcasting) possible.'
+    ]
+},
+'14': {
+    t:'Evidence Assembly', n:'14',
+    badges:['none:No LLM','param:leakage-safe','param:capped'],
+    io:['Question + knowledge store + as_of date','EvidencePackage: entities, threads, convergence, divergence, causal, relationships'],
+    decs:[
+        'No LLM calls. Pure database queries, completely deterministic. Run it twice, get the same evidence package.',
+        'Every query respects an <strong>as_of</strong> cutoff date. When hindcasting, the evidence assembly can\u2019t peek at future events.',
+        'For each entity: recent events ranked by recency \u00d7 significance, active threads, relationships, and how those relationships changed over the last 14 days.'
+    ],
+    params:[['MAX_THREADS','5'],['MAX_EVENTS','15'],['MAX_CONVERGENCE','10'],['MAX_DIVERGENCE','5'],['MAX_CAUSAL','10'],['MAX_RELS','15']]
+},
+'15': {
+    t:'Multi-Engine Forecasting', n:'15',
+    badges:['fast:Fast Model','key:config: knowledge_summary','param:6 engines','param:protocol-based'],
+    io:['ForecastEngineInput or EvidencePackage','ForecastRun: questions with probability, reasoning, signposts'],
+    decs:[
+        'Six engines compete independently. They don\u2019t vote or average. Benchmarking reveals which approach actually works best.',
+        'Any object that satisfies the <strong>ForecastEngine</strong> protocol can plug in. No inheritance, no base class. Just implement the method.',
+        'The active engine is selected via config (default: actor). Click any engine in the grid for its design details.'
+    ]
+},
+'15a': {
+    t:'Actor Engine', n:'15a',
+    badges:['fast:Fast Model','param:3-6 LLM calls','param:DEFAULT'],
+    decs:[
+        'Predictions are about what actors do. This engine reasons about each relevant actor independently, then synthesizes.',
+        '<strong>Step 1: Identify actors</strong> (0 LLM). Text matching against the entity store. Canonical name match scores +2, alias +1. Top 5 kept.',
+        '<strong>Step 2: Build context</strong> (0 LLM). For each actor: 30 days of events, relationships, timeline changes, cross-topic presence.',
+        '<strong>Step 3: Per-actor reasoning</strong> (1 LLM per actor). Produces a direction (increases/decreases/neutral), magnitude, and probability shift capped at \u00b10.3.',
+        '<strong>Step 4: Synthesize</strong> (1 LLM). All actor analyses combined, interactions considered, final calibrated probability.',
+        'If no LLM is available, a deterministic fallback shifts the base rate by min(0.1, event_count \u00d7 0.02).'
+    ]
+},
+'15b': {
+    t:'GraphRAG Engine', n:'15b',
+    badges:['fast:Fast Model','param:2 LLM calls'],
+    decs:[
+        'Some predictions depend on indirect connections the actor engine misses. This one walks the knowledge graph to find them.',
+        '<strong>Step 1:</strong> Extract entities from the question (1 LLM call). Semantic extraction, not text matching, so it catches implied entities too.',
+        '<strong>Step 2:</strong> Walk 2 hops out from each entity in the graph (0 LLM). Up to 30 entities, scored by recency \u00d7 significance.',
+        '<strong>Step 3:</strong> Reason over the full graph neighborhood (1 LLM call). Sees the entity map, relationships, causal chains. Prompted to consider absence of evidence too.'
+    ]
+},
+'15c': {
+    t:'Structural Engine', n:'15c',
+    badges:['fast:Fast Model','param:3 LLM calls (fixed)'],
+    decs:[
+        'Based on academic forecasting research (AIA Forecaster, Halawi et al., ForecastBench). Three fixed calls with distinct roles.',
+        '<strong>Call 1: Base-rate analyst.</strong> Identifies the reference class, lists pros and cons with strength ratings, gives a verdict.',
+        '<strong>Call 2: Contrarian analyst.</strong> Challenges the obvious answer. Looks for wildcards and blind spots in the base-rate reasoning.',
+        '<strong>Call 3: Supervisor.</strong> Sees both, resolves disagreements, produces final factors and uncertainties.',
+        'Probability comes from a lookup table: (verdict, confidence) \u2192 number. yes/high = 0.92, no/medium = 0.25, and so on.',
+        'Deliberately ignores market price. This engine\u2019s value is being an independent assessment.'
+    ]
+},
+'15d': {
+    t:'Perspective Engine', n:'15d',
+    badges:['fast:Fast Model','param:4-6 LLM calls'],
+    decs:[
+        'Three analyst personas (evidence-based, contrarian, historical pattern) reason independently, then get aggregated.',
+        'Each persona gets its own LLM call. No interaction, no debate. Pure independent reasoning.',
+        'Estimates combined using <strong>geometric mean of odds</strong> (GMO). Provably optimal under logarithmic scoring (Neyman & Roughgarden).'
+    ]
+},
+'15e': {
+    t:'Debate Engine', n:'15e',
+    badges:['fast:Fast Model','param:11 LLM calls'],
+    decs:[
+        'Tests a specific hypothesis: does structured agent-to-agent debate improve forecast calibration? Inspired by OASIS and MiroFish research.',
+        '5 personas generated (1 call), then each reasons independently (5 calls). That\u2019s the baseline.',
+        'Then a debate round: each persona sees the others\u2019 reasoning and can revise (5 more calls). Prompted to "update if compelling, but stay true to your lens."',
+        'Final estimates aggregated via geometric mean of odds. 11 total LLM calls makes this the most expensive engine.'
+    ]
+},
+'15f': {
+    t:'Naked Engine', n:'15f',
+    badges:['fast:Fast Model','param:1 LLM call','param:baseline'],
+    decs:[
+        'The control group. Sends just the question and today\u2019s date to the LLM. No knowledge store, no market price, no context.',
+        'If the actor engine can\u2019t beat this, then all the knowledge integration is adding noise, not signal. That\u2019s the benchmark.'
+    ]
+},
+'16': {
+    t:'Calibration', n:'16',
+    badges:['none:No LLM','param:\u03B3=0.8','param:anchor 0.4-0.45','param:auto-tune'],
+    io:['Raw probability from engine','Calibrated probability [0.05, 0.95]'],
+    decs:[
+        'LLMs are overconfident forecasters. <strong>Extremization</strong> (\u03B3=0.8) compresses probabilities toward 0.5 to correct for this. Based on Satop\u00e4\u00e4 et al. (IJF 2014).',
+        'The model doesn\u2019t replace the market price. <strong>Anchor blending</strong> lets it nudge the market by 40-45% of the gap between its estimate and the anchor. Markets are well-calibrated; the LLM provides edge, not replacement.',
+        'When combining multiple engines, we use <strong>geometric mean of odds</strong>. Provably optimal aggregation under logarithmic scoring (Neyman & Roughgarden).',
+        '<strong>Auto-calibration</strong> grid-searches \u03B3 and anchor weight to minimize Brier score. Needs \u226520 resolved forecasts. Kicks in automatically when it finds a meaningful improvement.'
+    ],
+    formulas:['p_ext = p\u1D5E / (p\u1D5E + (1-p)\u1D5E)  \u03B3=0.8','blended = anchor + w \u00d7 (engine - anchor)  w=0.4']
+},
+'17': {
+    t:'Kalshi Integration', n:'17',
+    badges:['fast:Fast Model','key:config: knowledge_summary','param:flipped matching'],
+    io:['Kalshi API market data + engine outputs','Market-matched forecasts + Brier scores'],
+    decs:[
+        'We don\u2019t map our questions to Kalshi. We scan their markets, find ones that overlap with our entities, and generate our own probability for their exact question. Same question, different probability. Directly comparable.',
+        'The benchmark harness runs settled markets through our engines at multiple cutoff points (7, 14, 30 days before settlement). Five concurrent evaluations at a time.',
+        'A <strong>MarketBaselineEngine</strong> always returns the market\u2019s own implied probability. That\u2019s the anchor we\u2019re trying to beat.',
+        '<strong>Brier score</strong> = (probability \u2212 outcome)\u00b2. Lower is better. We compare ours against the market\u2019s to see if we\u2019re adding value.'
+    ]
+},
+'18': {
+    t:'Evaluation + Hindcast', n:'18',
+    badges:['fast:Fast Model','key:config: filtering','param:keyword fallback'],
+    io:['Pending forecasts + subsequent events','Resolution: hit/miss/mixed, Brier scores, calibration reports'],
+    decs:[
+        'An LLM judge evaluates each prediction against subsequent events. Verdicts per event: confirms (1.0), partially (0.5), contradicts (0.0), irrelevant (skipped). Average \u22650.6 is a hit, \u22650.3 is mixed, below that is a miss.',
+        'If the LLM judge fails, a deterministic keyword fallback scores overlap between prediction claims and event summaries.',
+        '<strong>Hindcasting</strong> picks significant past events, generates retrospective questions, then runs engines with a strict date cutoff so they can\u2019t see the answer. Tests both positive cases (event happened) and negative cases (nothing happened). Without negatives, any engine that always says "yes" would score well.'
+    ]
+}
+};
+
+/* ── Edge definitions ────────────────────────────────────────────── */
+var EDGES = [
+    ['n01','n02',''],['n02','n03',''],
+    ['n03','n04',''],
+    ['n04','n05',''],['n05','n06',''],
+    ['n06','n07',''],
+    ['n07','n08',''],
+    ['n08','nhub',''],
+    ['nhub','n09','deliver'],['nhub','n11','predict'],
+    ['n09','n10','deliver'],['n10','n19','deliver'],['n19','n20','deliver'],
+    ['n11','n12','predict'],['n12','n13','predict'],['n13','n14','predict'],
+    ['n14','n15','predict'],['n15','n16','predict'],['n16','n17','predict'],['n17','n18','predict']
+];
+
+/* ── Panel rendering ─────────────────────────────────────────────── */
+var panel = document.getElementById('fgPanel');
+var body = document.getElementById('fgBody');
+var overlay = document.getElementById('fgOverlay');
+
+window.FG = {
+    show: function(id) {
+        var d = D[id];
+        if (!d) return;
+        document.querySelectorAll('.fg-node.active,.fg-engine.active').forEach(function(el){el.classList.remove('active')});
+        var nd = document.querySelector('#n'+id) || document.querySelector('[data-eid="'+id+'"]');
+        if (nd) nd.classList.add('active');
+
+        var h = '<div class="fg-p-num">'+d.n+'</div><div class="fg-p-title">'+d.t+'</div>';
+        if (d.badges) {
+            h += '<div class="fg-p-badges">';
+            d.badges.forEach(function(b){var p=b.split(':');h+='<span class="fg-b fg-b-'+p[0]+'">'+p[1]+'</span>';});
+            h += '</div>';
+        }
+        if (d.io) {
+            h += '<div class="fg-p-section"><div class="fg-p-label">Data Flow</div>';
+            h += '<div class="fg-p-io">';
+            h += '<div class="fg-p-io-half fg-p-io-in"><span class="fg-p-io-tag">in</span>'+d.io[0]+'</div>';
+            h += '<div class="fg-p-io-mid">\u2192</div>';
+            h += '<div class="fg-p-io-half fg-p-io-out"><span class="fg-p-io-tag">out</span>'+d.io[1]+'</div>';
+            h += '</div></div>';
+        }
+        if (d.decs) {
+            h += '<div class="fg-p-section"><div class="fg-p-label">Design Decisions</div>';
+            h += '<ul class="fg-p-decs">';
+            d.decs.forEach(function(x){h+='<li>'+x+'</li>';});
+            h += '</ul></div>';
+        }
+        if (d.formulas) {
+            h += '<div class="fg-p-section"><div class="fg-p-label">Formulas</div>';
+            d.formulas.forEach(function(f){h+='<div class="fg-p-formula">'+f+'</div>';});
+            h += '</div>';
+        }
+        if (d.params) {
+            h += '<div class="fg-p-section"><div class="fg-p-label">Parameters</div><table class="fg-p-params">';
+            d.params.forEach(function(p){h+='<tr><td>'+p[0]+'</td><td>'+p[1]+'</td></tr>';});
+            h += '</table></div>';
+        }
+        body.innerHTML = h;
+        panel.classList.add('open');
+        overlay.classList.add('open');
+    },
+    close: function() {
+        panel.classList.remove('open');
+        overlay.classList.remove('open');
+        document.querySelectorAll('.fg-node.active,.fg-engine.active').forEach(function(el){el.classList.remove('active')});
+    }
+};
+
+document.addEventListener('keydown', function(e){ if(e.key==='Escape') FG.close(); });
+
+/* ── SVG connectors ──────────────────────────────────────────────── */
+function drawEdges() {
+    var svg = document.getElementById('fgSvg');
+    var canvas = document.getElementById('fgCanvas');
+    if (!svg || !canvas) return;
+
+    var cw = canvas.scrollWidth;
+    var ch = canvas.scrollHeight;
+    svg.setAttribute('width', cw);
+    svg.setAttribute('height', ch);
+    svg.setAttribute('viewBox', '0 0 '+cw+' '+ch);
+
+    /* preserve defs, clear paths */
+    var paths = svg.querySelectorAll('path.fg-edge');
+    paths.forEach(function(p){p.remove();});
+
+    if (window.innerWidth < 720) return;
+
+    var cr = canvas.getBoundingClientRect();
+
+    EDGES.forEach(function(e) {
+        var fromEl = document.getElementById(e[0]);
+        var toEl = document.getElementById(e[1]);
+        if (!fromEl || !toEl) return;
+
+        var fr = fromEl.getBoundingClientRect();
+        var tr = toEl.getBoundingClientRect();
+
+        var fcx = fr.left + fr.width/2 - cr.left;
+        var fcy = fr.top + fr.height/2 - cr.top;
+        var tcx = tr.left + tr.width/2 - cr.left;
+        var tcy = tr.top + tr.height/2 - cr.top;
+
+        var dx = tcx - fcx;
+        var dy = tcy - fcy;
+        var horiz = Math.abs(dx) > Math.abs(dy) * 1.2;
+
+        var x1, y1, x2, y2, d;
+        if (horiz) {
+            x1 = fr.right - cr.left;
+            y1 = fcy;
+            x2 = tr.left - cr.left;
+            y2 = tcy;
+            var mx = (x1+x2)/2;
+            d = 'M'+x1+','+y1+' C'+mx+','+y1+' '+mx+','+y2+' '+x2+','+y2;
+        } else {
+            x1 = fcx;
+            y1 = fr.bottom - cr.top;
+            x2 = tcx;
+            y2 = tr.top - cr.top;
+            var my = (y1+y2)/2;
+            d = 'M'+x1+','+y1+' C'+x1+','+my+' '+x2+','+my+' '+x2+','+y2;
+        }
+
+        var path = document.createElementNS('http://www.w3.org/2000/svg','path');
+        path.setAttribute('d', d);
+
+        var cls = 'fg-edge';
+        var marker = 'url(#fgArr)';
+        if (e[0]==='nhub') cls += ' fg-edge-fork';
+        if (e[2]==='deliver') { cls += ' fg-edge-deliver'; marker = 'url(#fgArrG)'; }
+        if (e[2]==='predict') { cls += ' fg-edge-predict'; marker = 'url(#fgArrA)'; }
+
+        path.setAttribute('class', cls);
+        path.setAttribute('marker-end', marker);
+        svg.appendChild(path);
+    });
+}
+
+var _rt;
+window.addEventListener('load', function(){ setTimeout(drawEdges, 120); });
+window.addEventListener('resize', function(){ clearTimeout(_rt); _rt = setTimeout(drawEdges, 80); });
+
+})();
+</script>
+{% endblock %}

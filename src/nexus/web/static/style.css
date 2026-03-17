@@ -94,6 +94,10 @@ h3 { font-size: 1.15rem; margin-bottom: 0.75rem; }
     border-bottom: 1px solid var(--nx-border);
 }
 
+[data-theme="light"] .site-header {
+    background: rgba(245, 243, 239, 0.88);
+}
+
 .site-nav {
     max-width: 1200px;
     margin: 0 auto;
@@ -943,6 +947,57 @@ a.entity-tag:hover {
 
 .sidebar-thread a:hover { color: var(--nx-accent); }
 
+.sidebar-insight {
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--nx-glass-border);
+    font-size: 0.82rem;
+}
+
+.sidebar-insight:last-child { border-bottom: none; }
+
+.sidebar-insight-claim {
+    color: var(--nx-text);
+    line-height: 1.35;
+}
+
+.sidebar-bridge {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--nx-glass-border);
+}
+
+.sidebar-bridge:last-child { border-bottom: none; }
+
+.sidebar-bridge-entity {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--nx-accent);
+    margin-bottom: 0.2rem;
+}
+
+.sidebar-bridge-event {
+    font-size: 0.78rem;
+    line-height: 1.3;
+    color: var(--nx-text-secondary);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.sidebar-bridge-event a {
+    color: var(--nx-text-secondary);
+}
+
+.sidebar-bridge-event a:hover {
+    color: var(--nx-accent);
+}
+
+.sidebar-bridge-related {
+    margin-top: 0.15rem;
+    padding-left: 0.6rem;
+    border-left: 2px solid var(--nx-glass);
+}
+
 /* Breaking alerts sidebar */
 .sidebar-breaking-topic { margin-bottom: 0.5rem; }
 .sidebar-breaking-topic-name {
@@ -1083,6 +1138,27 @@ a.entity-tag:hover {
     text-transform: uppercase;
     letter-spacing: 0.04em;
     padding: 0.35rem 0;
+}
+
+.thread-count-badge {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--nx-text-dim);
+    background: var(--nx-bg-card);
+    border: 1px solid var(--nx-border);
+    border-radius: 1rem;
+    padding: 0.15rem 0.6rem;
+}
+
+.filter-count {
+    font-size: 0.68rem;
+    opacity: 0.6;
+    margin-left: 0.2rem;
+}
+
+.thread-stat {
+    font-size: 0.72rem;
+    color: var(--nx-text-dim);
 }
 
 /* Thread Tracker Detail */
@@ -2769,4 +2845,487 @@ a.entity-tag:hover {
 .health-issue-critical {
     border-color: rgba(239, 68, 68, 0.25);
     background: var(--nx-red-soft);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Predictions Dashboard
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Summary Cards ── */
+
+.pred-summary {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.pred-stat {
+    flex: 1;
+    min-width: 120px;
+    padding: 1rem 1.25rem;
+    background: var(--nx-bg-raised);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius-lg);
+}
+
+.pred-stat-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--nx-text-dim);
+    margin-bottom: 0.25rem;
+}
+
+.pred-stat-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--nx-heading);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Filter Pills ── */
+
+.pred-filters {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.pred-pill {
+    padding: 0.35rem 0.85rem;
+    border: 1px solid var(--nx-border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--nx-text-secondary);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--nx-transition);
+    font-family: var(--nx-font);
+}
+
+.pred-pill:hover {
+    border-color: var(--nx-border-hover);
+    color: var(--nx-text);
+}
+
+.pred-pill.active {
+    background: var(--nx-accent-soft);
+    border-color: var(--nx-accent);
+    color: var(--nx-accent-light);
+}
+
+/* ── Section Containers ── */
+
+.pred-section {
+    margin-bottom: 1.5rem;
+}
+
+.pred-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--nx-heading);
+    cursor: pointer;
+    padding: 0.6rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    list-style: none;
+}
+
+.pred-section-title::-webkit-details-marker { display: none; }
+
+.pred-section-title::before {
+    content: "▸";
+    font-size: 0.75rem;
+    color: var(--nx-text-dim);
+    transition: transform var(--nx-transition);
+}
+
+.pred-section[open] > .pred-section-title::before {
+    transform: rotate(90deg);
+}
+
+.pred-count {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: var(--nx-glass);
+    color: var(--nx-text-secondary);
+}
+
+/* ── Prediction Cards ── */
+
+.pred-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.pred-card {
+    background: var(--nx-bg-raised);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius-lg);
+    padding: 1rem 1.25rem;
+    transition: border-color var(--nx-transition);
+}
+
+.pred-card:hover {
+    border-color: var(--nx-border-hover);
+}
+
+.pred-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+}
+
+.pred-card-question {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--nx-heading);
+    line-height: 1.45;
+    margin-bottom: 0.65rem;
+}
+
+.pred-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+/* ── Probability Row ── */
+
+.pred-prob-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.pred-prob {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--nx-heading);
+    font-variant-numeric: tabular-nums;
+}
+
+.pred-market-prob {
+    font-size: 0.8rem;
+    color: var(--nx-text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.pred-gap {
+    font-size: 0.72rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+    font-weight: 500;
+}
+
+/* ── Probability Bar ── */
+
+.prob-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--nx-glass);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.prob-bar-fill {
+    height: 100%;
+    background: var(--nx-accent);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+/* ── Verdict Badges ── */
+
+.pred-verdict {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+}
+
+.pred-verdict-yes {
+    background: var(--nx-green-soft);
+    color: var(--nx-green);
+}
+
+.pred-verdict-no {
+    background: var(--nx-red-soft);
+    color: var(--nx-red);
+}
+
+.pred-verdict-uncertain {
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+}
+
+/* ── Engine Badges ── */
+
+.engine-badge {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+}
+
+.engine-badge-production {
+    background: var(--nx-accent-soft);
+    color: var(--nx-accent-light);
+}
+
+.engine-badge-strawman {
+    background: var(--nx-glass);
+    color: var(--nx-text-dim);
+}
+
+.engine-badge-research {
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+}
+
+/* ── Source & Countdown Badges ── */
+
+.source-badge {
+    font-size: 0.68rem;
+    font-weight: 500;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+}
+
+.source-kalshi {
+    background: var(--nx-blue-soft);
+    color: var(--nx-blue);
+}
+
+.source-kg {
+    background: var(--nx-green-soft);
+    color: var(--nx-green);
+}
+
+.countdown-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    background: var(--nx-red-soft);
+    color: var(--nx-red);
+}
+
+/* ── Evidence & Meta ── */
+
+.pred-evidence {
+    font-size: 0.78rem;
+    color: var(--nx-green);
+    font-weight: 500;
+}
+
+.pred-meta-dim {
+    font-size: 0.72rem;
+    color: var(--nx-text-dim);
+}
+
+/* ── Resolved Status ── */
+
+.pred-status {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+}
+
+.pred-status-hit {
+    background: var(--nx-green-soft);
+    color: var(--nx-green);
+}
+
+.pred-status-miss {
+    background: var(--nx-red-soft);
+    color: var(--nx-red);
+}
+
+.pred-status-pending {
+    background: var(--nx-glass);
+    color: var(--nx-text-dim);
+}
+.pred-resolved-q { max-width: 500px; }
+.pred-q-clamp {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    cursor: pointer;
+}
+.pred-q-clamp.pred-q-expanded {
+    -webkit-line-clamp: unset;
+    overflow: visible;
+}
+
+/* ── Engine Info Grid ── */
+
+.pred-engines-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.pred-engine-card {
+    padding: 0.85rem 1rem;
+    background: var(--nx-bg-raised);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+}
+
+/* ── Grouped Market Layout ── */
+
+.pred-market-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.pred-market-row {
+    background: var(--nx-bg-raised);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    padding: 0.85rem 1rem;
+    transition: border-color var(--nx-transition);
+}
+
+.pred-market-row:hover {
+    border-color: var(--nx-border-hover);
+}
+
+.pred-market-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+}
+
+.pred-market-question {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--nx-heading);
+    line-height: 1.4;
+}
+
+.pred-market-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.pred-ticker {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--nx-text-dim);
+    background: var(--nx-glass);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+}
+
+.pred-market-price-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+}
+
+.pred-market-label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--nx-text-dim);
+    width: 5.5rem;
+    flex-shrink: 0;
+    text-align: right;
+}
+
+.prob-bar-market {
+    background: var(--nx-glass-subtle);
+}
+
+.prob-bar-fill-market {
+    background: var(--nx-blue) !important;
+    opacity: 0.5;
+}
+
+.pred-engine-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.15rem 0;
+}
+
+.pred-engine-row .engine-badge {
+    width: 5.5rem;
+    flex-shrink: 0;
+    text-align: center;
+}
+
+.pred-engine-row .prob-bar {
+    flex: 1;
+}
+
+.pred-prob-sm {
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--nx-heading);
+    width: 2.5rem;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.pred-prob-yes { color: var(--nx-green); }
+.pred-prob-no { color: var(--nx-red); }
+
+.pred-verdict-mini {
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 0.08rem 0.35rem;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.pred-gap-mini {
+    font-size: 0.68rem;
+    color: var(--nx-text-dim);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    width: 3rem;
+    text-align: right;
+}
+
+.pred-consensus-row {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.3rem;
+    padding-top: 0.3rem;
+    border-top: 1px solid var(--nx-glass-border);
 }

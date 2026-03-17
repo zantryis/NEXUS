@@ -1,87 +1,176 @@
 {% extends "base.html" %}
 {% block title %}Nexus — Predictions{% endblock %}
+{% block nav_predictions %}active{% endblock %}
 {% block content %}
 
 <div class="page-header">
     <h2>Predictions</h2>
 </div>
 
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-    <div class="card" style="text-align: center; padding: 1.5rem;">
-        <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--nx-text-dim); margin-bottom: 0.5rem;">Total</div>
-        <div style="font-size: 1.8rem; font-weight: 700;">{{ summary.total }}</div>
+{# ── Summary Stats ── #}
+<div class="pred-summary">
+    <div class="pred-stat">
+        <div class="pred-stat-label">Markets</div>
+        <div class="pred-stat-value">{{ summary.unique_markets }}</div>
     </div>
-    <div class="card" style="text-align: center; padding: 1.5rem;">
-        <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--nx-text-dim); margin-bottom: 0.5rem;">Resolved</div>
-        <div style="font-size: 1.8rem; font-weight: 700;">{{ summary.resolved }}</div>
+    <div class="pred-stat">
+        <div class="pred-stat-label">Engines</div>
+        <div class="pred-stat-value">{{ summary.engines_active }}</div>
     </div>
-    <div class="card" style="text-align: center; padding: 1.5rem;">
-        <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--nx-text-dim); margin-bottom: 0.5rem;">Our Brier</div>
-        <div style="font-size: 1.8rem; font-weight: 700;">{% if summary.mean_brier is not none %}{{ "%.3f"|format(summary.mean_brier) }}{% else %}&mdash;{% endif %}</div>
+    <div class="pred-stat">
+        <div class="pred-stat-label">Resolved</div>
+        <div class="pred-stat-value">{{ summary.resolved }}</div>
     </div>
-    <div class="card" style="text-align: center; padding: 1.5rem;">
-        <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--nx-text-dim); margin-bottom: 0.5rem;">Market Brier</div>
-        <div style="font-size: 1.8rem; font-weight: 700;">{% if summary.market_mean_brier is not none %}{{ "%.3f"|format(summary.market_mean_brier) }}{% else %}&mdash;{% endif %}</div>
+    <div class="pred-stat">
+        <div class="pred-stat-label">Our Brier</div>
+        <div class="pred-stat-value">{% if summary.mean_brier is not none %}{{ "%.3f"|format(summary.mean_brier) }}{% else %}&mdash;{% endif %}</div>
     </div>
-    <div class="card" style="text-align: center; padding: 1.5rem;">
-        <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--nx-text-dim); margin-bottom: 0.5rem;">Accuracy</div>
-        <div style="font-size: 1.8rem; font-weight: 700;">{% if summary.accuracy is not none %}{{ summary.accuracy }}%{% else %}&mdash;{% endif %}</div>
+    <div class="pred-stat">
+        <div class="pred-stat-label">vs Market</div>
+        <div class="pred-stat-value">
+            {% if summary.beat_market is not none %}
+                {% if summary.beat_market %}
+                    <span style="color: var(--nx-green);">&#9650; Beating</span>
+                {% else %}
+                    <span style="color: var(--nx-red);">&#9660; Behind</span>
+                {% endif %}
+            {% else %}&mdash;{% endif %}
+        </div>
     </div>
 </div>
 
-{% if forecasts %}
-<div class="card-section">
-    <div class="card-section-title">Predictions (Last 90 Days)</div>
-</div>
-<table class="data-table">
-    <thead>
-        <tr>
-            <th>Date</th>
-            <th>Question</th>
-            <th class="num">Our Prob</th>
-            <th class="num">Market</th>
-            <th class="num">Gap</th>
-            <th>Outcome</th>
-            <th class="num">Brier</th>
-            <th>Status</th>
-        </tr>
-    </thead>
-    <tbody>
-    {% for q in forecasts %}
-        <tr>
-            <td>{{ q.generated_for }}</td>
-            <td title="{{ q.question }}">{{ q.question[:80] }}{% if q.question|length > 80 %}...{% endif %}</td>
-            <td class="num">{{ "%.0f"|format(q.probability * 100) }}%</td>
-            <td class="num">{% if q.market_prob is not none %}{{ "%.0f"|format(q.market_prob * 100) }}%{% else %}&mdash;{% endif %}</td>
-            <td class="num">{% if q.gap_pp is not none %}{{ q.gap_pp }}pp{% else %}&mdash;{% endif %}</td>
-            <td>
-                {% if q.outcome_status == 'resolved' %}
-                    {% if q.resolved_bool %}YES{% else %}NO{% endif %}
-                {% else %}
-                    <span style="color: var(--nx-text-dim);">pending</span>
+{# ── Active Predictions, grouped by event ── #}
+{% for event_group in pending_events %}
+<details class="pred-section" open>
+    <summary class="pred-section-title">
+        {% if event_group.title != "Standalone" %}
+            {{ event_group.title }}
+        {% else %}
+            Standalone Markets
+        {% endif %}
+        <span class="pred-count">{{ event_group.markets|length }}</span>
+        {% if event_group.source_type == "kalshi" %}<span class="source-badge source-kalshi">Kalshi</span>{% endif %}
+        {% if event_group.source_type == "kg" %}<span class="source-badge source-kg">KG</span>{% endif %}
+    </summary>
+
+    <div class="pred-market-list">
+    {% for market in event_group.markets %}
+        <div class="pred-market-row">
+            <div class="pred-market-header">
+                <span class="pred-market-question">{{ market.display_question }}</span>
+                <span class="pred-market-meta">
+                    {% if market.ticker %}<span class="pred-ticker">{{ market.ticker }}</span>{% endif %}
+                    {% if market.days_until_resolution is not none %}
+                        <span class="pred-meta-dim">{{ market.days_until_resolution }}d</span>
+                    {% endif %}
+                </span>
+            </div>
+
+            {# Kalshi market price bar #}
+            {% if market.market_prob is not none %}
+            <div class="pred-market-price-row">
+                <span class="pred-market-label">Market</span>
+                <div class="prob-bar prob-bar-market"><div class="prob-bar-fill prob-bar-fill-market" style="width: {{ (market.market_prob * 100)|round }}%"></div></div>
+                <span class="pred-prob-sm">{{ "%.0f"|format(market.market_prob * 100) }}%</span>
+            </div>
+            {% endif %}
+
+            {# Engine comparison rows #}
+            {% for eng_name, eq in market.engine_list %}
+            <div class="pred-engine-row">
+                <span class="engine-badge engine-badge-{{ engine_info[eng_name]['class'] if eng_name in engine_info else 'unknown' }}">{{ engine_info[eng_name]['label'] if eng_name in engine_info else eng_name }}</span>
+                <div class="prob-bar"><div class="prob-bar-fill" style="width: {{ (eq.probability * 100)|round }}%"></div></div>
+                <span class="pred-prob-sm {% if eq.verdict == 'yes' %}pred-prob-yes{% elif eq.verdict == 'no' %}pred-prob-no{% endif %}">{{ "%.0f"|format(eq.probability * 100) }}%</span>
+                {% if eq.verdict %}
+                    <span class="pred-verdict-mini pred-verdict-{{ eq.verdict }}">{{ eq.verdict|upper }}</span>
                 {% endif %}
-            </td>
-            <td class="num">{% if q.brier_score is not none %}{{ "%.3f"|format(q.brier_score) }}{% else %}&mdash;{% endif %}</td>
-            <td>
-                {% if q.status_label == 'hit' %}
-                    <span style="color: var(--nx-accent-green, #4ade80);">hit</span>
-                {% elif q.status_label == 'miss' %}
-                    <span style="color: var(--nx-accent-red, #f87171);">miss</span>
-                {% else %}
-                    <span style="color: var(--nx-text-dim);">pending</span>
+                {% if eq.gap_pp is not none %}
+                    <span class="pred-gap-mini">{{ eq.gap_pp }}pp</span>
                 {% endif %}
-            </td>
-        </tr>
+            </div>
+            {% endfor %}
+
+            {# Consensus + spread #}
+            {% if market.engine_count > 1 %}
+            <div class="pred-consensus-row">
+                <span class="pred-meta-dim">Consensus {{ "%.0f"|format(market.consensus_prob * 100) }}%</span>
+                {% if market.spread_pp is not none %}
+                    <span class="pred-meta-dim">&middot; {{ market.spread_pp }}pp spread</span>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
     {% endfor %}
-    </tbody>
-</table>
-{% else %}
+    </div>
+</details>
+{% endfor %}
+
+{# ── Resolved ── #}
+{% if resolved_markets %}
+<details class="pred-section">
+    <summary class="pred-section-title">Resolved <span class="pred-count">{{ resolved_markets|length }}</span></summary>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Question</th>
+                <th>Engine</th>
+                <th class="num">Ours</th>
+                <th class="num">Market</th>
+                <th>Outcome</th>
+                <th class="num">Brier</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for market in resolved_markets %}
+            {% for eng_name, eq in market.engine_list %}
+            <tr>
+                {% if loop.first %}
+                <td rowspan="{{ market.engine_count }}" class="pred-resolved-q">
+                    <span class="pred-q-clamp" onclick="this.classList.toggle('pred-q-expanded')">{{ market.display_question }}</span>
+                </td>
+                {% endif %}
+                <td><span class="engine-badge engine-badge-{{ engine_info[eng_name]['class'] if eng_name in engine_info else 'unknown' }}">{{ engine_info[eng_name]['label'] if eng_name in engine_info else eng_name }}</span></td>
+                <td class="num">{{ "%.0f"|format(eq.probability * 100) }}%</td>
+                <td class="num">{% if eq.market_prob is not none %}{{ "%.0f"|format(eq.market_prob * 100) }}%{% else %}&mdash;{% endif %}</td>
+                <td>{% if eq.resolved_bool is not none %}{% if eq.resolved_bool %}YES{% else %}NO{% endif %}{% else %}&mdash;{% endif %}</td>
+                <td class="num">{% if eq.brier_score is not none %}{{ "%.3f"|format(eq.brier_score) }}{% else %}&mdash;{% endif %}</td>
+                <td><span class="pred-status pred-status-{{ eq.status_label }}">{{ eq.status_label }}</span></td>
+            </tr>
+            {% endfor %}
+        {% endfor %}
+        </tbody>
+    </table>
+</details>
+{% endif %}
+
+{# ── Empty state ── #}
+{% if not pending_events and not resolved_markets %}
 <div class="empty-state">
-    <p>No predictions yet. Run the Kalshi loop or actor forecast engine to generate predictions.</p>
+    <p>No predictions yet. Run the Kalshi loop to generate predictions.</p>
     <p style="font-size: 0.85rem; color: var(--nx-text-dim); margin-top: 0.5rem;">
-        <code>python -m nexus forecast kalshi-loop</code> or <code>python -m nexus forecast generate</code>
+        <code>python -m nexus forecast kalshi-loop --engine structural</code>
     </p>
 </div>
 {% endif %}
+
+{# ── Engine Legend ── #}
+<details class="pred-section" style="margin-top: 2rem;">
+    <summary class="pred-section-title">Engine Legend</summary>
+    <div class="pred-engines-grid">
+    {% for key, info in engine_info.items() %}
+        {% if key in engines_active %}
+        <div class="pred-engine-card">
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem;">
+                <span class="engine-badge engine-badge-{{ info['class'] }}">{{ info.label }}</span>
+                <span class="pred-meta-dim">{{ info.calls }} calls</span>
+                {% if info.uses_kg %}<span class="pred-evidence">KG</span>{% endif %}
+            </div>
+            <div style="font-size: 0.82rem; color: var(--nx-text-dim);">{{ info.desc }}</div>
+        </div>
+        {% endif %}
+    {% endfor %}
+    </div>
+</details>
 
 {% endblock %}

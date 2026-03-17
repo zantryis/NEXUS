@@ -4,13 +4,38 @@
 {% block content %}
 
 <div class="page-header">
-    <h2>Threads</h2>
+    <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
+        <h2>Threads</h2>
+        <span class="thread-count-badge">{{ threads | length }}</span>
+    </div>
+
+    {# ── Topic filter ── #}
+    {% if topic_counts %}
     <div class="type-filters" style="margin-top: 0.75rem;">
-        <a href="/threads/" class="type-filter {{ 'active' if not filter_status }}">All</a>
-        <a href="/threads/?status=active" class="type-filter {{ 'active' if filter_status == 'active' }}">Active</a>
-        <a href="/threads/?status=emerging" class="type-filter {{ 'active' if filter_status == 'emerging' }}">Emerging</a>
-        <a href="/threads/?status=stale" class="type-filter {{ 'active' if filter_status == 'stale' }}">Stale</a>
-        <a href="/threads/?status=resolved" class="type-filter {{ 'active' if filter_status == 'resolved' }}">Resolved</a>
+        <a href="/threads/{{ '?status=' ~ filter_status if filter_status else '' }}"
+           class="type-filter {{ 'active' if not filter_topic }}">All topics</a>
+        {% for slug, count in topic_counts %}
+        <a href="/threads/?topic={{ slug }}{{ '&status=' ~ filter_status if filter_status else '' }}"
+           class="type-filter {{ 'active' if filter_topic == slug }}">
+            {{ slug | replace('-', ' ') | title }}
+            <span class="filter-count">{{ count }}</span>
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ── Status filter ── #}
+    <div class="type-filters" style="margin-top: 0.35rem;">
+        <a href="/threads/{{ '?topic=' ~ filter_topic if filter_topic else '' }}"
+           class="type-filter {{ 'active' if not filter_status }}">All</a>
+        <a href="/threads/?status=active{{ '&topic=' ~ filter_topic if filter_topic else '' }}"
+           class="type-filter {{ 'active' if filter_status == 'active' }}">Active</a>
+        <a href="/threads/?status=emerging{{ '&topic=' ~ filter_topic if filter_topic else '' }}"
+           class="type-filter {{ 'active' if filter_status == 'emerging' }}">Emerging</a>
+        <a href="/threads/?status=stale{{ '&topic=' ~ filter_topic if filter_topic else '' }}"
+           class="type-filter {{ 'active' if filter_status == 'stale' }}">Stale</a>
+        <a href="/threads/?status=resolved{{ '&topic=' ~ filter_topic if filter_topic else '' }}"
+           class="type-filter {{ 'active' if filter_status == 'resolved' }}">Resolved</a>
     </div>
 </div>
 
@@ -25,10 +50,19 @@
     <div class="thread-card-meta">
         <span class="status-dot {{ t.status }}"></span>
         <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
+        {% if t.trajectory_label %}
+        <span class="badge" style="background: var(--nx-blue-soft); color: var(--nx-blue);">{{ t.trajectory_label | replace('_', ' ') }}</span>
+        {% endif %}
+        {% if t.snapshot_count %}
+        <span class="thread-stat">{{ t.snapshot_count }} snapshots</span>
+        {% endif %}
         {% if t.key_entities %}
-        {% for e in t.key_entities[:3] %}
+        {% for e in t.key_entities[:4] %}
         <span class="entity-tag">{{ e }}</span>
         {% endfor %}
+        {% if t.key_entities | length > 4 %}
+        <span class="entity-tag" style="opacity: 0.5;">+{{ t.key_entities | length - 4 }}</span>
+        {% endif %}
         {% endif %}
     </div>
     <div class="thread-card-time">Updated {{ t.updated_at | timeago }}{% if t.created_at %} &middot; Created {{ t.created_at | timeago }}{% endif %}</div>
@@ -52,7 +86,7 @@
 </div>
 {% else %}
 <div class="empty-state">
-    <p>No threads found{% if filter_status %} with status "{{ filter_status }}"{% endif %}.</p>
+    <p>No threads found{% if filter_status %} with status "{{ filter_status }}"{% endif %}{% if filter_topic %} in topic "{{ filter_topic | replace('-', ' ') | title }}"{% endif %}.</p>
 </div>
 {% endif %}
 

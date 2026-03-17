@@ -26,6 +26,68 @@ TOPIC_EMOJI = {
 }
 
 
+async def _enrich_cross_topic_signals(store, signals) -> list[dict]:
+    """Resolve event summaries for cross-topic signals and deduplicate by event pair."""
+    if not signals:
+        return []
+
+    # Collect all event IDs we need
+    all_event_ids = set()
+    for s in signals:
+        all_event_ids.update(s.event_ids)
+        all_event_ids.update(s.related_event_ids)
+
+    if not all_event_ids:
+        return []
+
+    # Batch-fetch event summaries and thread links
+    placeholders = ",".join("?" * len(all_event_ids))
+    cursor = await store.db.execute(
+        f"SELECT e.id, e.summary, e.topic_slug, te.thread_id, t.slug, t.headline "
+        f"FROM events e "
+        f"LEFT JOIN thread_events te ON e.id = te.event_id "
+        f"LEFT JOIN threads t ON te.thread_id = t.id "
+        f"WHERE e.id IN ({placeholders})",
+        list(all_event_ids),
+    )
+    rows = await cursor.fetchall()
+    event_map = {}
+    for r in rows:
+        eid = r[0]
+        if eid not in event_map:  # first thread wins for display
+            event_map[eid] = {
+                "summary": r[1][:120],
+                "topic_slug": r[2],
+                "thread_slug": r[4],
+                "thread_headline": r[5],
+            }
+
+    # Deduplicate: group by (source_event_set, related_event_set) to avoid
+    # showing "Pentagon" and "US Department of Defense" as separate bridges
+    seen_pairs = set()
+    bridges = []
+    for s in signals:
+        pair_key = (frozenset(s.event_ids), frozenset(s.related_event_ids))
+        if pair_key in seen_pairs:
+            continue
+        seen_pairs.add(pair_key)
+
+        source_event = event_map.get(s.event_ids[0]) if s.event_ids else None
+        related_event = event_map.get(s.related_event_ids[0]) if s.related_event_ids else None
+
+        bridges.append({
+            "shared_entity": s.shared_entity,
+            "related_topic_slug": s.related_topic_slug,
+            "observed_at": s.observed_at,
+            "source_summary": source_event["summary"] if source_event else None,
+            "source_thread_slug": source_event["thread_slug"] if source_event else None,
+            "related_summary": related_event["summary"] if related_event else None,
+            "related_thread_slug": related_event["thread_slug"] if related_event else None,
+        })
+
+    return bridges[:4]  # cap for sidebar space
+
+
 def _topic_emoji(slug: str) -> str:
     for key, emoji in TOPIC_EMOJI.items():
         if key in slug.lower():
@@ -179,7 +241,10 @@ async def _build_topics_data(store, max_threads: int = 3, max_events: int = 2):
             })
 
         projection = await store.get_latest_projection(slug)
-        cross_topic = await store.get_cross_topic_signals(slug, limit=3)
+        cross_topic = await store.get_cross_topic_signals(slug, limit=6)
+
+        # Enrich cross-topic signals with event summaries and deduplicate by event pair
+        enriched_bridges = await _enrich_cross_topic_signals(store, cross_topic)
 
         topics_data.append({
             "slug": slug,
@@ -188,7 +253,7 @@ async def _build_topics_data(store, max_threads: int = 3, max_events: int = 2):
             "thread_count": ts.get("thread_count", len(threads_raw)),
             "threads": topic_threads,
             "projection": projection,
-            "cross_topic_signals": cross_topic,
+            "cross_topic_signals": enriched_bridges,
         })
 
     return topics_data

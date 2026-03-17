@@ -105,50 +105,6 @@
                 </div>
             </div>
 
-            {% if topic.projection %}
-            <div class="analysis-panel" style="margin-bottom: 1rem;">
-                <div class="analysis-card convergence">
-                    <div class="analysis-card-header">Forward Look</div>
-                    <div class="analysis-card-body">
-                        {% if topic.projection.items %}
-                        {% for item in topic.projection.items %}
-                        <div class="analysis-item">
-                            <div class="analysis-fact">{{ item.claim }}</div>
-                            <div class="analysis-sources">
-                                <span class="source-badge">{{ item.confidence }}</span>
-                                <span class="source-badge">{{ item.horizon_days }}d</span>
-                                <span class="source-badge">watch: {{ item.signpost }}</span>
-                            </div>
-                        </div>
-                        {% endfor %}
-                        {% else %}
-                        <div class="analysis-item">
-                            <div class="analysis-fact">{{ topic.projection.summary or 'History not sufficient yet.' }}</div>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-
-            {% if topic.cross_topic_signals %}
-            <div class="analysis-panel" style="margin-bottom: 1rem;">
-                <div class="analysis-card divergence">
-                    <div class="analysis-card-header">Cross-Topic Bridges</div>
-                    <div class="analysis-card-body">
-                        {% for signal in topic.cross_topic_signals %}
-                        <div class="analysis-item">
-                            <div class="analysis-fact">{{ signal.shared_entity }} linked to {{ signal.related_topic_slug | replace('-', ' ') }}</div>
-                            <div class="analysis-sources">
-                                <span class="source-badge">{{ signal.observed_at }}</span>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-
             {% for thread in topic.threads %}
             <div class="briefing-thread-card">
                 <div class="briefing-thread-header">
@@ -236,6 +192,49 @@
                         <span class="sidebar-breaking-score">[{{ alert.significance_score }}]</span>
                     </div>
                     {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if topic.projection %}
+            <div class="sidebar-section">
+                <div class="sidebar-title">Forward Look</div>
+                {% if topic.projection.items %}
+                {% for item in topic.projection.items[:3] %}
+                <div class="sidebar-insight">
+                    <div class="sidebar-insight-claim">{{ item.signpost }}</div>
+                    <div style="display:flex;gap:0.3rem;flex-wrap:wrap;margin-top:0.25rem;">
+                        <span class="source-badge">{{ item.confidence }} confidence</span>
+                        <span class="source-badge">{{ item.horizon_days }}d horizon</span>
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="sidebar-insight">
+                    <div class="sidebar-insight-claim">{{ topic.projection.summary or 'Not enough history yet.' }}</div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if topic.cross_topic_signals %}
+            <div class="sidebar-section">
+                <div class="sidebar-title">Cross-Topic Bridges</div>
+                {% for signal in topic.cross_topic_signals %}
+                <div class="sidebar-bridge">
+                    <div class="sidebar-bridge-entity">{{ signal.shared_entity }}</div>
+                    {% if signal.source_summary %}
+                    <div class="sidebar-bridge-event">
+                        {% if signal.source_thread_slug %}<a href="/threads/{{ signal.source_thread_slug }}">{{ signal.source_summary }}</a>{% else %}{{ signal.source_summary }}{% endif %}
+                    </div>
+                    {% endif %}
+                    {% if signal.related_summary %}
+                    <div class="sidebar-bridge-event sidebar-bridge-related">
+                        {% if signal.related_thread_slug %}<a href="/threads/{{ signal.related_thread_slug }}">{{ signal.related_summary }}</a>{% else %}{{ signal.related_summary }}{% endif %}
+                    </div>
+                    {% endif %}
+                    <span class="sidebar-time">{{ signal.observed_at }} &middot; {{ signal.related_topic_slug | replace('-', ' ') }}</span>
                 </div>
                 {% endfor %}
             </div>
