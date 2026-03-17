@@ -27,6 +27,11 @@
 <div class="alert-error">
     Choose a valid preset before saving.
 </div>
+{% elif error == "validation" %}
+<div class="alert-error">
+    Some settings are invalid. Please fix the highlighted fields:
+    {% for f in validation_fields %}{% if f %}<strong>{{ f }}</strong>{{ ", " if not loop.last }}{% endif %}{% endfor %}
+</div>
 {% endif %}
 
 <form method="post" action="/settings/save" id="settings-form">
@@ -60,7 +65,7 @@
 <!-- Model Preset -->
 <div class="settings-section open">
     <div class="settings-section-header" onclick="this.parentElement.classList.toggle('open')">
-        Models <span class="toggle-icon">+</span>
+        Models <span class="restart-required" title="Requires restart to take effect">restart required</span> <span class="toggle-icon">+</span>
     </div>
     <div class="settings-section-body">
         <div class="form-group">
@@ -109,8 +114,8 @@
                    value="{{ config.user.name if config else raw.get('user', {}).get('name', '') }}">
         </div>
         <div class="form-group">
-            <label for="timezone">Timezone</label>
-            <input type="text" name="timezone" id="timezone" class="form-input"
+            <label for="timezone">Timezone {% if "timezone" in validation_fields %}<span class="field-error">Invalid timezone</span>{% endif %}</label>
+            <input type="text" name="timezone" id="timezone" class="form-input {{ 'input-error' if 'timezone' in validation_fields }}"
                    value="{{ config.user.timezone if config else raw.get('user', {}).get('timezone', 'UTC') }}"
                    placeholder="e.g. America/New_York">
         </div>
@@ -131,8 +136,8 @@
     <div class="settings-section-body">
         <div class="form-row">
             <div class="form-group">
-                <label for="schedule">Schedule (HH:MM)</label>
-                <input type="time" name="schedule" id="schedule" class="form-input"
+                <label for="schedule">Schedule (HH:MM) {% if "schedule" in validation_fields %}<span class="field-error">Invalid time</span>{% endif %}</label>
+                <input type="time" name="schedule" id="schedule" class="form-input {{ 'input-error' if 'schedule' in validation_fields }}"
                        value="{{ config.briefing.schedule if config else raw.get('briefing', {}).get('schedule', '06:00') }}">
                 <span class="form-hint">Your briefing will be ready at this time each day.</span>
             </div>
@@ -172,7 +177,7 @@
             </label>
         </div>
         <div class="form-group">
-            <label for="tts_backend">TTS Backend</label>
+            <label for="tts_backend">TTS Backend <span class="restart-required" title="Requires restart to take effect">restart required</span></label>
             <select name="tts_backend" id="tts_backend" class="form-select" onchange="updateVoiceOptions()">
                 {% set current_backend = config.audio.tts_backend if config else raw.get('audio', {}).get('tts_backend', 'gemini') %}
                 <option value="gemini" {% if current_backend == 'gemini' %}selected{% endif %}>Gemini</option>
@@ -199,6 +204,16 @@
                     {% endfor %}
                 </select>
             </div>
+        </div>
+        <div class="form-group">
+            <label for="podcast_style">Podcast Style</label>
+            <select name="podcast_style" id="podcast_style" class="form-select">
+                {% set current_ps = config.audio.podcast_style if config and config.audio else raw.get('audio', {}).get('podcast_style', 'conversational') %}
+                {% for ps in podcast_styles %}
+                <option value="{{ ps }}" {% if current_ps == ps %}selected{% endif %}>{{ ps | title }}</option>
+                {% endfor %}
+            </select>
+            <span class="form-hint">Sets the tone and pacing of the podcast dialogue.</span>
         </div>
         <div id="elevenlabs-fetch" style="display:{% if current_backend == 'elevenlabs' %}block{% else %}none{% endif %};margin-bottom:0.75rem;">
             <button type="button" class="btn-secondary" onclick="fetchElevenLabsVoices()" style="font-size:0.8rem;">Fetch My Voices</button>

@@ -48,6 +48,7 @@ class AudioConfig(BaseModel):
     tts_model: str = "gemini-2.5-flash-preview-tts"
     voice_host_a: str = "Kore"
     voice_host_b: str = "Puck"
+    podcast_style: str = "conversational"  # conversational | analytical | energetic | formal
     # ElevenLabs voice tuning (only used when tts_backend == "elevenlabs")
     elevenlabs_stability: float = Field(default=0.7, ge=0.0, le=1.0)
     elevenlabs_similarity_boost: float = Field(default=0.8, ge=0.0, le=1.0)

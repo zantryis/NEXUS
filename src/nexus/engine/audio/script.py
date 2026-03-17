@@ -24,6 +24,27 @@ class DialogueScript(BaseModel):
     turns: list[DialogueTurn] = Field(default_factory=list)
 
 
+PODCAST_STYLE_ADDENDUMS = {
+    "conversational": (
+        "\n\nSTYLE: Keep the dialogue loose and natural — like two colleagues chatting "
+        "over coffee. Occasional humor, relaxed pacing, genuine reactions."
+    ),
+    "analytical": (
+        "\n\nSTYLE: Prioritize depth and precision. Both hosts should cite data, "
+        "draw comparisons, and explain mechanisms. Less banter, more substance."
+    ),
+    "energetic": (
+        "\n\nSTYLE: High energy, punchy delivery. Short sentences, strong hooks, "
+        "dramatic pauses. Open with the most surprising development. "
+        "Atlas should express genuine excitement or concern."
+    ),
+    "formal": (
+        "\n\nSTYLE: Professional broadcast tone. Measured pacing, precise language, "
+        "minimal humor. Think BBC World Service or NPR — authoritative and polished."
+    ),
+}
+
+
 EDITORIAL_DIALOGUE_ADDENDUM = (
     "\n\nEDITORIAL VOICE:\n"
     "Nova and Atlas have strong editorial opinions grounded in international law "
@@ -144,6 +165,11 @@ async def generate_dialogue_script(
     )
     if config.briefing.style == "editorial":
         system_prompt += EDITORIAL_DIALOGUE_ADDENDUM
+
+    # Apply podcast style addendum
+    podcast_style = getattr(config.audio, "podcast_style", "conversational")
+    if podcast_style in PODCAST_STYLE_ADDENDUMS:
+        system_prompt += PODCAST_STYLE_ADDENDUMS[podcast_style]
 
     try:
         response = await llm.complete(
