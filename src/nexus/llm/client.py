@@ -15,6 +15,22 @@ from typing import Optional
 import httpx
 from dotenv import dotenv_values
 
+# ── Retry / Circuit Breaker constants ──
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 1.0  # seconds; doubles each attempt (1, 2, 4)
+CIRCUIT_FAILURE_THRESHOLD = 5
+CIRCUIT_RECOVERY_TIMEOUT = 60.0  # seconds
+
+# Default timeouts per provider (seconds)
+PROVIDER_TIMEOUTS: dict[str, float] = {
+    "gemini": 60.0,
+    "anthropic": 120.0,
+    "openai": 60.0,
+    "deepseek": 60.0,
+    "litellm": 60.0,
+    "ollama": 120.0,
+}
+
 from nexus.config.models import BudgetConfig, ModelsConfig
 from nexus.llm.budget import BudgetDegradedError, BudgetExceededError, BudgetGuard
 from nexus.llm.cost import estimate_cost
@@ -78,6 +94,71 @@ def _is_auth_error(exc: Exception) -> bool:
     message = str(exc).lower()
     return "invalid vm proxy token" in message or "unauthorized" in message
 
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """Check if an error is transient and worth retrying."""
+    if isinstance(exc, (httpx.ConnectError, httpx.TimeoutException, ConnectionError, TimeoutError)):
+        return True
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        response = getattr(exc, "response", None)
+        if response is not None:
+            status = getattr(response, "status_code", None)
+    if status is not None:
+        return status in (429, 500, 502, 503, 504)
+    msg = str(exc).lower()
+    return any(p in msg for p in ("rate limit", "too many requests", "overloaded", "service unavailable"))
+
+
+class CircuitOpenError(Exception):
+    """Raised when a provider's circuit breaker is open."""
+
+
+class CircuitBreaker:
+    """Per-provider circuit breaker.
+
+    States: closed (normal) → open (blocking) → half_open (one test call).
+    """
+
+    def __init__(
+        self,
+        failure_threshold: int = CIRCUIT_FAILURE_THRESHOLD,
+        recovery_timeout: float = CIRCUIT_RECOVERY_TIMEOUT,
+    ):
+        self._threshold = failure_threshold
+        self._recovery_timeout = recovery_timeout
+        # Per-provider state
+        self._failures: dict[str, int] = defaultdict(int)
+        self._opened_at: dict[str, float] = {}
+        self._half_open: set[str] = set()
+
+    def check(self, provider: str) -> None:
+        """Raise CircuitOpenError if the provider circuit is open."""
+        if provider not in self._opened_at:
+            return  # closed
+        elapsed = time.monotonic() - self._opened_at[provider]
+        if elapsed >= self._recovery_timeout:
+            # Transition to half-open: allow one test call
+            self._half_open.add(provider)
+            del self._opened_at[provider]
+            return
+        raise CircuitOpenError(f"Circuit open for provider '{provider}'")
+
+    def record_success(self, provider: str) -> None:
+        self._failures[provider] = 0
+        self._half_open.discard(provider)
+        self._opened_at.pop(provider, None)
+
+    def record_failure(self, provider: str) -> None:
+        self._failures[provider] += 1
+        if provider in self._half_open:
+            # Half-open test call failed → re-open
+            self._half_open.discard(provider)
+            self._opened_at[provider] = time.monotonic()
+            return
+        if self._failures[provider] >= self._threshold:
+            self._opened_at[provider] = time.monotonic()
 
 
 def _resolve_provider(model_name: str) -> str:
@@ -184,6 +265,7 @@ class LLMClient:
         )
         self._store = None  # KnowledgeStore, set via set_store()
         self._pending_usage_tasks: set[asyncio.Task] = set()
+        self._circuit_breaker = CircuitBreaker()
 
         # Lazy-init Gemini
         if api_key:
@@ -368,8 +450,13 @@ class LLMClient:
         system_prompt: str,
         user_prompt: str,
         json_response: bool = False,
+        timeout_s: float | None = None,
     ) -> str:
-        """Send a completion request through the configured model."""
+        """Send a completion request through the configured model.
+
+        Args:
+            timeout_s: Per-call timeout in seconds. If None, uses provider default.
+        """
         configured_model = self.resolve_model(config_key)
         provider = _resolve_provider(configured_model)
         runtime_model = self._resolve_runtime_model(configured_model)
@@ -387,28 +474,56 @@ class LLMClient:
                     f"Daily budget limit reached, expensive operation '{config_key}' blocked"
                 )
 
-        t0 = time.monotonic()
+        # Circuit breaker check
+        self._circuit_breaker.check(provider)
 
-        if provider == "gemini":
-            text, in_tok, out_tok = await self._complete_gemini(
-                runtime_model, system_prompt, user_prompt, json_response)
-        elif provider == "anthropic":
-            text, in_tok, out_tok = await self._complete_anthropic(
-                runtime_model, system_prompt, user_prompt, json_response)
-        elif provider == "openai":
-            text, in_tok, out_tok = await self._complete_openai(
-                runtime_model, system_prompt, user_prompt, json_response)
-        elif provider == "deepseek":
-            text, in_tok, out_tok = await self._complete_deepseek(
-                runtime_model, system_prompt, user_prompt, json_response)
-        elif provider == "litellm":
-            text, in_tok, out_tok = await self._complete_litellm(
-                runtime_model, system_prompt, user_prompt, json_response)
-        elif provider == "ollama":
-            text, in_tok, out_tok = await self._complete_ollama(
-                runtime_model, system_prompt, user_prompt, json_response)
+        effective_timeout = timeout_s if timeout_s is not None else PROVIDER_TIMEOUTS.get(provider, 60.0)
+
+        t0 = time.monotonic()
+        last_exc: Exception | None = None
+
+        for attempt in range(MAX_RETRIES):
+            try:
+                if provider == "gemini":
+                    text, in_tok, out_tok = await self._complete_gemini(
+                        runtime_model, system_prompt, user_prompt, json_response, timeout_s=effective_timeout)
+                elif provider == "anthropic":
+                    text, in_tok, out_tok = await self._complete_anthropic(
+                        runtime_model, system_prompt, user_prompt, json_response, timeout_s=effective_timeout)
+                elif provider == "openai":
+                    text, in_tok, out_tok = await self._complete_openai(
+                        runtime_model, system_prompt, user_prompt, json_response, timeout_s=effective_timeout)
+                elif provider == "deepseek":
+                    text, in_tok, out_tok = await self._complete_deepseek(
+                        runtime_model, system_prompt, user_prompt, json_response, timeout_s=effective_timeout)
+                elif provider == "litellm":
+                    text, in_tok, out_tok = await self._complete_litellm(
+                        runtime_model, system_prompt, user_prompt, json_response, timeout_s=effective_timeout)
+                elif provider == "ollama":
+                    text, in_tok, out_tok = await self._complete_ollama(
+                        runtime_model, system_prompt, user_prompt, json_response, timeout_s=effective_timeout)
+                else:
+                    raise ValueError(f"Unsupported provider: {provider}")
+
+                # Success — record and return
+                self._circuit_breaker.record_success(provider)
+                break
+
+            except Exception as exc:
+                last_exc = exc
+                self._circuit_breaker.record_failure(provider)
+
+                if not _is_retryable(exc) or attempt == MAX_RETRIES - 1:
+                    raise
+
+                delay = RETRY_BASE_DELAY * (2 ** attempt)
+                logger.warning(
+                    "LLM call failed (attempt %d/%d, provider=%s): %s — retrying in %.1fs",
+                    attempt + 1, MAX_RETRIES, provider, exc, delay,
+                )
+                await asyncio.sleep(delay)
         else:
-            raise ValueError(f"Unsupported provider: {provider}")
+            raise last_exc  # type: ignore[misc]
 
         elapsed = time.monotonic() - t0
         self.usage.record(provider, usage_model, config_key, in_tok, out_tok, elapsed)
@@ -433,7 +548,8 @@ class LLMClient:
         return text
 
     async def _complete_gemini(
-        self, model: str, system_prompt: str, user_prompt: str, json_response: bool
+        self, model: str, system_prompt: str, user_prompt: str, json_response: bool,
+        *, timeout_s: float = 60.0,
     ) -> tuple[str, int, int]:
         if not self._gemini_client:
             raise RuntimeError("Gemini client not initialized — set GEMINI_API_KEY")
@@ -441,6 +557,7 @@ class LLMClient:
         from google.genai import types
         config = types.GenerateContentConfig(
             system_instruction=system_prompt,
+            http_options=types.HttpOptions(timeout=timeout_s),
         )
         if json_response:
             config.response_mime_type = "application/json"
@@ -456,7 +573,8 @@ class LLMClient:
         return response.text, in_tok, out_tok
 
     async def _complete_anthropic(
-        self, model: str, system_prompt: str, user_prompt: str, json_response: bool
+        self, model: str, system_prompt: str, user_prompt: str, json_response: bool,
+        *, timeout_s: float = 120.0,
     ) -> tuple[str, int, int]:
         if not self._anthropic_client:
             raise RuntimeError("Anthropic client not initialized — set ANTHROPIC_API_KEY")
@@ -470,6 +588,7 @@ class LLMClient:
             max_tokens=4096,
             system=effective_system,
             messages=[{"role": "user", "content": user_prompt}],
+            timeout=timeout_s,
         )
 
         in_tok = getattr(getattr(response, 'usage', None), 'input_tokens', 0) or 0
@@ -477,7 +596,8 @@ class LLMClient:
         return response.content[0].text, in_tok, out_tok
 
     async def _complete_ollama(
-        self, model: str, system_prompt: str, user_prompt: str, json_response: bool
+        self, model: str, system_prompt: str, user_prompt: str, json_response: bool,
+        *, timeout_s: float = 120.0,
     ) -> tuple[str, int, int]:
         model_name = model.removeprefix("ollama/")
         url = f"{self._ollama_base_url}/api/chat"
@@ -494,7 +614,7 @@ class LLMClient:
 
         try:
             async with httpx.AsyncClient() as client:
-                resp = await client.post(url, json=body, timeout=120.0)
+                resp = await client.post(url, json=body, timeout=timeout_s)
                 resp.raise_for_status()
         except httpx.ConnectError:
             raise RuntimeError(
@@ -508,7 +628,8 @@ class LLMClient:
         return text, in_tok, out_tok
 
     async def _complete_deepseek(
-        self, model: str, system_prompt: str, user_prompt: str, json_response: bool
+        self, model: str, system_prompt: str, user_prompt: str, json_response: bool,
+        *, timeout_s: float = 60.0,
     ) -> tuple[str, int, int]:
         if not self._deepseek_client:
             raise RuntimeError("DeepSeek client not initialized — set DEEPSEEK_API_KEY")
@@ -523,6 +644,7 @@ class LLMClient:
                 {"role": "system", "content": effective_system},
                 {"role": "user", "content": user_prompt},
             ],
+            "timeout": timeout_s,
         }
         if json_response:
             kwargs["response_format"] = {"type": "json_object"}
@@ -534,7 +656,8 @@ class LLMClient:
         return response.choices[0].message.content, in_tok, out_tok
 
     async def _complete_litellm(
-        self, model: str, system_prompt: str, user_prompt: str, json_response: bool
+        self, model: str, system_prompt: str, user_prompt: str, json_response: bool,
+        *, timeout_s: float = 60.0,
     ) -> tuple[str, int, int]:
         client = self._get_litellm_client()
         model_name = model.removeprefix("litellm/")
@@ -549,6 +672,7 @@ class LLMClient:
                 {"role": "system", "content": effective_system},
                 {"role": "user", "content": user_prompt},
             ],
+            "timeout": timeout_s,
         }
         if json_response:
             kwargs["response_format"] = {"type": "json_object"}
@@ -568,7 +692,8 @@ class LLMClient:
         return response.choices[0].message.content, in_tok, out_tok
 
     async def _complete_openai(
-        self, model: str, system_prompt: str, user_prompt: str, json_response: bool
+        self, model: str, system_prompt: str, user_prompt: str, json_response: bool,
+        *, timeout_s: float = 60.0,
     ) -> tuple[str, int, int]:
         if not self._openai_client:
             raise RuntimeError("OpenAI client not initialized — set OPENAI_API_KEY")
@@ -579,6 +704,7 @@ class LLMClient:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
+            "timeout": timeout_s,
         }
         if json_response:
             kwargs["response_format"] = {"type": "json_object"}
