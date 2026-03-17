@@ -1,7 +1,6 @@
 """Tests for pipeline artifact cleanup on crash."""
 
 import pytest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from nexus.engine.audio.pipeline import run_audio_pipeline

@@ -1,7 +1,6 @@
 """Tests for graceful shutdown behavior in runner.py."""
 
 import asyncio
-import sys
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -90,7 +89,6 @@ async def test_store_close_has_timeout(base_config, tmp_path):
     mock_store, mock_llm, mock_sched, mock_server = _make_runner_mocks()
 
     # Simulate store.close() hanging (replaced by timeout wrapper raising TimeoutError)
-    original_close = mock_store.close
     mock_store.close = AsyncMock(side_effect=asyncio.TimeoutError("hung"))
 
     with patch("nexus.runner.KnowledgeStore", return_value=mock_store), \
