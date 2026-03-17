@@ -1,6 +1,5 @@
 """Tests for LLM client resilience: retry, circuit breaker, timeouts."""
 
-import asyncio
 import time
 
 import httpx
