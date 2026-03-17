@@ -1,0 +1,1028 @@
+[
+  {
+    "ticker": "KXNEXTIRANLEADER-45JAN01-HKHO",
+    "question": "Will Hassan Khomeini be the next Supreme Leader of Iran?",
+    "outcome": false,
+    "settlement_date": "2026-03-08",
+    "cutoff_date": "2026-03-01",
+    "market_prob_at_cutoff": 0.15,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXNEXTIRANLEADER-45JAN01-HKHO",
+    "question": "Will Hassan Khomeini be the next Supreme Leader of Iran?",
+    "outcome": false,
+    "settlement_date": "2026-03-08",
+    "cutoff_date": "2026-02-22",
+    "market_prob_at_cutoff": 0.16,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXNEXTIRANLEADER-45JAN01-HKHO",
+    "question": "Will Hassan Khomeini be the next Supreme Leader of Iran?",
+    "outcome": false,
+    "settlement_date": "2026-03-08",
+    "cutoff_date": "2026-02-06",
+    "market_prob_at_cutoff": 0.16,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXNEXTIRANLEADER-45JAN01-ABO",
+    "question": "Will Position abolished be the next Supreme Leader of Iran?",
+    "outcome": false,
+    "settlement_date": "2026-03-08",
+    "cutoff_date": "2026-03-01",
+    "market_prob_at_cutoff": 0.25,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXNEXTIRANLEADER-45JAN01-ABO",
+    "question": "Will Position abolished be the next Supreme Leader of Iran?",
+    "outcome": false,
+    "settlement_date": "2026-03-08",
+    "cutoff_date": "2026-02-22",
+    "market_prob_at_cutoff": 0.53,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXNEXTIRANLEADER-45JAN01-ABO",
+    "question": "Will Position abolished be the next Supreme Leader of Iran?",
+    "outcome": false,
+    "settlement_date": "2026-03-08",
+    "cutoff_date": "2026-02-06",
+    "market_prob_at_cutoff": 0.41,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXNEXTIRANLEADER-45JAN01-ALAR",
+    "question": "Will Ali Larijani be the next Supreme Leader of Iran?",
+    "outcome": false,
+    "settlement_date": "2026-03-08",
+    "cutoff_date": "2026-03-01",
+    "market_prob_at_cutoff": 0.15,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXNEXTIRANLEADER-45JAN01-MKHA",
+    "question": "Will Mojtaba Khamenei be the next Supreme Leader of Iran?",
+    "outcome": true,
+    "settlement_date": "2026-03-08",
+    "cutoff_date": "2026-03-01",
+    "market_prob_at_cutoff": 0.26,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXNEXTIRANLEADER-45JAN01-MKHA",
+    "question": "Will Mojtaba Khamenei be the next Supreme Leader of Iran?",
+    "outcome": true,
+    "settlement_date": "2026-03-08",
+    "cutoff_date": "2026-02-22",
+    "market_prob_at_cutoff": 0.14,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXNEXTPOPE-35-PPAR",
+    "question": "Who will the next Pope be?",
+    "outcome": false,
+    "settlement_date": "2025-05-08",
+    "cutoff_date": "2025-05-01",
+    "market_prob_at_cutoff": 0.24,
+    "category": "World"
+  },
+  {
+    "ticker": "KXNEXTPOPE-35-PPAR",
+    "question": "Who will the next Pope be?",
+    "outcome": false,
+    "settlement_date": "2025-05-08",
+    "cutoff_date": "2025-04-24",
+    "market_prob_at_cutoff": 0.3,
+    "category": "World"
+  },
+  {
+    "ticker": "KXNEXTPOPE-35-PTURK",
+    "question": "Who will the next Pope be?",
+    "outcome": false,
+    "settlement_date": "2025-05-08",
+    "cutoff_date": "2025-05-01",
+    "market_prob_at_cutoff": 0.19,
+    "category": "World"
+  },
+  {
+    "ticker": "KXNEXTPOPE-35-MZUP",
+    "question": "Who will the next Pope be?",
+    "outcome": false,
+    "settlement_date": "2025-05-08",
+    "cutoff_date": "2025-05-01",
+    "market_prob_at_cutoff": 0.12,
+    "category": "World"
+  },
+  {
+    "ticker": "KXNEXTPOPE-35-MZUP",
+    "question": "Who will the next Pope be?",
+    "outcome": false,
+    "settlement_date": "2025-05-08",
+    "cutoff_date": "2025-04-24",
+    "market_prob_at_cutoff": 0.12,
+    "category": "World"
+  },
+  {
+    "ticker": "KXNEXTPOPE-35-LANT",
+    "question": "Who will the next Pope be?",
+    "outcome": false,
+    "settlement_date": "2025-05-08",
+    "cutoff_date": "2025-05-01",
+    "market_prob_at_cutoff": 0.2,
+    "category": "World"
+  },
+  {
+    "ticker": "KXNEXTPOPE-35-LANT",
+    "question": "Who will the next Pope be?",
+    "outcome": false,
+    "settlement_date": "2025-05-08",
+    "cutoff_date": "2025-04-24",
+    "market_prob_at_cutoff": 0.22,
+    "category": "World"
+  },
+  {
+    "ticker": "KXLALEADEROUT-35-NM",
+    "question": "Will Nicol\u00e1s Maduro leave office next in this set?",
+    "outcome": false,
+    "settlement_date": "2025-10-11",
+    "cutoff_date": "2025-10-04",
+    "market_prob_at_cutoff": 0.28,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXLALEADEROUT-35-NM",
+    "question": "Will Nicol\u00e1s Maduro leave office next in this set?",
+    "outcome": false,
+    "settlement_date": "2025-10-11",
+    "cutoff_date": "2025-09-11",
+    "market_prob_at_cutoff": 0.3,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXG7LEADEROUT-35-JT",
+    "question": "Will Justin Trudeau leave office next in this set?",
+    "outcome": true,
+    "settlement_date": "2025-03-17",
+    "cutoff_date": "2025-02-15",
+    "market_prob_at_cutoff": 0.82,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXG7LEADEROUT-35-OS",
+    "question": "Will Olaf Scholz leave office next in this set?",
+    "outcome": false,
+    "settlement_date": "2025-03-17",
+    "cutoff_date": "2025-03-03",
+    "market_prob_at_cutoff": 0.13,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXG7LEADEROUT-35-OS",
+    "question": "Will Olaf Scholz leave office next in this set?",
+    "outcome": false,
+    "settlement_date": "2025-03-17",
+    "cutoff_date": "2025-02-15",
+    "market_prob_at_cutoff": 0.16,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXROMANIATOP-30-GS",
+    "question": "Will George Simion be 1st in the next Romanian presidential election first round?",
+    "outcome": true,
+    "settlement_date": "2025-05-08",
+    "cutoff_date": "2025-04-08",
+    "market_prob_at_cutoff": 0.67,
+    "category": "Elections"
+  },
+  {
+    "ticker": "KXNEWROLEVOGUE-30JAN-SAR",
+    "question": "Who will be the next Editor-in-Chief of Vogue?",
+    "outcome": false,
+    "settlement_date": "2025-09-02",
+    "cutoff_date": "2025-08-19",
+    "market_prob_at_cutoff": 0.11,
+    "category": "Companies"
+  },
+  {
+    "ticker": "KXHALFTRIL-26",
+    "question": "When will there be a half-trillionaire?",
+    "outcome": true,
+    "settlement_date": "2025-11-03",
+    "cutoff_date": "2025-10-27",
+    "market_prob_at_cutoff": 0.82,
+    "category": "Economics"
+  },
+  {
+    "ticker": "KXHALFTRIL-26",
+    "question": "When will there be a half-trillionaire?",
+    "outcome": true,
+    "settlement_date": "2025-11-03",
+    "cutoff_date": "2025-10-20",
+    "market_prob_at_cutoff": 0.86,
+    "category": "Economics"
+  },
+  {
+    "ticker": "KXCANCOALITION-30-LMINOR",
+    "question": "Will Liberal minority make up the next government of Canada?",
+    "outcome": true,
+    "settlement_date": "2025-05-27",
+    "cutoff_date": "2025-04-27",
+    "market_prob_at_cutoff": 0.2,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCANCOALITION-30-L",
+    "question": "Will Liberal majority make up the next government of Canada?",
+    "outcome": false,
+    "settlement_date": "2025-05-27",
+    "cutoff_date": "2025-04-27",
+    "market_prob_at_cutoff": 0.59,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCANCOALITION-30-CMINOR",
+    "question": "Will Conservative minority make up the next government of Canada?",
+    "outcome": false,
+    "settlement_date": "2025-05-27",
+    "cutoff_date": "2025-04-27",
+    "market_prob_at_cutoff": 0.14,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXTDEFICITHALF-29",
+    "question": "Will Trump halve the trade deficit?",
+    "outcome": true,
+    "settlement_date": "2026-01-13",
+    "cutoff_date": "2026-01-06",
+    "market_prob_at_cutoff": 0.4,
+    "category": "Economics"
+  },
+  {
+    "ticker": "KXTDEFICITHALF-29",
+    "question": "Will Trump halve the trade deficit?",
+    "outcome": true,
+    "settlement_date": "2026-01-13",
+    "cutoff_date": "2025-12-30",
+    "market_prob_at_cutoff": 0.44,
+    "category": "Economics"
+  },
+  {
+    "ticker": "KXCABOUT-29JAN-HLUT",
+    "question": "Will Howard Lutnick be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-03-07",
+    "cutoff_date": "2026-02-28",
+    "market_prob_at_cutoff": 0.19,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29JAN-HLUT",
+    "question": "Will Howard Lutnick be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-03-07",
+    "cutoff_date": "2026-02-21",
+    "market_prob_at_cutoff": 0.15,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29JAN-LCDR",
+    "question": "Will Lori Chavez-DeRemer be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-03-07",
+    "cutoff_date": "2026-02-28",
+    "market_prob_at_cutoff": 0.12,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29JAN-LCDR",
+    "question": "Will Lori Chavez-DeRemer be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-03-07",
+    "cutoff_date": "2026-02-21",
+    "market_prob_at_cutoff": 0.14,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29JAN-LCDR",
+    "question": "Will Lori Chavez-DeRemer be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-03-07",
+    "cutoff_date": "2026-02-05",
+    "market_prob_at_cutoff": 0.18,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29JAN-PBON",
+    "question": "Will Pam Bondi be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-03-07",
+    "cutoff_date": "2026-02-28",
+    "market_prob_at_cutoff": 0.15,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29JAN-PBON",
+    "question": "Will Pam Bondi be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-03-07",
+    "cutoff_date": "2026-02-21",
+    "market_prob_at_cutoff": 0.2,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29JAN-PBON",
+    "question": "Will Pam Bondi be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-03-07",
+    "cutoff_date": "2026-02-05",
+    "market_prob_at_cutoff": 0.13,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29JAN-KNOE",
+    "question": "Will Kristi Noem be the first person to leave the Trump Cabinet?",
+    "outcome": true,
+    "settlement_date": "2026-03-07",
+    "cutoff_date": "2026-02-28",
+    "market_prob_at_cutoff": 0.22,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29JAN-KNOE",
+    "question": "Will Kristi Noem be the first person to leave the Trump Cabinet?",
+    "outcome": true,
+    "settlement_date": "2026-03-07",
+    "cutoff_date": "2026-02-21",
+    "market_prob_at_cutoff": 0.18,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29JAN-KNOE",
+    "question": "Will Kristi Noem be the first person to leave the Trump Cabinet?",
+    "outcome": true,
+    "settlement_date": "2026-03-07",
+    "cutoff_date": "2026-02-05",
+    "market_prob_at_cutoff": 0.19,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABLEAVE-26FEB-26AUG",
+    "question": "Will any member of Trump's Cabinet leave before Aug 2026?",
+    "outcome": true,
+    "settlement_date": "2026-03-10",
+    "cutoff_date": "2026-02-24",
+    "market_prob_at_cutoff": 0.63,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABLEAVE-26FEB-26AUG",
+    "question": "Will any member of Trump's Cabinet leave before Aug 2026?",
+    "outcome": true,
+    "settlement_date": "2026-03-10",
+    "cutoff_date": "2026-02-08",
+    "market_prob_at_cutoff": 0.63,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABLEAVE-26FEB-26FEB",
+    "question": "Will any member of Trump's Cabinet leave before Feb 2026?",
+    "outcome": false,
+    "settlement_date": "2026-03-01",
+    "cutoff_date": "2026-02-22",
+    "market_prob_at_cutoff": 0.11,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABLEAVE-26FEB-26FEB",
+    "question": "Will any member of Trump's Cabinet leave before Feb 2026?",
+    "outcome": false,
+    "settlement_date": "2026-03-01",
+    "cutoff_date": "2026-02-15",
+    "market_prob_at_cutoff": 0.16,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABLEAVE-26FEB-26DEC",
+    "question": "Will any member of Trump's Cabinet leave before Dec 2026?",
+    "outcome": true,
+    "settlement_date": "2026-03-10",
+    "cutoff_date": "2026-02-24",
+    "market_prob_at_cutoff": 0.78,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABLEAVE-26FEB-26APR",
+    "question": "Will any member of Trump's Cabinet leave before Apr 2026?",
+    "outcome": true,
+    "settlement_date": "2026-03-10",
+    "cutoff_date": "2026-03-03",
+    "market_prob_at_cutoff": 0.41,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABLEAVE-26FEB-26APR",
+    "question": "Will any member of Trump's Cabinet leave before Apr 2026?",
+    "outcome": true,
+    "settlement_date": "2026-03-10",
+    "cutoff_date": "2026-02-24",
+    "market_prob_at_cutoff": 0.47,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABLEAVE-26FEB-26APR",
+    "question": "Will any member of Trump's Cabinet leave before Apr 2026?",
+    "outcome": true,
+    "settlement_date": "2026-03-10",
+    "cutoff_date": "2026-02-08",
+    "market_prob_at_cutoff": 0.44,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABLEAVE-26FEB-26MAR",
+    "question": "Will any member of Trump's Cabinet leave before Mar 2026?",
+    "outcome": true,
+    "settlement_date": "2026-03-10",
+    "cutoff_date": "2026-03-03",
+    "market_prob_at_cutoff": 0.24,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABLEAVE-26FEB-26MAR",
+    "question": "Will any member of Trump's Cabinet leave before Mar 2026?",
+    "outcome": true,
+    "settlement_date": "2026-03-10",
+    "cutoff_date": "2026-02-24",
+    "market_prob_at_cutoff": 0.29,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABLEAVE-26FEB-26MAR",
+    "question": "Will any member of Trump's Cabinet leave before Mar 2026?",
+    "outcome": true,
+    "settlement_date": "2026-03-10",
+    "cutoff_date": "2026-02-08",
+    "market_prob_at_cutoff": 0.36,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABLEAVE-26FEB-26MAY",
+    "question": "Will any member of Trump's Cabinet leave before May 2026?",
+    "outcome": true,
+    "settlement_date": "2026-03-10",
+    "cutoff_date": "2026-03-03",
+    "market_prob_at_cutoff": 0.53,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABLEAVE-26FEB-26MAY",
+    "question": "Will any member of Trump's Cabinet leave before May 2026?",
+    "outcome": true,
+    "settlement_date": "2026-03-10",
+    "cutoff_date": "2026-02-24",
+    "market_prob_at_cutoff": 0.55,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABLEAVE-26FEB-26MAY",
+    "question": "Will any member of Trump's Cabinet leave before May 2026?",
+    "outcome": true,
+    "settlement_date": "2026-03-10",
+    "cutoff_date": "2026-02-08",
+    "market_prob_at_cutoff": 0.53,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXPENNYCONGRESS-29",
+    "question": "Will the U.S. get rid of the penny?",
+    "outcome": true,
+    "settlement_date": "2025-05-27",
+    "cutoff_date": "2025-04-27",
+    "market_prob_at_cutoff": 0.39,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXMTMCK-29",
+    "question": "Will Trump rename Denali back to Mt. McKinley?",
+    "outcome": true,
+    "settlement_date": "2025-01-23",
+    "cutoff_date": "2025-01-16",
+    "market_prob_at_cutoff": 0.63,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXMTMCK-29",
+    "question": "Will Trump rename Denali back to Mt. McKinley?",
+    "outcome": true,
+    "settlement_date": "2025-01-23",
+    "cutoff_date": "2025-01-09",
+    "market_prob_at_cutoff": 0.79,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXINSURRECTION-29-FEB26",
+    "question": "Will Trump invoke the Insurrection Act during his Presidency?",
+    "outcome": false,
+    "settlement_date": "2026-02-01",
+    "cutoff_date": "2026-01-25",
+    "market_prob_at_cutoff": 0.12,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXINSURRECTION-29-FEB26",
+    "question": "Will Trump invoke the Insurrection Act during his Presidency?",
+    "outcome": false,
+    "settlement_date": "2026-02-01",
+    "cutoff_date": "2026-01-18",
+    "market_prob_at_cutoff": 0.21,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXINSURRECTION-29-26MAR",
+    "question": "Will Trump invoke the Insurrection Act during his Presidency?",
+    "outcome": false,
+    "settlement_date": "2026-03-01",
+    "cutoff_date": "2026-01-30",
+    "market_prob_at_cutoff": 0.13,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXEVCREDITS-29",
+    "question": "Will Trump end the electric vehicle tax credit before Jan 20, 2029?",
+    "outcome": true,
+    "settlement_date": "2025-07-07",
+    "cutoff_date": "2025-06-07",
+    "market_prob_at_cutoff": 0.77,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29-KN",
+    "question": "Will Kristi Noem be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-02-04",
+    "cutoff_date": "2026-01-28",
+    "market_prob_at_cutoff": 0.44,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29-KN",
+    "question": "Will Kristi Noem be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-02-04",
+    "cutoff_date": "2026-01-21",
+    "market_prob_at_cutoff": 0.12,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29-KN",
+    "question": "Will Kristi Noem be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-02-04",
+    "cutoff_date": "2026-01-05",
+    "market_prob_at_cutoff": 0.16,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29-LCD",
+    "question": "Will Lori Chavez-DeRemer be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-02-04",
+    "cutoff_date": "2026-01-28",
+    "market_prob_at_cutoff": 0.11,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29-LCD",
+    "question": "Will Lori Chavez-DeRemer be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-02-04",
+    "cutoff_date": "2026-01-21",
+    "market_prob_at_cutoff": 0.16,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29-PB",
+    "question": "Will Pam Bondi be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-02-04",
+    "cutoff_date": "2026-01-28",
+    "market_prob_at_cutoff": 0.16,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29-PB",
+    "question": "Will Pam Bondi be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-02-04",
+    "cutoff_date": "2026-01-21",
+    "market_prob_at_cutoff": 0.25,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29-PB",
+    "question": "Will Pam Bondi be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-02-04",
+    "cutoff_date": "2026-01-05",
+    "market_prob_at_cutoff": 0.17,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCABOUT-29-PH",
+    "question": "Will Pete Hegseth be the first person to leave the Trump Cabinet?",
+    "outcome": false,
+    "settlement_date": "2026-02-04",
+    "cutoff_date": "2026-01-05",
+    "market_prob_at_cutoff": 0.15,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXSTJUDE-29",
+    "question": "Will The Delaware Supreme Court rule in Elon Musk's favor in the appeal of the decision striking down the 2018 compensation plan?",
+    "outcome": true,
+    "settlement_date": "2025-12-22",
+    "cutoff_date": "2025-12-15",
+    "market_prob_at_cutoff": 0.72,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXBARNESFELIX",
+    "question": "Will the Supreme Court rule in favor of Barnes in Barnes v. Felix",
+    "outcome": true,
+    "settlement_date": "2025-05-20",
+    "cutoff_date": "2025-05-06",
+    "market_prob_at_cutoff": 0.81,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXAVGMEASLESDJT-29-200",
+    "question": "What will the average number of measles cases be during the Trump Administration?",
+    "outcome": true,
+    "settlement_date": "2025-04-18",
+    "cutoff_date": "2025-04-04",
+    "market_prob_at_cutoff": 0.89,
+    "category": "Health"
+  },
+  {
+    "ticker": "GOOGLEUS-28DEC31",
+    "question": "Will a court find that Google has illegally maintained a monopoly?",
+    "outcome": true,
+    "settlement_date": "2024-08-06",
+    "cutoff_date": "2024-07-30",
+    "market_prob_at_cutoff": 0.56,
+    "category": "Politics"
+  },
+  {
+    "ticker": "GOOGLEUS-28DEC31",
+    "question": "Will a court find that Google has illegally maintained a monopoly?",
+    "outcome": true,
+    "settlement_date": "2024-08-06",
+    "cutoff_date": "2024-07-23",
+    "market_prob_at_cutoff": 0.65,
+    "category": "Politics"
+  },
+  {
+    "ticker": "GOOGLEUS-28DEC31",
+    "question": "Will a court find that Google has illegally maintained a monopoly?",
+    "outcome": true,
+    "settlement_date": "2024-08-06",
+    "cutoff_date": "2024-07-07",
+    "market_prob_at_cutoff": 0.58,
+    "category": "Politics"
+  },
+  {
+    "ticker": "OPENAISUIT",
+    "question": "Musk wins OpenAI lawsuit?",
+    "outcome": false,
+    "settlement_date": "2024-06-12",
+    "cutoff_date": "2024-06-05",
+    "market_prob_at_cutoff": 0.11,
+    "category": "Companies"
+  },
+  {
+    "ticker": "OPENAISUIT",
+    "question": "Musk wins OpenAI lawsuit?",
+    "outcome": false,
+    "settlement_date": "2024-06-12",
+    "cutoff_date": "2024-05-29",
+    "market_prob_at_cutoff": 0.14,
+    "category": "Companies"
+  },
+  {
+    "ticker": "OPENAISUIT",
+    "question": "Musk wins OpenAI lawsuit?",
+    "outcome": false,
+    "settlement_date": "2024-06-12",
+    "cutoff_date": "2024-05-13",
+    "market_prob_at_cutoff": 0.2,
+    "category": "Companies"
+  },
+  {
+    "ticker": "KXPCOIE-28",
+    "question": "Will Perkins Coie win their lawsuit against Trump?",
+    "outcome": true,
+    "settlement_date": "2025-05-03",
+    "cutoff_date": "2025-04-26",
+    "market_prob_at_cutoff": 0.82,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXPCOIE-28",
+    "question": "Will Perkins Coie win their lawsuit against Trump?",
+    "outcome": true,
+    "settlement_date": "2025-05-03",
+    "cutoff_date": "2025-04-19",
+    "market_prob_at_cutoff": 0.82,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXDJTVOSTARIFFS",
+    "question": "Will the Supreme Court rule in favor of Trump in V.O.S. Selections, Inc. v. Trump",
+    "outcome": false,
+    "settlement_date": "2026-02-20",
+    "cutoff_date": "2026-02-13",
+    "market_prob_at_cutoff": 0.26,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXDJTVOSTARIFFS",
+    "question": "Will the Supreme Court rule in favor of Trump in V.O.S. Selections, Inc. v. Trump",
+    "outcome": false,
+    "settlement_date": "2026-02-20",
+    "cutoff_date": "2026-02-06",
+    "market_prob_at_cutoff": 0.34,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXDJTVOSTARIFFS",
+    "question": "Will the Supreme Court rule in favor of Trump in V.O.S. Selections, Inc. v. Trump",
+    "outcome": false,
+    "settlement_date": "2026-02-20",
+    "cutoff_date": "2026-01-21",
+    "market_prob_at_cutoff": 0.34,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCONGESTIONSUIT-28",
+    "question": "Will the MTA win its congestion pricing lawsuit against Trump?",
+    "outcome": true,
+    "settlement_date": "2026-03-03",
+    "cutoff_date": "2026-02-24",
+    "market_prob_at_cutoff": 0.84,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXCONGESTIONSUIT-28",
+    "question": "Will the MTA win its congestion pricing lawsuit against Trump?",
+    "outcome": true,
+    "settlement_date": "2026-03-03",
+    "cutoff_date": "2026-02-17",
+    "market_prob_at_cutoff": 0.8,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXAPSUIT-28",
+    "question": "Will the AP win their lawsuit against the White House?",
+    "outcome": true,
+    "settlement_date": "2025-04-08",
+    "cutoff_date": "2025-04-01",
+    "market_prob_at_cutoff": 0.41,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXAPSUIT-28",
+    "question": "Will the AP win their lawsuit against the White House?",
+    "outcome": true,
+    "settlement_date": "2025-04-08",
+    "cutoff_date": "2025-03-25",
+    "market_prob_at_cutoff": 0.28,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXJAMESBOND-27-ACU",
+    "question": "Will Alfonso Cuar\u00f3n direct James Bond?",
+    "outcome": false,
+    "settlement_date": "2025-06-26",
+    "cutoff_date": "2025-05-27",
+    "market_prob_at_cutoff": 0.31,
+    "category": "Entertainment"
+  },
+  {
+    "ticker": "KXACTORWHITELOTUS-27-HEL",
+    "question": "Will Helena Bonham Carter be cast in The White Lotus: Season 4?",
+    "outcome": true,
+    "settlement_date": "2026-01-30",
+    "cutoff_date": "2025-12-31",
+    "market_prob_at_cutoff": 0.76,
+    "category": "Entertainment"
+  },
+  {
+    "ticker": "KXIPOKLARNA-25OCT01",
+    "question": "When will Klarna IPO?",
+    "outcome": true,
+    "settlement_date": "2025-09-02",
+    "cutoff_date": "2025-08-26",
+    "market_prob_at_cutoff": 0.63,
+    "category": "Economics"
+  },
+  {
+    "ticker": "KXIPOKLARNA-25OCT01",
+    "question": "When will Klarna IPO?",
+    "outcome": true,
+    "settlement_date": "2025-09-02",
+    "cutoff_date": "2025-08-19",
+    "market_prob_at_cutoff": 0.4,
+    "category": "Economics"
+  },
+  {
+    "ticker": "KXIPOKLARNA-25OCT01",
+    "question": "When will Klarna IPO?",
+    "outcome": true,
+    "settlement_date": "2025-09-02",
+    "cutoff_date": "2025-08-03",
+    "market_prob_at_cutoff": 0.28,
+    "category": "Economics"
+  },
+  {
+    "ticker": "KXWARSHNOM-26FEB20-T0",
+    "question": "Will the count of nominations formally received by the US Senate for Kevin Warsh to be Chairman of the Board of Governors of the Federal Reserve be above 0 before February 20?",
+    "outcome": false,
+    "settlement_date": "2026-02-20",
+    "cutoff_date": "2026-02-13",
+    "market_prob_at_cutoff": 0.11,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXWARSHNOM-26MAR13-T0",
+    "question": "Will the count of nominations formally received by the US Senate for Kevin Warsh to be Chairman of the Board of Governors of the Federal Reserve be above 0 before March 13?",
+    "outcome": true,
+    "settlement_date": "2026-03-05",
+    "cutoff_date": "2026-02-26",
+    "market_prob_at_cutoff": 0.67,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXWARSHNOM-26MAR13-T0",
+    "question": "Will the count of nominations formally received by the US Senate for Kevin Warsh to be Chairman of the Board of Governors of the Federal Reserve be above 0 before March 13?",
+    "outcome": true,
+    "settlement_date": "2026-03-05",
+    "cutoff_date": "2026-02-19",
+    "market_prob_at_cutoff": 0.7,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXWARSHNOM-26MAR01-T0",
+    "question": "Will the count of nominations formally received by the US Senate for Kevin Warsh to be Chairman of the Board of Governors of the Federal Reserve be above 0 before March?",
+    "outcome": false,
+    "settlement_date": "2026-03-01",
+    "cutoff_date": "2026-02-22",
+    "market_prob_at_cutoff": 0.29,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXWARSHNOM-26MAR01-T0",
+    "question": "Will the count of nominations formally received by the US Senate for Kevin Warsh to be Chairman of the Board of Governors of the Federal Reserve be above 0 before March?",
+    "outcome": false,
+    "settlement_date": "2026-03-01",
+    "cutoff_date": "2026-02-15",
+    "market_prob_at_cutoff": 0.68,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXWARSHNOM-26APR01-T0",
+    "question": "Will the count of nominations formally received by the US Senate for Kevin Warsh to be Chairman of the Board of Governors of the Federal Reserve be above 0 before April?",
+    "outcome": true,
+    "settlement_date": "2026-03-05",
+    "cutoff_date": "2026-02-26",
+    "market_prob_at_cutoff": 0.86,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXWARSHNOM-26APR01-T0",
+    "question": "Will the count of nominations formally received by the US Senate for Kevin Warsh to be Chairman of the Board of Governors of the Federal Reserve be above 0 before April?",
+    "outcome": true,
+    "settlement_date": "2026-03-05",
+    "cutoff_date": "2026-02-19",
+    "market_prob_at_cutoff": 0.87,
+    "category": "Politics"
+  },
+  {
+    "ticker": "KXGORTONDENTON2ND-26FEB26-2ND-GRN",
+    "question": "Will the Green Party finish 2nd in the Gorton and Denton by-election?",
+    "outcome": false,
+    "settlement_date": "2026-02-27",
+    "cutoff_date": "2026-02-20",
+    "market_prob_at_cutoff": 0.16,
+    "category": "Elections"
+  },
+  {
+    "ticker": "KXGORTONDENTON2ND-26FEB26-2ND-GRN",
+    "question": "Will the Green Party finish 2nd in the Gorton and Denton by-election?",
+    "outcome": false,
+    "settlement_date": "2026-02-27",
+    "cutoff_date": "2026-02-13",
+    "market_prob_at_cutoff": 0.31,
+    "category": "Elections"
+  },
+  {
+    "ticker": "KXGORTONDENTON2ND-26FEB26-2ND-REF",
+    "question": "Will Reform UK finish 2nd in the Gorton and Denton by-election?",
+    "outcome": true,
+    "settlement_date": "2026-02-27",
+    "cutoff_date": "2026-02-20",
+    "market_prob_at_cutoff": 0.66,
+    "category": "Elections"
+  },
+  {
+    "ticker": "KXGORTONDENTON2ND-26FEB26-2ND-REF",
+    "question": "Will Reform UK finish 2nd in the Gorton and Denton by-election?",
+    "outcome": true,
+    "settlement_date": "2026-02-27",
+    "cutoff_date": "2026-02-13",
+    "market_prob_at_cutoff": 0.57,
+    "category": "Elections"
+  },
+  {
+    "ticker": "KXGORTONDENTONMOV-26FEB26-WIN-P7",
+    "question": "Will the margin of victory for the election winner in the 2026 Gorton and Denton by election be between 6% and 9%?",
+    "outcome": false,
+    "settlement_date": "2026-02-27",
+    "cutoff_date": "2026-02-20",
+    "market_prob_at_cutoff": 0.18,
+    "category": "Elections"
+  },
+  {
+    "ticker": "KXGORTONDENTONMOV-26FEB26-WIN-P1",
+    "question": "Will the margin of victory for the election winner in the 2026 Gorton and Denton by election be between 0% and 3%?",
+    "outcome": false,
+    "settlement_date": "2026-02-27",
+    "cutoff_date": "2026-02-20",
+    "market_prob_at_cutoff": 0.25,
+    "category": "Elections"
+  },
+  {
+    "ticker": "KXGORTONDENTONMOV-26FEB26-WIN-P4",
+    "question": "Will the margin of victory for the election winner in the 2026 Gorton and Denton by election be between 3% and 6%?",
+    "outcome": false,
+    "settlement_date": "2026-02-27",
+    "cutoff_date": "2026-02-20",
+    "market_prob_at_cutoff": 0.24,
+    "category": "Elections"
+  },
+  {
+    "ticker": "KXGORTONDENTONMOV-26FEB26-WIN-P10",
+    "question": "Will the margin of victory for the election winner in the 2026 Gorton and Denton by election be between 9% and 12%?",
+    "outcome": true,
+    "settlement_date": "2026-02-27",
+    "cutoff_date": "2026-02-20",
+    "market_prob_at_cutoff": 0.16,
+    "category": "Elections"
+  },
+  {
+    "ticker": "KXTHAIPARLIAMENT2ND-26FEB08-2-BJT",
+    "question": "Will Bhumjaithai Party finish 2nd in Thailand?",
+    "outcome": false,
+    "settlement_date": "2026-03-08",
+    "cutoff_date": "2026-02-06",
+    "market_prob_at_cutoff": 0.66,
+    "category": "Elections"
+  },
+  {
+    "ticker": "KXMOVPORTUGALPRESRUNOFF-26FEB08-P37",
+    "question": "Will the margin of victory for Ant\u00f3nio Jos\u00e9 Seguro in the Portugal presidential election runoff be between 35% and 40%?",
+    "outcome": false,
+    "settlement_date": "2026-02-22",
+    "cutoff_date": "2026-02-08",
+    "market_prob_at_cutoff": 0.28,
+    "category": "Elections"
+  },
+  {
+    "ticker": "KXMOVPORTUGALPRESRUNOFF-26FEB08-P37",
+    "question": "Will the margin of victory for Ant\u00f3nio Jos\u00e9 Seguro in the Portugal presidential election runoff be between 35% and 40%?",
+    "outcome": false,
+    "settlement_date": "2026-02-22",
+    "cutoff_date": "2026-01-23",
+    "market_prob_at_cutoff": 0.23,
+    "category": "Elections"
+  },
+  {
+    "ticker": "KXMOVPORTUGALPRESRUNOFF-26FEB08-P32",
+    "question": "Will the margin of victory for Ant\u00f3nio Jos\u00e9 Seguro in the Portugal presidential election runoff be between 30% and 35%?",
+    "outcome": true,
+    "settlement_date": "2026-02-22",
+    "cutoff_date": "2026-02-08",
+    "market_prob_at_cutoff": 0.29,
+    "category": "Elections"
+  },
+  {
+    "ticker": "KXMOVPORTUGALPRESRUNOFF-26FEB08-P32",
+    "question": "Will the margin of victory for Ant\u00f3nio Jos\u00e9 Seguro in the Portugal presidential election runoff be between 30% and 35%?",
+    "outcome": true,
+    "settlement_date": "2026-02-22",
+    "cutoff_date": "2026-01-23",
+    "market_prob_at_cutoff": 0.17,
+    "category": "Elections"
+  }
+]
