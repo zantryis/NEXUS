@@ -9,11 +9,39 @@
 </div>
 {% endif %}
 
+{% if show_onboarding %}
+<div class="onboarding-card" id="onboarding-card">
+    <div class="onboarding-header">
+        <strong>Welcome to Nexus</strong>
+        <button class="btn-sm btn-dismiss" hx-post="/api/dismiss-onboarding" hx-swap="none"
+                onclick="document.getElementById('onboarding-card').remove()">&times;</button>
+    </div>
+    <p>Your first briefing is on the way. Once it arrives, here's what to explore:</p>
+    <div class="onboarding-highlights">
+        <a href="/threads/" class="onboarding-item">
+            <strong>Narrative Threads</strong>
+            <span>Track evolving stories across your topics</span>
+        </a>
+        <a href="/explore/" class="onboarding-item">
+            <strong>Entities &amp; Knowledge</strong>
+            <span>Browse people, organizations, and concepts</span>
+        </a>
+        <a href="/chat/" class="onboarding-item">
+            <strong>Ask Questions</strong>
+            <span>Chat with your intelligence briefings</span>
+        </a>
+    </div>
+</div>
+{% endif %}
+
 <div class="briefing-header">
     <div class="briefing-header-top">
         <div class="briefing-header-left">
             <h2>&#9670; Intelligence Briefing</h2>
-            <div class="briefing-date">{{ briefing_date.strftime('%B %d, %Y') }}</div>
+            <div class="briefing-date">
+                {{ briefing_date.strftime('%B %d, %Y') }}
+                <span class="staleness-badge staleness-{{ staleness_level }}">{{ staleness_label }}</span>
+            </div>
             <div class="briefing-nav">
                 {% if has_prev %}
                 <a href="/briefings/{{ prev_date.isoformat() }}">&larr; {{ prev_date.strftime('%b %d') }}</a>

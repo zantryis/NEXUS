@@ -24,7 +24,10 @@
     </tbody>
 </table>
 {% else %}
-<div class="empty-state"><p>No source data.</p></div>
+<div class="empty-state">
+    <p>No source data.</p>
+    <p style="margin-top: 0.5rem; font-size: 0.82rem; color: var(--nx-text-dim);">Source statistics appear after the pipeline polls your configured feeds. <a href="/">Run the pipeline</a> to get started.</p>
+</div>
 {% endif %}
 
 {% endblock %}

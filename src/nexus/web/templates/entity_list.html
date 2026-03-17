@@ -30,7 +30,10 @@
     </tbody>
 </table>
 {% else %}
-<div class="empty-state"><p>No entities found.</p></div>
+<div class="empty-state">
+    <p>No entities found.</p>
+    <p style="margin-top: 0.5rem; font-size: 0.82rem; color: var(--nx-text-dim);">Entities are extracted during pipeline runs. <a href="/">Run the pipeline</a> to populate this page.</p>
+</div>
 {% endif %}
 
 {% endblock %}

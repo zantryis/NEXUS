@@ -6,7 +6,7 @@ import os
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 
 from nexus.config.loader import load_config
@@ -93,6 +93,20 @@ def _topic_emoji(slug: str) -> str:
         if key in slug.lower():
             return emoji
     return "&#128196;"
+
+
+def briefing_age_badge(briefing_date: date, today: date) -> tuple[str, str]:
+    """Return (level, label) for briefing freshness.
+
+    Levels: 'fresh' (<24h), 'recent' (1 day), 'stale' (>1 day).
+    """
+    age_days = (today - briefing_date).days
+    if age_days <= 0:
+        return "fresh", "Today"
+    elif age_days == 1:
+        return "recent", "Yesterday"
+    else:
+        return "stale", f"{age_days} days ago"
 
 
 def _find_audio(data_dir: Path, target_date: date) -> dict:
@@ -326,6 +340,14 @@ async def homepage(request: Request):
             remaining = timedelta(minutes=30) - since
             cooldown_remaining = f"{int(remaining.total_seconds() // 60)}m"
 
+    # Staleness badge
+    staleness_level, staleness_label = briefing_age_badge(briefing_date, today)
+
+    # Onboarding: show after setup complete, until dismissed
+    is_setup_complete = request.query_params.get("setup") == "complete"
+    onboarding_dismissed = request.cookies.get("nexus_onboarding") == "dismissed"
+    show_onboarding = is_setup_complete and not onboarding_dismissed
+
     return templates.TemplateResponse(request, "dashboard.html", {
         "today": today,
         "briefing_date": briefing_date,
@@ -342,14 +364,30 @@ async def homepage(request: Request):
         "breaking_alerts": breaking_alerts,
         "kalshi_sidebar": kalshi_sidebar,
         "audio": audio_info,
-        "setup_complete": request.query_params.get("setup") == "complete",
+        "setup_complete": is_setup_complete,
         "pipeline_status": getattr(request.app.state, "pipeline_status", None),
         "last_run": last_run,
         "pipeline_running": pipeline_running,
         "cooldown_active": cooldown_active,
         "cooldown_remaining": cooldown_remaining,
         "health": health_snapshot,
+        "staleness_level": staleness_level,
+        "staleness_label": staleness_label,
+        "show_onboarding": show_onboarding,
     })
+
+
+@router.post("/api/dismiss-onboarding")
+async def dismiss_onboarding():
+    """Set cookie to dismiss onboarding cards."""
+    response = Response(status_code=200)
+    response.set_cookie(
+        "nexus_onboarding", "dismissed",
+        max_age=60 * 60 * 24 * 365,  # 1 year
+        httponly=True,
+        samesite="lax",
+    )
+    return response
 
 
 @router.get("/briefings/{briefing_date}")
