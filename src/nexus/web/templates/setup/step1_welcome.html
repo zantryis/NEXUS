@@ -32,6 +32,15 @@
 
     <input type="hidden" name="preset" id="preset-hidden" value="{{ selected_preset or '' }}">
 
+    <div id="api-key-section" style="display:none; margin-top: 1.5rem;">
+        <div class="form-group">
+            <label for="api_key" id="api-key-label">API Key</label>
+            <input type="password" id="api_key" name="api_key" class="form-input"
+                   placeholder="Paste your API key here" autocomplete="off">
+            <span class="form-hint">Your key is stored locally in <code>.env</code> and never sent anywhere.</span>
+        </div>
+    </div>
+
     <div class="setup-actions">
         <button type="submit" class="btn-primary">Continue</button>
     </div>
@@ -40,6 +49,14 @@
 <script>
 const TIERS = {{ tiers_json | safe }};
 const currentPreset = '{{ selected_preset or '' }}';
+const PROVIDERS = {{ providers | tojson }};
+
+function getRequiredKey(provider) {
+    for (const p of PROVIDERS) {
+        if (p[0] === provider) return p[3];
+    }
+    return null;
+}
 
 function onProviderChange(provider) {
     const tiers = TIERS[provider] || [];
@@ -50,37 +67,51 @@ function onProviderChange(provider) {
     if (tiers.length <= 1) {
         container.style.display = 'none';
         hiddenInput.value = tiers.length ? tiers[0][0] : '';
-        return;
+    } else {
+        container.style.display = 'block';
+        optionsDiv.innerHTML = '';
+
+        tiers.forEach(function(tier, i) {
+            const presetName = tier[0], label = tier[1], cost = tier[2];
+            const isChecked = presetName === currentPreset || (currentPreset === '' && i === 0);
+
+            const lbl = document.createElement('label');
+            lbl.className = 'tier-option' + (isChecked ? ' selected' : '');
+
+            const radio = document.createElement('input');
+            radio.type = 'radio';
+            radio.name = 'tier_radio';
+            radio.value = presetName;
+            if (isChecked) { radio.checked = true; hiddenInput.value = presetName; }
+            radio.onchange = function() {
+                hiddenInput.value = presetName;
+                optionsDiv.querySelectorAll('.tier-option').forEach(function(el) { el.classList.remove('selected'); });
+                lbl.classList.add('selected');
+            };
+
+            const span = document.createElement('span');
+            span.innerHTML = '<strong>' + label + '</strong> <span style="color:var(--nx-text-dim)">' + cost + '</span>';
+
+            lbl.appendChild(radio);
+            lbl.appendChild(span);
+            optionsDiv.appendChild(lbl);
+        });
     }
 
-    container.style.display = 'block';
-    optionsDiv.innerHTML = '';
+    // Show/hide API key section
+    const keySection = document.getElementById('api-key-section');
+    const keyLabel = document.getElementById('api-key-label');
+    const keyInput = document.getElementById('api_key');
+    const requiredKey = getRequiredKey(provider);
 
-    tiers.forEach(function(tier, i) {
-        const presetName = tier[0], label = tier[1], cost = tier[2];
-        const isChecked = presetName === currentPreset || (currentPreset === '' && i === 0);
-
-        const lbl = document.createElement('label');
-        lbl.className = 'tier-option' + (isChecked ? ' selected' : '');
-
-        const radio = document.createElement('input');
-        radio.type = 'radio';
-        radio.name = 'tier_radio';
-        radio.value = presetName;
-        if (isChecked) { radio.checked = true; hiddenInput.value = presetName; }
-        radio.onchange = function() {
-            hiddenInput.value = presetName;
-            optionsDiv.querySelectorAll('.tier-option').forEach(function(el) { el.classList.remove('selected'); });
-            lbl.classList.add('selected');
-        };
-
-        const span = document.createElement('span');
-        span.innerHTML = '<strong>' + label + '</strong> <span style="color:var(--nx-text-dim)">' + cost + '</span>';
-
-        lbl.appendChild(radio);
-        lbl.appendChild(span);
-        optionsDiv.appendChild(lbl);
-    });
+    if (requiredKey) {
+        keySection.style.display = 'block';
+        keyLabel.textContent = requiredKey;
+        keyInput.placeholder = 'Paste your ' + requiredKey + ' here';
+    } else {
+        keySection.style.display = 'none';
+        keyInput.value = '';
+    }
 }
 
 // Initialize on page load if provider already selected

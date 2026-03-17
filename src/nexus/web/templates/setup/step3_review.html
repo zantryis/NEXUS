@@ -1,0 +1,33 @@
+{% extends "setup/base_setup.html" %}
+{% block wizard_content %}
+<h2>Ready to Go</h2>
+<p class="setup-desc">Nexus will start building your first intelligence briefing immediately.</p>
+
+<div class="review-card">
+    <div class="review-section">
+        <span class="review-label">Provider</span>
+        <span class="review-value">{{ provider_label }}{% if tier_label %} &middot; {{ tier_label }}{% endif %}</span>
+        <a href="/setup" class="review-edit">Change</a>
+    </div>
+    <div class="review-section">
+        <span class="review-label">Topics</span>
+        <span class="review-value">
+            {% for t in session.get('topics', []) %}
+            <span class="review-tag">{{ t.name }}</span>
+            {% endfor %}
+        </span>
+        <a href="/setup/step/2" class="review-edit">Change</a>
+    </div>
+</div>
+
+<div class="setup-note">
+    <p>Preferences like timezone, briefing schedule, Telegram delivery, and audio can be configured in <strong>Settings</strong> after your first briefing is ready.</p>
+</div>
+
+<form method="post" action="/setup/complete">
+    <div class="setup-actions">
+        <a href="/setup/step/2" class="btn-secondary">Back</a>
+        <button type="submit" class="btn-primary btn-lg">Start Nexus</button>
+    </div>
+</form>
+{% endblock %}
