@@ -24,6 +24,7 @@ def _make_config():
     )
 
 
+
 def test_quick_flag_disables_audio_and_projections():
     """--quick should set audio.enabled=False and future_projection.enabled=False."""
     config = _make_config()
@@ -42,6 +43,7 @@ def test_quick_flag_caps_max_ingest():
     """--quick should pass max_ingest=20 to run_pipeline."""
     with patch("sys.argv", ["nexus", "engine", "--quick"]), \
          patch("nexus.__main__.load_dotenv"), \
+         patch("pathlib.Path.exists", return_value=True), \
          patch("nexus.config.loader.load_config") as mock_load, \
          patch("nexus.llm.client.LLMClient") as mock_llm_cls, \
          patch("nexus.engine.pipeline.run_pipeline", new_callable=AsyncMock) as mock_pipeline, \
@@ -69,6 +71,7 @@ def test_normal_mode_no_ingest_cap():
     """Without --quick, max_ingest should be None (no cap)."""
     with patch("sys.argv", ["nexus", "engine"]), \
          patch("nexus.__main__.load_dotenv"), \
+         patch("pathlib.Path.exists", return_value=True), \
          patch("nexus.config.loader.load_config") as mock_load, \
          patch("nexus.llm.client.LLMClient") as mock_llm_cls, \
          patch("nexus.engine.pipeline.run_pipeline", new_callable=AsyncMock) as mock_pipeline, \
