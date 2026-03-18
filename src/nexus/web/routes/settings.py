@@ -38,6 +38,35 @@ PROVIDERS = [
 ]
 
 
+RESTART_REQUIRED_FIELDS = {"preset", "tts_backend", "telegram_enabled"}
+
+PODCAST_STYLES = ["conversational", "analytical", "energetic", "formal"]
+
+
+def validate_settings(timezone: str = "", schedule: str = "") -> dict[str, str]:
+    """Validate settings values. Returns {field: error_message} for invalid fields."""
+    errors: dict[str, str] = {}
+
+    # Timezone
+    if timezone:
+        from zoneinfo import available_timezones
+        if timezone not in available_timezones():
+            errors["timezone"] = f'Unknown timezone "{timezone}". Use a valid IANA timezone.'
+
+    # Schedule format: HH:MM
+    if schedule:
+        import re
+        m = re.match(r"^(\d{1,2}):(\d{2})$", schedule)
+        if not m:
+            errors["schedule"] = 'Schedule must be in HH:MM format (e.g., "06:00").'
+        else:
+            h, mn = int(m.group(1)), int(m.group(2))
+            if h > 23 or mn > 59:
+                errors["schedule"] = f'Invalid time "{schedule}". Hours 0-23, minutes 0-59.'
+
+    return errors
+
+
 def _data_dir(request: Request) -> Path:
     return getattr(request.app.state, "data_dir", Path("data"))
 
@@ -92,6 +121,8 @@ async def settings_page(request: Request):
     pipeline_status = getattr(request.app.state, "pipeline_status", None)
     pipeline_running = pipeline_status is not None and not pipeline_status.get("done", True)
 
+    validation_fields = request.query_params.get("fields", "").split(",") if error == "validation" else []
+
     return templates.TemplateResponse(request, "settings.html", {
         "providers": _provider_status(),
         "config": config,
@@ -99,6 +130,7 @@ async def settings_page(request: Request):
         "preset": getattr(config, "preset", raw.get("preset")),
         "saved": saved,
         "error": error,
+        "validation_fields": validation_fields,
         "oauth_connected": oauth_connected,
         "model_choices": MODEL_CHOICES,
         "pipeline_stages": PIPELINE_STAGES,
@@ -107,6 +139,7 @@ async def settings_page(request: Request):
         "tts_voices": TTS_VOICES,
         "tts_voices_json": json.dumps(TTS_VOICES),
         "pipeline_running": pipeline_running,
+        "podcast_styles": PODCAST_STYLES,
     })
 
 
@@ -118,6 +151,14 @@ async def settings_save_all(request: Request):
     form = await request.form()
     data_dir = _data_dir(request)
     raw = _get_config_dict(request)
+
+    # ─ Validate before writing ─
+    tz = (form.get("timezone") or "").strip()
+    sched = (form.get("schedule") or "").strip()
+    errors = validate_settings(timezone=tz, schedule=sched)
+    if errors:
+        fields = ",".join(errors.keys())
+        return RedirectResponse(url=f"/settings?error=validation&fields={fields}", status_code=303)
 
     # ─ API Keys ─
     keys = {}
@@ -161,6 +202,10 @@ async def settings_save_all(request: Request):
         except ValueError:
             raw["audio"]["elevenlabs_style"] = 0.35
         raw["audio"]["elevenlabs_speaker_boost"] = form.get("elevenlabs_speaker_boost") == "on"
+    # Podcast style preset
+    podcast_style = (form.get("podcast_style") or "").strip()
+    if podcast_style in PODCAST_STYLES:
+        raw["audio"]["podcast_style"] = podcast_style
 
     # ─ Telegram ─
     raw.setdefault("telegram", {})

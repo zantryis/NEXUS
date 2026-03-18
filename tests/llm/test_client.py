@@ -176,7 +176,7 @@ async def test_complete_uses_runtime_model_for_litellm_alias(monkeypatch):
     )
 
     assert result == "ok"
-    client._complete_litellm.assert_awaited_once_with("gpt-5.4", "system", "user", False)
+    client._complete_litellm.assert_awaited_once_with("gpt-5.4", "system", "user", False, timeout_s=60.0)
 
 
 def test_refresh_hosted_env_from_env_file(tmp_path, monkeypatch):
