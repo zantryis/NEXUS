@@ -6,7 +6,7 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 13
+CURRENT_VERSION = 14
 
 DDL = """
 -- Schema version tracking
@@ -661,6 +661,19 @@ CREATE INDEX IF NOT EXISTS idx_er_type ON entity_relationships(relation_type);
 """
 
 
+MIGRATION_V14 = """
+-- Breaking news feedback (v14)
+CREATE TABLE IF NOT EXISTS breaking_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    headline_hash TEXT NOT NULL,
+    topic_slug TEXT NOT NULL,
+    feedback TEXT NOT NULL CHECK(feedback IN ('useful','not_breaking')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_breaking_feedback_hash ON breaking_feedback(headline_hash);
+"""
+
+
 async def initialize_schema(db: aiosqlite.Connection) -> None:
     """Create all tables and indexes. Idempotent."""
     await db.executescript(DDL)
@@ -727,6 +740,10 @@ async def initialize_schema(db: aiosqlite.Connection) -> None:
     if current < 13 and not await _has_table(db, "entity_relationships"):
         await db.executescript(MIGRATION_V13)
         logger.info("Applied migration v13: entity-entity relationships")
+
+    if current < 14 and not await _has_table(db, "breaking_feedback"):
+        await db.executescript(MIGRATION_V14)
+        logger.info("Applied migration v14: breaking_feedback table")
 
     if current < CURRENT_VERSION:
         await db.execute(
