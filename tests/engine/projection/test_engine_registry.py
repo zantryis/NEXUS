@@ -46,3 +46,26 @@ def test_config_accepts_all_engine_names():
     for name in ("actor", "native", "graphrag", "perspective", "debate", "naked", "structural"):
         cfg = FutureProjectionConfig(engine=name)
         assert cfg.engine == name
+
+
+def test_engine_tiers_cover_all_engines():
+    """ENGINE_TIERS should classify every engine that get_forecast_engine handles."""
+    from nexus.engine.projection.forecasting import ENGINE_TIERS
+
+    expected = {"actor", "structural", "graphrag", "naked", "perspective", "debate"}
+    assert set(ENGINE_TIERS.keys()) == expected
+    assert all(v in ("production", "experimental") for v in ENGINE_TIERS.values())
+
+
+def test_production_engines():
+    from nexus.engine.projection.forecasting import ENGINE_TIERS
+
+    production = {k for k, v in ENGINE_TIERS.items() if v == "production"}
+    assert production == {"actor", "structural"}
+
+
+def test_experimental_engines():
+    from nexus.engine.projection.forecasting import ENGINE_TIERS
+
+    experimental = {k for k, v in ENGINE_TIERS.items() if v == "experimental"}
+    assert experimental == {"graphrag", "naked", "perspective", "debate"}

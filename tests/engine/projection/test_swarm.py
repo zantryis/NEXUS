@@ -203,3 +203,85 @@ class TestFitCalibrationParams:
         assert result["n_samples"] == 30
         # Optimal gamma should compress (< 1.0) since LLM is overconfident
         assert result["gamma"] < 1.0
+
+    def test_exactly_20_samples_runs_tuning(self):
+        """Boundary: exactly MIN_RESOLVED_FOR_TUNING samples should trigger tuning."""
+        samples = [
+            {"raw_probability": 0.7, "resolved_bool": True, "market_probability": None}
+        ] * 20
+        result = fit_calibration_params(samples)
+        assert result["n_samples"] == 20
+        assert result["mean_brier"] is not None  # tuning ran, not defaults
+
+    def test_exactly_19_samples_returns_defaults(self):
+        """One below threshold should return defaults."""
+        samples = [
+            {"raw_probability": 0.7, "resolved_bool": True, "market_probability": None}
+        ] * 19
+        result = fit_calibration_params(samples)
+        assert result["improved"] is False
+        assert result["gamma"] == 0.8
+        assert "need" in result.get("reason", "")
+
+    def test_all_yes_outcomes(self):
+        """All-YES outcomes: engine that says 0.9 should be well-calibrated."""
+        samples = [
+            {"raw_probability": 0.9, "resolved_bool": True, "market_probability": None}
+        ] * 25
+        result = fit_calibration_params(samples)
+        assert result["n_samples"] == 25
+        assert result["mean_brier"] is not None
+        assert result["mean_brier"] < 0.1  # 0.9 predicting all-yes is good
+
+    def test_all_no_outcomes(self):
+        """All-NO outcomes: engine that says 0.1 should be well-calibrated."""
+        samples = [
+            {"raw_probability": 0.1, "resolved_bool": False, "market_probability": None}
+        ] * 25
+        result = fit_calibration_params(samples)
+        assert result["n_samples"] == 25
+        assert result["mean_brier"] < 0.1
+
+    def test_all_half_probability(self):
+        """All-0.5 predictions on mixed outcomes: should be moderately calibrated."""
+        samples = []
+        for i in range(25):
+            samples.append({"raw_probability": 0.5, "resolved_bool": i % 2 == 0, "market_probability": None})
+        result = fit_calibration_params(samples)
+        assert result["n_samples"] == 25
+        assert result["mean_brier"] is not None
+        # 0.5 on 50/50 outcomes → Brier = 0.25 (maximum entropy)
+        assert result["mean_brier"] == pytest.approx(0.25, abs=0.02)
+
+    def test_with_market_anchor(self):
+        """Samples with market_probability should use anchor blending."""
+        samples = []
+        for _ in range(15):
+            # Market says 0.6, LLM says 0.8, outcome is yes
+            samples.append({"raw_probability": 0.8, "resolved_bool": True, "market_probability": 0.6})
+            # Market says 0.3, LLM says 0.2, outcome is no
+            samples.append({"raw_probability": 0.2, "resolved_bool": False, "market_probability": 0.3})
+        result = fit_calibration_params(samples)
+        assert result["n_samples"] == 30
+        assert result["mean_brier"] is not None
+        assert result["mean_brier"] < 0.15  # Both anchored and raw agree
+
+    def test_skips_entries_with_none_probability(self):
+        """Entries missing raw_probability should be excluded."""
+        samples = [
+            {"raw_probability": 0.7, "resolved_bool": True, "market_probability": None},
+        ] * 20 + [
+            {"raw_probability": None, "resolved_bool": True},  # should be skipped
+        ] * 5
+        result = fit_calibration_params(samples)
+        assert result["n_samples"] == 20  # only the valid ones
+
+    def test_skips_entries_with_none_outcome(self):
+        """Entries missing resolved_bool should be excluded."""
+        samples = [
+            {"raw_probability": 0.7, "resolved_bool": True, "market_probability": None},
+        ] * 20 + [
+            {"raw_probability": 0.7, "resolved_bool": None},  # should be skipped
+        ] * 5
+        result = fit_calibration_params(samples)
+        assert result["n_samples"] == 20

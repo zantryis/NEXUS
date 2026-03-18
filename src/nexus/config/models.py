@@ -108,7 +108,8 @@ class KalshiBenchmarkConfig(BaseModel):
 
 class FutureProjectionConfig(BaseModel):
     enabled: bool = False
-    # "actor" = multi-actor swarm engine, "native" = single-pass LLM engine
+    # Production: actor (default, multi-actor swarm), structural (KG-native daily).
+    # Experimental: graphrag, perspective, debate, naked (benchmark/research only).
     engine: Literal["actor", "native", "graphrag", "perspective", "debate", "naked", "structural"] = "actor"
     min_history_days: int = Field(default=7, ge=1)
     min_thread_snapshots: int = Field(default=2, ge=1)
