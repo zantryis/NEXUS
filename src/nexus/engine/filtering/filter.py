@@ -15,6 +15,7 @@ from typing import Optional
 from nexus.config.models import TopicConfig
 from nexus.engine.filtering.pairwise import (
     detect_degenerate,
+    pairwise_fallback,
     resolve_maybe_items,
     triage_split,
 )
@@ -343,38 +344,56 @@ async def filter_items(
         is_degenerate = detect_degenerate(all_scores)
 
         if is_degenerate:
-            logger.warning("Degenerate score distribution detected — expanding MAYBE pool")
+            logger.warning("Degenerate score distribution detected — using full pairwise fallback")
+            eff_div_max = diversity_max_items if diversity_max_items is not None else DIVERSITY_MAX_ITEMS
+            pass1_results = await pairwise_fallback(llm, scored_items, topic, max_keep=eff_div_max)
 
-        keep, maybe, drop = triage_split(scored_items)
+            for item in scored_items:
+                log = item_logs[item.url]
+                log["triage_band"] = "degenerate"
+                log["filter_mode"] = "pairwise_fallback"
+                if item in pass1_results:
+                    log["passed_pass1"] = True
+                    log["pairwise_promoted"] = True
+                else:
+                    log["outcome"] = "rejected_relevance"
+                    log["pairwise_promoted"] = False
 
-        # Log triage bands
-        for item in keep:
-            item_logs[item.url]["passed_pass1"] = True
-            item_logs[item.url]["triage_band"] = "keep"
-        for item in maybe:
-            item_logs[item.url]["triage_band"] = "maybe"
-        for item in drop:
-            item_logs[item.url]["outcome"] = "rejected_relevance"
-            item_logs[item.url]["triage_band"] = "drop"
+            logger.info(f"Pass 1 (fallback): {len(pass1_results)}/{len(scored_items)} items selected via full pairwise")
+        else:
+            keep, maybe, drop = triage_split(scored_items)
 
-        # Resolve MAYBE items via pairwise comparison
-        promoted = await resolve_maybe_items(llm, maybe, keep, topic)
-        promoted_urls = {item.url for item in promoted}
+            # Log triage bands
+            for item in keep:
+                item_logs[item.url]["passed_pass1"] = True
+                item_logs[item.url]["triage_band"] = "keep"
+                item_logs[item.url]["filter_mode"] = "hybrid"
+            for item in maybe:
+                item_logs[item.url]["triage_band"] = "maybe"
+                item_logs[item.url]["filter_mode"] = "hybrid"
+            for item in drop:
+                item_logs[item.url]["outcome"] = "rejected_relevance"
+                item_logs[item.url]["triage_band"] = "drop"
+                item_logs[item.url]["filter_mode"] = "hybrid"
 
-        for item in maybe:
-            log = item_logs[item.url]
-            if item.url in promoted_urls:
-                log["passed_pass1"] = True
-                log["pairwise_promoted"] = True
-            else:
-                log["outcome"] = "rejected_relevance"
-                log["pairwise_promoted"] = False
+            # Resolve MAYBE items via pairwise comparison
+            promoted = await resolve_maybe_items(llm, maybe, keep, topic)
+            promoted_urls = {item.url for item in promoted}
 
-        pass1_results = keep + promoted
-        logger.info(
-            f"Pass 1 (hybrid): {len(keep)} KEEP + {len(promoted)}/{len(maybe)} "
-            f"MAYBE promoted + {len(drop)} DROP = {len(pass1_results)} survivors"
-        )
+            for item in maybe:
+                log = item_logs[item.url]
+                if item.url in promoted_urls:
+                    log["passed_pass1"] = True
+                    log["pairwise_promoted"] = True
+                else:
+                    log["outcome"] = "rejected_relevance"
+                    log["pairwise_promoted"] = False
+
+            pass1_results = keep + promoted
+            logger.info(
+                f"Pass 1 (hybrid): {len(keep)} KEEP + {len(promoted)}/{len(maybe)} "
+                f"MAYBE promoted + {len(drop)} DROP = {len(pass1_results)} survivors"
+            )
     else:
         # Simple threshold cut (original behavior)
         pass1_results = []

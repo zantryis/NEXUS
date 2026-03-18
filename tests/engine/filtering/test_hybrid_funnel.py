@@ -264,3 +264,60 @@ async def test_hybrid_funnel_log_entries_complete():
     drop_log = next(e for e in result.log_entries if "drop" in e["url"])
     assert drop_log["triage_band"] == "drop"
     assert drop_log["outcome"] == "rejected_relevance"
+
+
+# ── Degenerate fallback ────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_degenerate_distribution_triggers_fallback():
+    """When scores collapse into a narrow band, full pairwise fallback runs."""
+    topic = _make_topic()
+    # 10 items all scoring 4 — degenerate (100% in band [4,5], fits one batch)
+    items = [_item(f"Article {i}") for i in range(10)]
+
+    mock_llm = AsyncMock()
+
+    # Pass 1: all score 4 (degenerate distribution)
+    pass1 = json.dumps([{"id": i, "score": 4, "reason": "Moderate"} for i in range(10)])
+
+    # Fallback: 3 rounds of Swiss pairings (5 pairs each round)
+    fallback_round = json.dumps([
+        {"pair": i, "winner": "A", "reason": "Better"} for i in range(1, 6)
+    ])
+
+    mock_llm.complete.side_effect = [pass1, fallback_round, fallback_round, fallback_round]
+
+    result = await filter_items(mock_llm, items, topic, threshold=5,
+                                diversity_max_items=4)
+
+    # Fallback selects top 4
+    assert len(result.accepted) == 4
+    # All items should be marked as degenerate
+    assert all(e.get("triage_band") == "degenerate" for e in result.log_entries)
+    assert all(e.get("filter_mode") == "pairwise_fallback" for e in result.log_entries)
+    # 4 promoted, 6 rejected
+    promoted_logs = [e for e in result.log_entries if e.get("pairwise_promoted")]
+    assert len(promoted_logs) == 4
+
+
+@pytest.mark.asyncio
+async def test_non_degenerate_uses_hybrid_not_fallback():
+    """Bimodal distribution uses hybrid triage, not fallback."""
+    topic = _make_topic()
+    items = [_item("High"), _item("Low")]
+
+    mock_llm = AsyncMock()
+    pass1 = json.dumps([
+        {"id": 0, "score": 9, "reason": "Great"},
+        {"id": 1, "score": 1, "reason": "Bad"},
+    ])
+    mock_llm.complete.return_value = pass1
+
+    result = await filter_items(mock_llm, items, topic, threshold=5)
+
+    assert len(result.accepted) == 1
+    # Should use hybrid mode, not fallback
+    keep_log = next(e for e in result.log_entries if "high" in e["url"])
+    assert keep_log.get("filter_mode") == "hybrid"
+    assert keep_log["triage_band"] == "keep"

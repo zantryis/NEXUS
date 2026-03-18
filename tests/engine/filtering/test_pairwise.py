@@ -322,3 +322,109 @@ class TestTriageSplit:
         assert len(maybe) == 1
         assert len(keep) == 0
         assert len(drop) == 0
+
+
+# ── pairwise_fallback ──────────────────────────────────────────
+
+
+class TestPairwiseFallback:
+    """Tests for full pairwise fallback (degenerate distribution)."""
+
+    @pytest.mark.asyncio
+    async def test_returns_top_k_items(self):
+        """Fallback ranks all items by wins, returns top max_keep."""
+        from nexus.engine.filtering.pairwise import pairwise_fallback
+
+        items = [
+            _make_item("Best", score=4.0),
+            _make_item("Good", score=4.0),
+            _make_item("Okay", score=4.0),
+            _make_item("Weak", score=4.0),
+        ]
+        topic = _make_topic()
+
+        mock_llm = AsyncMock()
+        # Round 1: Best beats Weak, Good beats Okay
+        # Round 2: Best beats Good, Okay beats Weak
+        # Round 3: Best beats Okay, Good beats Weak
+        mock_llm.complete.side_effect = [
+            json.dumps([
+                {"pair": 1, "winner": "A", "reason": "Better"},
+                {"pair": 2, "winner": "A", "reason": "Better"},
+            ]),
+            json.dumps([
+                {"pair": 1, "winner": "A", "reason": "Better"},
+                {"pair": 2, "winner": "A", "reason": "Better"},
+            ]),
+            json.dumps([
+                {"pair": 1, "winner": "A", "reason": "Better"},
+                {"pair": 2, "winner": "A", "reason": "Better"},
+            ]),
+        ]
+
+        result = await pairwise_fallback(mock_llm, items, topic, max_keep=2)
+        assert len(result) == 2
+
+    @pytest.mark.asyncio
+    async def test_fewer_items_than_max_keep(self):
+        """If fewer items than max_keep, return all."""
+        from nexus.engine.filtering.pairwise import pairwise_fallback
+
+        items = [_make_item("Only One", score=4.0)]
+        topic = _make_topic()
+        mock_llm = AsyncMock()
+
+        result = await pairwise_fallback(mock_llm, items, topic, max_keep=5)
+        assert len(result) == 1
+        assert mock_llm.complete.call_count == 0  # no comparisons needed
+
+    @pytest.mark.asyncio
+    async def test_two_items_compared_across_rounds(self):
+        """Two items are paired each round (3 rounds default)."""
+        from nexus.engine.filtering.pairwise import pairwise_fallback
+
+        items = [
+            _make_item("Article A", score=4.0),
+            _make_item("Article B", score=4.0),
+        ]
+        topic = _make_topic()
+
+        winner_response = json.dumps([{"pair": 1, "winner": "A", "reason": "A is better"}])
+        mock_llm = AsyncMock()
+        mock_llm.complete.side_effect = [winner_response] * 3  # 3 rounds
+
+        result = await pairwise_fallback(mock_llm, items, topic, max_keep=1)
+        assert len(result) == 1
+        assert result[0].title == "Article A"  # A won all rounds
+
+    @pytest.mark.asyncio
+    async def test_parse_errors_still_produce_ranking(self):
+        """LLM errors don't crash — items with 0 wins go to bottom."""
+        from nexus.engine.filtering.pairwise import pairwise_fallback
+
+        items = [
+            _make_item("A", score=4.0),
+            _make_item("B", score=4.0),
+            _make_item("C", score=4.0),
+            _make_item("D", score=4.0),
+        ]
+        topic = _make_topic()
+
+        mock_llm = AsyncMock()
+        # All calls return garbage → 0 wins each → still returns max_keep items
+        mock_llm.complete.side_effect = [
+            "not json",
+            "not json",
+            "not json",
+        ]
+
+        result = await pairwise_fallback(mock_llm, items, topic, max_keep=2)
+        assert len(result) == 2  # still returns requested count
+
+    @pytest.mark.asyncio
+    async def test_empty_items(self):
+        """Empty input → empty output."""
+        from nexus.engine.filtering.pairwise import pairwise_fallback
+
+        result = await pairwise_fallback(AsyncMock(), [], _make_topic(), max_keep=5)
+        assert result == []
