@@ -557,7 +557,7 @@ class LLMClient:
         from google.genai import types
         config = types.GenerateContentConfig(
             system_instruction=system_prompt,
-            http_options=types.HttpOptions(timeout=timeout_s),
+            http_options=types.HttpOptions(timeout=int(timeout_s * 1000)),
         )
         if json_response:
             config.response_mime_type = "application/json"
