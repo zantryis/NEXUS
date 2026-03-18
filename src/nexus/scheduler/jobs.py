@@ -171,6 +171,56 @@ async def daily_prediction_job(
     logger.info("=== Daily prediction job complete: %s ===", results)
 
 
+async def source_rediscovery_job(
+    config: NexusConfig,
+    llm: LLMClient,
+    data_dir: Path,
+) -> None:
+    """Re-discover sources for all topics and merge new feeds into registries."""
+    from nexus.engine.sources.discovery import discover_sources
+
+    import yaml
+
+    for topic in config.topics:
+        slug = topic.name.lower().replace(" ", "-").replace("/", "-")
+        registry_path = data_dir / "sources" / slug / "registry.yaml"
+
+        # Load existing registry
+        existing_sources: list[dict] = []
+        if registry_path.exists():
+            raw = yaml.safe_load(registry_path.read_text())
+            if raw and "sources" in raw:
+                existing_sources = raw["sources"]
+
+        existing_urls = {s["url"] for s in existing_sources}
+
+        try:
+            result = await discover_sources(
+                llm, topic.name,
+                subtopics=topic.subtopics,
+                existing_urls=existing_urls,
+                data_dir=data_dir,
+            )
+
+            # Merge: add only feeds with new URLs
+            new_feeds = [f for f in result.feeds if f["url"] not in existing_urls]
+            if new_feeds:
+                merged = existing_sources + new_feeds
+                registry_path.parent.mkdir(parents=True, exist_ok=True)
+                registry_path.write_text(
+                    yaml.dump({"sources": merged}, default_flow_style=False)
+                )
+                logger.info(
+                    f"[{topic.name}] Re-discovery: added {len(new_feeds)} new feeds "
+                    f"({len(merged)} total)"
+                )
+            else:
+                logger.info(f"[{topic.name}] Re-discovery: no new feeds found")
+
+        except Exception as e:
+            logger.error(f"[{topic.name}] Source re-discovery failed: {e}", exc_info=True)
+
+
 async def breaking_news_job(
     config: NexusConfig,
     llm: LLMClient,
@@ -261,6 +311,20 @@ def schedule_jobs(
             f"Scheduled daily predictions at {pred_hour:02d}:{pred_minute:02d} "
             f"{timezone} ({offset}min after pipeline)"
         )
+
+    # Source re-discovery (if discovery enabled)
+    if config.sources.discover_new_sources and config.topics:
+        interval_days = config.sources.discovery_interval_days
+        scheduler.add_job(
+            source_rediscovery_job,
+            "interval",
+            days=interval_days,
+            args=[config, llm, data_dir],
+            id="source_rediscovery",
+            name="Source Re-Discovery",
+            replace_existing=True,
+        )
+        logger.info(f"Scheduled source re-discovery every {interval_days} days")
 
     # Breaking news (if enabled)
     if config.breaking_news.enabled:

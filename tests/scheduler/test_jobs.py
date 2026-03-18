@@ -5,10 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
 
 from nexus.config.models import (
-    FutureProjectionConfig, NexusConfig, UserConfig, BreakingNewsConfig,
+    FutureProjectionConfig, NexusConfig, UserConfig, TopicConfig,
+    BreakingNewsConfig, SourcesConfig,
 )
 from nexus.scheduler.jobs import (
-    daily_pipeline_job, daily_prediction_job, breaking_news_job, schedule_jobs,
+    daily_pipeline_job, daily_prediction_job, breaking_news_job,
+    source_rediscovery_job, schedule_jobs,
 )
 
 
@@ -222,3 +224,192 @@ async def test_daily_prediction_job_kg_native(config, tmp_path):
         mock_kg.return_value = {"total_generated": 3, "topics": []}
         await daily_prediction_job(config, AsyncMock(), mock_store, tmp_path)
         mock_kg.assert_called_once()
+
+
+# ── Source re-discovery ──
+
+
+async def test_source_rediscovery_merges_new_feeds(tmp_path):
+    """Re-discovery should merge new feeds into existing registry without overwriting."""
+    import yaml
+
+    config = NexusConfig(
+        user=UserConfig(name="Test"),
+        topics=[TopicConfig(name="AI Research", subtopics=["agents"])],
+        sources=SourcesConfig(discover_new_sources=True, discovery_interval_days=7),
+    )
+    data_dir = tmp_path / "data"
+
+    # Pre-existing registry with one feed
+    slug = "ai-research"
+    reg_dir = data_dir / "sources" / slug
+    reg_dir.mkdir(parents=True)
+    existing = {"sources": [
+        {"url": "https://existing.com/feed", "id": "existing-feed", "name": "Existing"},
+    ]}
+    (reg_dir / "registry.yaml").write_text(yaml.dump(existing))
+
+    # Discovery returns a new feed
+    from dataclasses import dataclass, field as dfield
+
+    @dataclass
+    class FakeResult:
+        feeds: list = dfield(default_factory=list)
+
+    with patch(
+        "nexus.engine.sources.discovery.discover_sources",
+        new_callable=AsyncMock,
+    ) as mock_discover:
+        mock_discover.return_value = FakeResult(feeds=[
+            {"url": "https://new.com/feed", "id": "new-feed", "name": "New Source"},
+        ])
+
+        await source_rediscovery_job(config, AsyncMock(), data_dir)
+
+    # Registry should now contain both feeds
+    reg = yaml.safe_load((reg_dir / "registry.yaml").read_text())
+    urls = {s["url"] for s in reg["sources"]}
+    assert "https://existing.com/feed" in urls
+    assert "https://new.com/feed" in urls
+    assert len(reg["sources"]) == 2
+
+    # Discovery was called with existing URLs to avoid re-discovering them
+    call_kwargs = mock_discover.call_args.kwargs
+    assert "https://existing.com/feed" in call_kwargs["existing_urls"]
+
+
+async def test_source_rediscovery_skips_duplicates(tmp_path):
+    """Re-discovery should not add feeds that already exist in the registry."""
+    import yaml
+
+    config = NexusConfig(
+        user=UserConfig(name="Test"),
+        topics=[TopicConfig(name="AI Research")],
+        sources=SourcesConfig(discover_new_sources=True),
+    )
+    data_dir = tmp_path / "data"
+
+    slug = "ai-research"
+    reg_dir = data_dir / "sources" / slug
+    reg_dir.mkdir(parents=True)
+    existing = {"sources": [
+        {"url": "https://feed.com/rss", "id": "feed1", "name": "Feed One"},
+    ]}
+    (reg_dir / "registry.yaml").write_text(yaml.dump(existing))
+
+    from dataclasses import dataclass, field as dfield
+
+    @dataclass
+    class FakeResult:
+        feeds: list = dfield(default_factory=list)
+
+    with patch(
+        "nexus.engine.sources.discovery.discover_sources",
+        new_callable=AsyncMock,
+    ) as mock_discover:
+        # Discovery returns same URL as existing
+        mock_discover.return_value = FakeResult(feeds=[
+            {"url": "https://feed.com/rss", "id": "feed1-dup", "name": "Duplicate"},
+        ])
+
+        await source_rediscovery_job(config, AsyncMock(), data_dir)
+
+    # Should still have exactly 1 feed
+    reg = yaml.safe_load((reg_dir / "registry.yaml").read_text())
+    assert len(reg["sources"]) == 1
+
+
+async def test_source_rediscovery_handles_empty_registry(tmp_path):
+    """Re-discovery should work when no registry exists yet."""
+    import yaml
+
+    config = NexusConfig(
+        user=UserConfig(name="Test"),
+        topics=[TopicConfig(name="Space Exploration")],
+        sources=SourcesConfig(discover_new_sources=True),
+    )
+    data_dir = tmp_path / "data"
+
+    from dataclasses import dataclass, field as dfield
+
+    @dataclass
+    class FakeResult:
+        feeds: list = dfield(default_factory=list)
+
+    with patch(
+        "nexus.engine.sources.discovery.discover_sources",
+        new_callable=AsyncMock,
+    ) as mock_discover:
+        mock_discover.return_value = FakeResult(feeds=[
+            {"url": "https://space.com/feed", "id": "space", "name": "Space.com"},
+        ])
+
+        await source_rediscovery_job(config, AsyncMock(), data_dir)
+
+    slug = "space-exploration"
+    reg = yaml.safe_load((data_dir / "sources" / slug / "registry.yaml").read_text())
+    assert len(reg["sources"]) == 1
+    assert reg["sources"][0]["url"] == "https://space.com/feed"
+
+
+async def test_source_rediscovery_error_doesnt_clobber_registry(tmp_path):
+    """If discovery fails, existing registry should be untouched."""
+    import yaml
+
+    config = NexusConfig(
+        user=UserConfig(name="Test"),
+        topics=[TopicConfig(name="AI Research")],
+        sources=SourcesConfig(discover_new_sources=True),
+    )
+    data_dir = tmp_path / "data"
+
+    slug = "ai-research"
+    reg_dir = data_dir / "sources" / slug
+    reg_dir.mkdir(parents=True)
+    existing = {"sources": [
+        {"url": "https://existing.com/feed", "id": "existing", "name": "Existing"},
+    ]}
+    (reg_dir / "registry.yaml").write_text(yaml.dump(existing))
+
+    with patch(
+        "nexus.engine.sources.discovery.discover_sources",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("LLM down"),
+    ):
+        # Should not raise
+        await source_rediscovery_job(config, AsyncMock(), data_dir)
+
+    # Registry unchanged
+    reg = yaml.safe_load((reg_dir / "registry.yaml").read_text())
+    assert len(reg["sources"]) == 1
+
+
+def test_schedule_jobs_with_rediscovery():
+    """When discovery is enabled, re-discovery job should be scheduled."""
+    config = NexusConfig(
+        user=UserConfig(name="Tristan", timezone="America/Denver"),
+        topics=[TopicConfig(name="AI Research")],
+        sources=SourcesConfig(discover_new_sources=True, discovery_interval_days=7),
+        breaking_news=BreakingNewsConfig(enabled=False),
+    )
+    scheduler = MagicMock()
+
+    schedule_jobs(scheduler, config, MagicMock(), Path("/tmp"), MagicMock())
+
+    call_ids = [c.kwargs["id"] for c in scheduler.add_job.call_args_list]
+    assert "source_rediscovery" in call_ids
+
+
+def test_schedule_jobs_no_rediscovery_when_disabled():
+    """When discovery is disabled, re-discovery job should NOT be scheduled."""
+    config = NexusConfig(
+        user=UserConfig(name="Tristan", timezone="America/Denver"),
+        sources=SourcesConfig(discover_new_sources=False),
+        breaking_news=BreakingNewsConfig(enabled=False),
+    )
+    scheduler = MagicMock()
+
+    schedule_jobs(scheduler, config, MagicMock(), Path("/tmp"), MagicMock())
+
+    call_ids = [c.kwargs["id"] for c in scheduler.add_job.call_args_list]
+    assert "source_rediscovery" not in call_ids
