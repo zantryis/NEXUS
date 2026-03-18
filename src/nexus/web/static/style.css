@@ -3873,3 +3873,36 @@ a.entity-tag:hover {
     vertical-align: middle;
     margin-left: 0.35rem;
 }
+
+/* ── Feed Health ── */
+
+.feed-health-warning {
+    background: rgba(255, 60, 60, 0.08);
+    border: 1px solid rgba(255, 60, 60, 0.25);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+}
+.feed-health-warning ul {
+    margin: 0.4rem 0 0 1.2rem;
+    padding: 0;
+}
+.feed-health-error {
+    color: var(--nx-text-dim);
+    font-size: 0.78rem;
+}
+.feed-status {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.feed-status-healthy { background: rgba(0, 200, 120, 0.15); color: #00c878; }
+.feed-status-degraded { background: rgba(255, 180, 0, 0.15); color: #e6a800; }
+.feed-status-dead { background: rgba(255, 60, 60, 0.15); color: #ff3c3c; }
+.feed-row-dead { opacity: 0.5; }
+.feed-row-degraded { opacity: 0.75; }
+.feed-url { font-family: var(--nx-font-mono); font-size: 0.78rem; }
