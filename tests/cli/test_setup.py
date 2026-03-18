@@ -31,8 +31,8 @@ def test_run_setup_creates_config(tmp_path):
     inputs = iter([
         "2",          # preset: cheap
         "sk-fake123", # api key
-        "1,3",        # topics: first and third
-        "",           # no custom topic
+        "",           # no custom topics (skip)
+        "1,3",        # pre-configured: first and third
         "Tester",     # user name
         "UTC",        # timezone
     ])
@@ -56,8 +56,8 @@ def test_run_setup_balanced_preset_needs_gemini_key(tmp_path):
     inputs = iter([
         "3",          # balanced
         "AIza-fake",  # gemini key
-        "1",          # topic
-        "",           # no custom topic
+        "",           # no custom topics
+        "1",          # pre-configured: first
         "Tester",
         "UTC",
     ])
@@ -75,8 +75,8 @@ def test_run_setup_free_preset_no_key(tmp_path):
 
     inputs = iter([
         "1",          # free
-        "1",          # topic
-        "",           # no custom topic
+        "",           # no custom topics
+        "1",          # pre-configured: first
         "Tester",
         "UTC",
     ])
@@ -100,8 +100,8 @@ def test_setup_invalid_preset_retries(tmp_path):
         "99",         # out of range
         "2",          # valid
         "sk-key",     # api key
-        "1",          # topic
-        "",           # no custom
+        "",           # no custom topics
+        "1",          # pre-configured: first
         "Tester",
         "UTC",
     ])
@@ -119,8 +119,8 @@ def test_setup_invalid_topic_input_skipped(tmp_path):
 
     inputs = iter([
         "1",          # free preset
+        "",           # no custom topics
         "1,abc,99",   # mix of valid, invalid, out-of-range
-        "",           # no custom
         "Tester",
         "UTC",
     ])
@@ -139,8 +139,9 @@ def test_setup_custom_topic(tmp_path):
 
     inputs = iter([
         "1",                    # free preset
-        "1",                    # pick first built-in topic
         "Horticulture",         # custom topic
+        "",                     # done adding custom topics
+        "",                     # skip pre-configured
         "Tester",
         "UTC",
     ])
@@ -168,8 +169,8 @@ def test_setup_openai_preset(tmp_path):
     inputs = iter([
         str(openai_idx),
         "sk-openai-fake",   # api key
-        "1",                # topic
-        "",                 # no custom
+        "",                 # no custom topics
+        "1",                # pre-configured: first
         "Tester",
         "UTC",
     ])
@@ -190,8 +191,8 @@ def test_setup_preserves_existing_env(tmp_path):
     inputs = iter([
         "2",          # cheap (DeepSeek)
         "sk-deep",    # api key
-        "1",          # topic
-        "",           # no custom
+        "",           # no custom topics
+        "1",          # pre-configured: first
         "Tester",
         "UTC",
     ])
@@ -212,8 +213,8 @@ def test_setup_empty_api_key_reprompts(tmp_path):
         "2",          # cheap (needs key)
         "",           # empty first try
         "sk-real",    # valid second try
-        "1",          # topic
-        "",           # no custom
+        "",           # no custom topics
+        "1",          # pre-configured: first
         "Tester",
         "UTC",
     ])

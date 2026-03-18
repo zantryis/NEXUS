@@ -28,6 +28,7 @@ def _mock_kalshi_events():
                         "title": "Iran military strike before April 2026",
                         "subtitle": "Resolves Yes if Iran conducts a military strike",
                         "status": "open",
+                        "close_time": "2026-04-01T23:59:00Z",
                         "yes_bid": 0.31,
                         "yes_ask": 0.34,
                         "last_price": 0.32,
@@ -46,6 +47,7 @@ def _mock_kalshi_events():
                         "title": "EU AI regulation before July 2026",
                         "subtitle": "Resolves Yes if EU passes comprehensive AI regulation",
                         "status": "open",
+                        "close_time": "2026-07-01T23:59:00Z",
                         "yes_bid": 0.62,
                         "yes_ask": 0.65,
                         "last_price": 0.63,
@@ -64,6 +66,7 @@ def _mock_kalshi_events():
                         "title": "Bitcoin reaches $100K before June 2026",
                         "subtitle": "",
                         "status": "open",
+                        "close_time": "2026-06-01T23:59:00Z",
                         "yes_bid": 0.45,
                         "yes_ask": 0.48,
                         "last_price": 0.46,
@@ -92,6 +95,7 @@ class TestScanKalshiMarkets:
             mock_client,
             entity_names=["Iran", "Israel", "United States"],
             topic_name="Iran-US Relations",
+            run_date=date(2026, 3, 15),
         )
         assert len(matches) >= 1
         # Should match the Iran strike market
@@ -108,6 +112,7 @@ class TestScanKalshiMarkets:
             mock_client,
             entity_names=["Iran", "Israel"],
             topic_name="Iran-US Relations",
+            run_date=date(2026, 3, 15),
         )
         # Iran market should have higher match score than unrelated ones
         if len(matches) >= 2:
@@ -123,6 +128,7 @@ class TestScanKalshiMarkets:
             mock_client,
             entity_names=["Iran"],
             topic_name="Iran-US Relations",
+            run_date=date(2026, 3, 15),
         )
         assert len(matches) >= 1
         iran_match = next(m for m in matches if m["ticker"] == "IRAN-STRIKE-2026-Y")
@@ -139,6 +145,7 @@ class TestScanKalshiMarkets:
             mock_client,
             entity_names=["Japan", "South Korea"],
             topic_name="East Asian Diplomacy",
+            run_date=date(2026, 3, 15),
         )
         # None of the mock markets mention Japan or South Korea
         assert len(matches) == 0
@@ -154,8 +161,172 @@ class TestScanKalshiMarkets:
             entity_names=["Iran", "AI", "Bitcoin", "EU"],
             topic_name="Everything",
             max_markets=2,
+            run_date=date(2026, 3, 15),
         )
         assert len(matches) <= 2
+
+    async def test_rejects_market_beyond_max_horizon(self):
+        from nexus.engine.projection.kalshi_matcher import scan_kalshi_markets
+
+        mock_client = AsyncMock()
+        mock_client.list_events.return_value = _mock_kalshi_events()
+
+        # run_date far before close_times, but max_horizon_days=10 rejects all
+        matches = await scan_kalshi_markets(
+            mock_client,
+            entity_names=["Iran", "AI", "Bitcoin", "EU"],
+            topic_name="Everything",
+            run_date=date(2026, 3, 15),
+            max_horizon_days=10,
+        )
+        # Iran closes 2026-04-01 (17 days out), AI 2026-07-01, BTC 2026-06-01 — all > 10
+        assert len(matches) == 0
+
+    async def test_rejects_expired_market(self):
+        from nexus.engine.projection.kalshi_matcher import scan_kalshi_markets
+
+        mock_client = AsyncMock()
+        mock_client.list_events.return_value = _mock_kalshi_events()
+
+        # run_date after all close_times → all expired
+        matches = await scan_kalshi_markets(
+            mock_client,
+            entity_names=["Iran", "AI", "Bitcoin", "EU"],
+            topic_name="Everything",
+            run_date=date(2026, 8, 1),
+        )
+        assert len(matches) == 0
+
+    async def test_accepts_market_within_horizon(self):
+        from nexus.engine.projection.kalshi_matcher import scan_kalshi_markets
+
+        mock_client = AsyncMock()
+        mock_client.list_events.return_value = _mock_kalshi_events()
+
+        matches = await scan_kalshi_markets(
+            mock_client,
+            entity_names=["Iran"],
+            topic_name="Iran-US Relations",
+            run_date=date(2026, 3, 15),
+            max_horizon_days=30,
+        )
+        assert len(matches) >= 1
+        iran = next(m for m in matches if m["ticker"] == "IRAN-STRIKE-2026-Y")
+        assert iran["close_date"] == "2026-04-01"
+        assert iran["days_to_close"] == 17
+
+    async def test_skips_market_without_close_time(self):
+        from nexus.engine.projection.kalshi_matcher import scan_kalshi_markets
+
+        # Create events with one market missing close_time
+        events = {
+            "events": [
+                {
+                    "event_ticker": "NO-CLOSE",
+                    "title": "Will Iran do something?",
+                    "category": "world",
+                    "markets": [
+                        {
+                            "ticker": "NO-CLOSE-Y",
+                            "title": "Iran something",
+                            "subtitle": "",
+                            "status": "open",
+                            # no close_time field
+                            "last_price": 0.50,
+                        },
+                    ],
+                },
+            ],
+            "cursor": None,
+        }
+        mock_client = AsyncMock()
+        mock_client.list_events.return_value = events
+
+        matches = await scan_kalshi_markets(
+            mock_client,
+            entity_names=["Iran"],
+            topic_name="Iran",
+            run_date=date(2026, 3, 15),
+        )
+        assert len(matches) == 0
+
+
+# ── Horizon Bucket Mapping ───────────────────────────────────────────
+
+
+class TestHorizonBucketMapping:
+
+    async def test_generate_uses_real_close_date(self):
+        from nexus.engine.projection.kalshi_matcher import generate_aligned_forecasts
+
+        matched_markets = [
+            {
+                "ticker": "TEST-Y",
+                "title": "Test market",
+                "event_title": "Will test happen?",
+                "implied_probability": 0.40,
+                "match_score": 2,
+                "matched_entities": [],
+                "close_date": "2026-04-15",
+            },
+        ]
+
+        mock_store = AsyncMock()
+        mock_store.find_entity.return_value = None
+        mock_store.get_entity_neighborhood.return_value = {
+            "entities": [], "relationships": [],
+        }
+        mock_store.get_relationship_timeline.return_value = []
+
+        questions = await generate_aligned_forecasts(
+            None, mock_store, matched_markets,
+            topic_slug="test",
+            run_date=date(2026, 3, 15),
+        )
+        assert len(questions) == 1
+        q = questions[0]
+        # resolution_date should be the market's close_date, not run_date + 14
+        assert q.resolution_date == date(2026, 4, 15)
+
+    async def test_horizon_mapped_to_literal_bucket(self):
+        from nexus.engine.projection.kalshi_matcher import generate_aligned_forecasts
+
+        mock_store = AsyncMock()
+        mock_store.find_entity.return_value = None
+        mock_store.get_entity_neighborhood.return_value = {
+            "entities": [], "relationships": [],
+        }
+        mock_store.get_relationship_timeline.return_value = []
+
+        # 2-day market → horizon_days=3
+        q2 = await generate_aligned_forecasts(
+            None, mock_store,
+            [{"ticker": "T2", "title": "T", "event_title": "T?",
+              "implied_probability": 0.5, "match_score": 1,
+              "matched_entities": [], "close_date": "2026-03-17"}],
+            topic_slug="t", run_date=date(2026, 3, 15),
+        )
+        assert q2[0].horizon_days == 3
+
+        # 5-day market → horizon_days=7
+        q5 = await generate_aligned_forecasts(
+            None, mock_store,
+            [{"ticker": "T5", "title": "T", "event_title": "T?",
+              "implied_probability": 0.5, "match_score": 1,
+              "matched_entities": [], "close_date": "2026-03-20"}],
+            topic_slug="t", run_date=date(2026, 3, 15),
+        )
+        assert q5[0].horizon_days == 7
+
+        # 30-day market → horizon_days=14
+        q30 = await generate_aligned_forecasts(
+            None, mock_store,
+            [{"ticker": "T30", "title": "T", "event_title": "T?",
+              "implied_probability": 0.5, "match_score": 1,
+              "matched_entities": [], "close_date": "2026-04-14"}],
+            topic_slug="t", run_date=date(2026, 3, 15),
+        )
+        assert q30[0].horizon_days == 14
 
 
 # ── Aligned Forecast Generation ──────────────────────────────────────

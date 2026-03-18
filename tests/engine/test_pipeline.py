@@ -35,7 +35,8 @@ async def test_pipeline_produces_briefing(config, data_dir):
          patch("nexus.engine.pipeline.extract_event") as mock_extract, \
          patch("nexus.engine.pipeline.synthesize_topic") as mock_synth_topic, \
          patch("nexus.engine.pipeline.render_text_briefing") as mock_render, \
-         patch("nexus.engine.pipeline.maybe_compress") as mock_compress:
+         patch("nexus.engine.pipeline.maybe_compress") as mock_compress, \
+         patch("nexus.engine.pipeline.run_audio_pipeline", new_callable=AsyncMock) as mock_audio:
 
         from nexus.engine.sources.polling import ContentItem
         from nexus.engine.knowledge.events import Event
@@ -59,6 +60,7 @@ async def test_pipeline_produces_briefing(config, data_dir):
             threads=[NarrativeThread(headline="AI event", significance=8)],
         )
         mock_render.return_value = "# Daily Briefing\n\n## AI Research\n\nContent here."
+        mock_audio.return_value = None
 
         briefing_path = await run_pipeline(config, mock_llm, data_dir)
 
@@ -169,7 +171,8 @@ async def test_run_pipeline_auto_discovers_when_no_sources(data_dir):
          patch("nexus.engine.pipeline.extract_event") as mock_extract, \
          patch("nexus.engine.pipeline.synthesize_topic") as mock_synth_topic, \
          patch("nexus.engine.pipeline.render_text_briefing") as mock_render, \
-         patch("nexus.engine.pipeline.maybe_compress"):
+         patch("nexus.engine.pipeline.maybe_compress"), \
+         patch("nexus.engine.pipeline.run_audio_pipeline", new_callable=AsyncMock) as mock_audio:
 
         from nexus.engine.sources.polling import ContentItem
         from nexus.engine.knowledge.events import Event
@@ -203,6 +206,7 @@ async def test_run_pipeline_auto_discovers_when_no_sources(data_dir):
             threads=[NarrativeThread(headline="Rocket launch", significance=8)],
         )
         mock_render.return_value = "# Briefing\n\nSpace content."
+        mock_audio.return_value = None
 
         briefing_path = await run_pipeline(config, mock_llm, data_dir)
         assert briefing_path.exists()
@@ -227,10 +231,12 @@ async def test_run_pipeline_skips_topic_when_no_sources_and_discovery_disabled(d
 
     with patch("nexus.engine.pipeline.load_source_registry") as mock_registry, \
          patch("nexus.engine.pipeline.run_topic_pipeline", new_callable=AsyncMock) as mock_topic, \
-         patch("nexus.engine.pipeline.render_text_briefing") as mock_render:
+         patch("nexus.engine.pipeline.render_text_briefing") as mock_render, \
+         patch("nexus.engine.pipeline.run_audio_pipeline", new_callable=AsyncMock) as mock_audio:
 
         mock_registry.return_value = []
         mock_render.return_value = "# Empty briefing"
+        mock_audio.return_value = None
 
         await run_pipeline(config, mock_llm, data_dir)
 

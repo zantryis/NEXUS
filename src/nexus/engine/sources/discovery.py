@@ -46,15 +46,16 @@ QUERY_SYSTEM_PROMPT = (
 REGISTRY_MATCH_PROMPT = (
     "You are a source relevance scorer. Given a list of RSS news sources and a topic, "
     "score how relevant each source is to the topic on a scale of 1-10.\n\n"
-    "Consider:\n"
-    "- Source name and tags\n"
-    "- Whether the source's coverage area overlaps with the topic\n"
-    "- Quality tier (A=best, B=good, C=niche)\n\n"
-    "Score conservatively for niche topics: a general tech outlet should score 3-4 for "
-    "a specific topic like 'Semiconductor Supply Chain'. Only score 7+ if the source "
-    "has dedicated, regular coverage of the topic.\n\n"
+    "SCORING GUIDE:\n"
+    "- 1-3: No meaningful connection (e.g., BBC World News for 'Rugby Union')\n"
+    "- 4-5: Occasional coverage as part of broader beat (e.g., NYT Business for 'Fashion Industry')\n"
+    "- 6-7: Regular coverage, topic is part of their core beat (e.g., Middle East Eye for 'Iran-US Relations')\n"
+    "- 8-10: Dedicated/specialist source (e.g., RugbyPass for 'Rugby Union')\n\n"
+    "CRITICAL: General news outlets (BBC, NYT, Guardian, Al Jazeera, France 24, etc.) should almost always "
+    "score 1-4 for specific topics. A source that covers 'everything including X' is NOT a good source for X. "
+    "Only score 7+ if the source name, tags, or beat clearly indicate dedicated, regular coverage.\n\n"
     "Respond with a JSON array: [{\"id\": \"<source_id>\", \"score\": <int>, \"reason\": \"<brief>\"}]\n"
-    "Only include sources scoring 5 or above."
+    "Only include sources scoring 7 or above."
 )
 
 CLASSIFY_PROMPT = (
@@ -160,7 +161,7 @@ async def _match_from_global_registry(
             scores = [scores]
 
         # Map scores back to sources
-        score_map = {entry["id"]: entry["score"] for entry in scores if entry.get("score", 0) >= 5}
+        score_map = {entry["id"]: entry["score"] for entry in scores if entry.get("score", 0) >= 7}
         matched = []
         for s in candidates:
             if s["id"] in score_map:
@@ -194,10 +195,10 @@ async def _match_from_global_registry(
 
 
 def _google_news_rss_urls(topic_name: str, subtopics: list[str] | None) -> list[str]:
-    """Generate Google News RSS URLs for topic and subtopics."""
+    """Generate Google News RSS URLs for topic and first subtopic only."""
     queries = [topic_name]
     if subtopics:
-        queries.extend(subtopics[:3])  # Limit to avoid too many feeds
+        queries.append(subtopics[0])  # Just 1 subtopic — Google News is a catch-all, not a primary source
 
     urls = []
     for q in queries:
@@ -220,10 +221,10 @@ async def _discover_from_google_news(
             continue
         validated = await _validate_feed(url)
         if validated:
-            # Override metadata — Google News aggregates
+            # Override metadata — Google News is an aggregator, not an original source
             validated["affiliation"] = "private"
             validated["country"] = "US"
-            validated["tier"] = "A"
+            validated["tier"] = "B"
             validated["name"] = f"Google News: {topic_name}"
             feeds.append(validated)
 
@@ -263,29 +264,127 @@ async def _generate_search_queries(
     ]
 
 
+async def _extract_feed_links(page_url: str) -> list[str]:
+    """Fetch a web page and extract RSS/Atom feed links from <link> tags."""
+    import httpx
+    import re
+
+    feeds: list[str] = []
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
+            resp = await client.get(page_url, headers={"User-Agent": "Mozilla/5.0"})
+            if resp.status_code != 200:
+                return []
+            html = resp.text[:50_000]  # Only scan head section
+
+        # Match <link rel="alternate" type="application/rss+xml" href="...">
+        # and application/atom+xml variants
+        pattern = r'<link[^>]+type=["\']application/(?:rss|atom)\+xml["\'][^>]*>'
+        for tag in re.findall(pattern, html, re.IGNORECASE):
+            href_match = re.search(r'href=["\']([^"\']+)', tag)
+            if href_match:
+                href = href_match.group(1)
+                # Resolve relative URLs
+                if href.startswith("/"):
+                    from urllib.parse import urlparse
+                    parsed = urlparse(page_url)
+                    href = f"{parsed.scheme}://{parsed.netloc}{href}"
+                if href.startswith("http"):
+                    feeds.append(href)
+
+        # Also check reverse attribute order (href before type)
+        pattern2 = r'<link[^>]+href=["\']([^"\']+)["\'][^>]+type=["\']application/(?:rss|atom)\+xml["\'][^>]*>'
+        for href in re.findall(pattern2, html, re.IGNORECASE):
+            if href.startswith("/"):
+                from urllib.parse import urlparse
+                parsed = urlparse(page_url)
+                href = f"{parsed.scheme}://{parsed.netloc}{href}"
+            if href.startswith("http") and href not in feeds:
+                feeds.append(href)
+
+    except Exception as e:
+        logger.debug(f"Feed link extraction failed for {page_url}: {e}")
+
+    return feeds
+
+
+# Common RSS feed paths to try when a page doesn't have <link> tags
+_COMMON_FEED_PATHS = ["/feed", "/rss", "/rss.xml", "/atom.xml"]
+
+
+async def _probe_common_feed_paths(page_url: str) -> list[str]:
+    """Try common RSS feed paths on a domain (fast, 5s timeout per probe)."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(page_url)
+    base = f"{parsed.scheme}://{parsed.netloc}"
+
+    for path in _COMMON_FEED_PATHS:
+        candidate = base + path
+        try:
+            validated = await _validate_feed(candidate, timeout=5.0)
+            if validated:
+                return [candidate]
+        except Exception:
+            continue
+
+    return []
+
+
 async def _find_rss_feeds(query: str) -> list[str]:
-    """Search the web for RSS feed URLs matching a query."""
+    """Search the web for RSS feed URLs matching a query.
+
+    Strategy:
+      1. DDG search for the query
+      2. For each result URL, try to validate it directly as a feed
+      3. For non-feed URLs, extract <link rel="alternate"> feed links from the page
+      4. For domains with no feed links, probe common feed paths (/feed, /rss.xml, etc.)
+    """
     results = await web_search(query, max_results=8)
-    urls: list[str] = []
+    page_urls: list[str] = []
+    feed_urls: list[str] = []
+
     for r in results:
         url = r.get("url", "")
-        # Collect all URLs — we'll validate them as feeds later
         if url:
-            urls.append(url)
+            page_urls.append(url)
         # Also look for RSS URLs mentioned in snippets
         snippet = r.get("snippet", "")
         for word in snippet.split():
             if word.startswith("http") and ("rss" in word.lower() or "feed" in word.lower() or "atom" in word.lower()):
                 clean = word.rstrip(".,;)")
-                urls.append(clean)
-    return list(set(urls))
+                feed_urls.append(clean)
+
+    # Try extracting feed links from discovered pages (parallel, capped)
+    sem = asyncio.Semaphore(4)
+
+    async def _extract(url: str) -> list[str]:
+        async with sem:
+            links = await _extract_feed_links(url)
+            if links:
+                return links
+            # Fallback: probe common paths on this domain
+            return await _probe_common_feed_paths(url)
+
+    tasks = [_extract(url) for url in page_urls[:12]]
+    results_nested = await asyncio.gather(*tasks)
+    for found in results_nested:
+        feed_urls.extend(found)
+
+    # Also include the original page URLs (some may be direct feed links)
+    feed_urls.extend(page_urls)
+
+    return list(set(feed_urls))
 
 
-async def _validate_feed(url: str) -> dict | None:
+async def _validate_feed(url: str, timeout: float = 10.0) -> dict | None:
     """Check if a URL is a valid RSS/Atom feed with entries."""
     try:
         loop = asyncio.get_event_loop()
-        parsed = await loop.run_in_executor(None, feedparser.parse, url)
+        parsed = await asyncio.wait_for(
+            loop.run_in_executor(None, feedparser.parse, url),
+            timeout=timeout,
+        )
 
         if parsed.bozo and not parsed.entries:
             return None

@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Nexus — Benchmark{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h2>Engine Benchmark</h2>
+    {% if dev_mode %}
+    <span class="pred-tag pred-tag-experimental" style="margin-left: 0.5rem;">dev mode</span>
+    {% endif %}
+</div>
+
+{# ── Summary ── #}
+<div class="pred-summary">
+    <div class="pred-stat">
+        <div class="pred-stat-label">Resolved</div>
+        <div class="pred-stat-value">{{ summary.total_resolved }}</div>
+    </div>
+    <div class="pred-stat">
+        <div class="pred-stat-label">Tickers</div>
+        <div class="pred-stat-value">{{ summary.unique_tickers }}</div>
+    </div>
+    <div class="pred-stat">
+        <div class="pred-stat-label">Engines</div>
+        <div class="pred-stat-value">{{ summary.engines_tested }}</div>
+    </div>
+    <div class="pred-stat">
+        <div class="pred-stat-label">Best</div>
+        <div class="pred-stat-value">
+            {% if summary.best_engine %}
+                {{ summary.best_engine.label }}
+                <span style="font-size: 0.85rem; font-weight: 400; color: var(--nx-text-secondary);">{{ "%.3f"|format(summary.best_engine.brier) }}</span>
+            {% else %}&mdash;{% endif %}
+        </div>
+    </div>
+    <div class="pred-stat">
+        <div class="pred-stat-label">Market Baseline</div>
+        <div class="pred-stat-value">
+            {% if summary.market_mean_brier is not none %}
+                {{ "%.3f"|format(summary.market_mean_brier) }}
+            {% else %}&mdash;{% endif %}
+        </div>
+    </div>
+    {% if summary.date_range %}
+    <div class="pred-stat">
+        <div class="pred-stat-label">Period</div>
+        <div class="pred-stat-value" style="font-size: 0.8rem;">{{ summary.date_range }}</div>
+    </div>
+    {% endif %}
+</div>
+
+{# ── Engine Comparison Charts ── #}
+{% if analytics_anchored or analytics_independent %}
+<details class="pred-section" open>
+    <summary class="pred-section-title">Engine Comparison</summary>
+
+    {% if market_mean_brier is not none %}
+    <div class="pred-meta-dim" style="margin-bottom: 1rem;">
+        Lower Brier is better &middot; Green = beats market baseline ({{ "%.3f"|format(market_mean_brier) }})
+    </div>
+    {% endif %}
+
+    {% macro brier_chart(rows, title, subtitle, market_brier) %}
+    <div class="analytics-chart-section">
+        <h4 class="pred-analytics-heading">{{ title }} <span class="pred-meta-dim">{{ subtitle }}</span></h4>
+        <div class="brier-chart">
+            {% for row in rows %}
+            <div class="brier-row {{ 'brier-row-best' if loop.first else '' }}">
+                <span class="brier-label">{{ row.label }}</span>
+                <div class="brier-bar-track">
+                    {% set pct = (row.brier / 0.35 * 100)|round %}
+                    {% set mkt_pct = (market_brier / 0.35 * 100)|round if market_brier else 0 %}
+                    <div class="brier-bar-fill {{ 'brier-bar-beats' if row.vs_market < 0 else 'brier-bar-behind' }}" style="width: {{ [pct, 100]|min }}%"></div>
+                    {% if market_brier %}
+                    <div class="brier-baseline" style="left: {{ [mkt_pct, 100]|min }}%" title="Market baseline: {{ '%.3f'|format(market_brier) }}"></div>
+                    {% endif %}
+                </div>
+                <span class="brier-value {{ 'pred-beats' if row.vs_market < 0 else 'pred-behind' }}">{{ "%.3f"|format(row.brier) }}</span>
+                <span class="brier-vs {{ 'pred-beats' if row.vs_market < 0 else 'pred-behind' }}">{{ "%+.3f"|format(row.vs_market) }}</span>
+                <span class="brier-meta">{{ "%.0f"|format(row.hit_rate) }}% hit &middot; {{ row.count }}q</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endmacro %}
+
+    {% if analytics_anchored %}
+    {{ brier_chart(analytics_anchored, "Anchored", "(engine sees market price)", market_mean_brier) }}
+    {% endif %}
+
+    {% if analytics_independent %}
+    {{ brier_chart(analytics_independent, "Independent", "(no market info)", market_mean_brier) }}
+    {% endif %}
+</details>
+{% endif %}
+
+{# ── Per-Question Detail ── #}
+{% if question_detail %}
+<details class="pred-section">
+    <summary class="pred-section-title">Per-Question Detail <span class="pred-count">{{ question_detail|length }}</span></summary>
+    <div class="benchmark-table-wrap">
+        <table class="benchmark-table">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Question</th>
+                    <th>Engine</th>
+                    <th>Run</th>
+                    <th>Prob</th>
+                    <th>Market</th>
+                    <th>Outcome</th>
+                    <th>Brier</th>
+                    <th>Ticker</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for q in question_detail %}
+                <tr>
+                    <td>
+                        {% if q.status_label == 'hit' %}
+                        <span class="bench-verdict bench-hit">HIT</span>
+                        {% elif q.status_label == 'miss' %}
+                        <span class="bench-verdict bench-miss">MISS</span>
+                        {% endif %}
+                    </td>
+                    <td class="benchmark-q-cell">{{ q.display_question[:60] }}{% if q.display_question|length > 60 %}...{% endif %}</td>
+                    <td><span class="engine-badge engine-badge-{{ q.engine_class }}">{{ q.engine_label }}</span></td>
+                    <td>
+                        {% if q.run_label %}
+                        <span class="run-badge run-badge-{{ q.run_label }}">{{ q.run_label }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ "%.0f"|format(q.probability * 100) }}%</td>
+                    <td>{% if q.market_prob is not none %}{{ "%.0f"|format(q.market_prob * 100) }}%{% else %}&mdash;{% endif %}</td>
+                    <td>
+                        {% if q.resolved_bool is not none %}
+                        <span class="pred-outcome {{ 'pred-outcome-yes' if q.resolved_bool else 'pred-outcome-no' }}">
+                            {{ "YES" if q.resolved_bool else "NO" }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="{{ 'pred-beats' if q.brier_score is not none and q.brier_score < 0.25 else 'pred-behind' if q.brier_score is not none else '' }}">
+                        {% if q.brier_score is not none %}{{ "%.3f"|format(q.brier_score) }}{% else %}&mdash;{% endif %}
+                    </td>
+                    <td class="pred-ticker">{{ q.ticker }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</details>
+{% endif %}
+
+{# ── Empty state ── #}
+{% if not question_detail and not analytics_anchored and not analytics_independent %}
+<div class="empty-state">
+    <p>No benchmark results yet. Run the benchmark suite to generate results.</p>
+    <p style="font-size: 0.85rem; color: var(--nx-text-dim); margin-top: 0.5rem;">
+        <code>python -m nexus experiment --suite A --export-fixtures data/fixtures/</code>
+    </p>
+</div>
+{% endif %}
+
+{% if not dev_mode %}
+<div style="margin-top: 2rem; text-align: center;">
+    <a href="/benchmark?dev=1" class="pred-meta-dim" style="font-size: 0.78rem;">Enable dev mode for hindcast results</a>
+</div>
+{% endif %}
+
+{% endblock %}

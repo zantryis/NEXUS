@@ -8,6 +8,12 @@ from nexus.web.app import create_app
 from nexus.web.routes.settings import validate_settings
 
 
+@pytest.fixture(autouse=True)
+def _clear_demo_mode(monkeypatch):
+    """Ensure NEXUS_DEMO_MODE is not set (may leak from .env via load_dotenv)."""
+    monkeypatch.delenv("NEXUS_DEMO_MODE", raising=False)
+
+
 # ── Unit tests for validation helper ──
 
 
@@ -64,7 +70,7 @@ async def app(tmp_path):
 
 async def test_save_with_invalid_timezone_returns_errors(app):
     """POST /settings/save with bad timezone returns error, does NOT save."""
-    transport = ASGITransport(app=app)
+    transport = ASGITransport(app=app, client=("127.0.0.1", 0))
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/settings/save", data={
             "name": "Test",
@@ -84,7 +90,7 @@ async def test_save_with_invalid_timezone_returns_errors(app):
 
 async def test_save_with_invalid_schedule_returns_errors(app):
     """POST /settings/save with bad schedule returns error."""
-    transport = ASGITransport(app=app)
+    transport = ASGITransport(app=app, client=("127.0.0.1", 0))
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/settings/save", data={
             "name": "Test",
@@ -103,7 +109,7 @@ async def test_save_with_invalid_schedule_returns_errors(app):
 
 async def test_save_valid_settings_succeeds(app):
     """POST /settings/save with valid data saves and redirects."""
-    transport = ASGITransport(app=app)
+    transport = ASGITransport(app=app, client=("127.0.0.1", 0))
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/settings/save", data={
             "name": "Tristan",
@@ -136,7 +142,7 @@ async def test_save_podcast_style(app):
     """Podcast style is persisted in config."""
     import yaml
     data_dir = app.state.data_dir
-    transport = ASGITransport(app=app)
+    transport = ASGITransport(app=app, client=("127.0.0.1", 0))
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         await client.post("/settings/save", data={
             "name": "Test",

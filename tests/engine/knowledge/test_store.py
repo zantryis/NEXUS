@@ -1522,3 +1522,105 @@ async def test_purge_template_projections_deletes_templates(store):
     claims = [r[0] for r in rows]
     assert "Iran will impose new transit fees on non-allied vessels in the Strait of Hormuz" in claims
     assert not any("significant new developments" in c for c in claims)
+
+
+# ── purge_forecast_runs ───────────────────────────────────────────────
+
+
+def _make_forecast_run(topic_slug, engine, target_variable, question_text="Test?"):
+    """Helper to build a minimal ForecastRun."""
+    return ForecastRun(
+        topic_slug=topic_slug,
+        topic_name=topic_slug.replace("-", " ").title(),
+        engine=engine,
+        generated_for=date(2026, 3, 17),
+        summary="test",
+        questions=[ForecastQuestion(
+            question=question_text,
+            forecast_type="binary",
+            target_variable=target_variable,
+            probability=0.5,
+            base_rate=0.5,
+            resolution_criteria="test",
+            resolution_date=date(2026, 3, 24),
+            horizon_days=7,
+            signpost="test",
+        )],
+    )
+
+
+async def test_purge_by_target_variable(store):
+    """Purge benchmark, verify topic_claim survives."""
+    run_bench = _make_forecast_run("bench", "actor", "kalshi_benchmark", "Bench?")
+    run_claim = _make_forecast_run("claim", "actor", "topic_claim", "Claim?")
+    await store.save_forecast_run(run_bench)
+    await store.save_forecast_run(run_claim)
+
+    # Resolve the benchmark question
+    qid = run_bench.questions[0].question_id
+    await store.set_forecast_resolution(ForecastResolution(
+        forecast_question_id=qid,
+        outcome_status="resolved",
+        resolved_bool=True,
+        brier_score=0.1,
+    ))
+
+    result = await store.purge_forecast_runs(target_variable="kalshi_benchmark", dry_run=False)
+    assert result["runs_deleted"] == 1
+    assert result["questions_deleted"] == 1
+    assert result["resolutions_deleted"] == 1
+
+    # topic_claim still there
+    cursor = await store.db.execute(
+        "SELECT COUNT(*) FROM forecast_questions WHERE target_variable='topic_claim'"
+    )
+    assert (await cursor.fetchone())[0] == 1
+
+
+async def test_purge_dry_run(store):
+    """Dry run reports counts but doesn't delete."""
+    run = _make_forecast_run("bench", "actor", "kalshi_benchmark")
+    await store.save_forecast_run(run)
+
+    result = await store.purge_forecast_runs(target_variable="kalshi_benchmark", dry_run=True)
+    assert result["runs_found"] >= 1
+    assert result["questions_found"] >= 1
+    assert result["dry_run"] is True
+
+    # Data still exists
+    cursor = await store.db.execute(
+        "SELECT COUNT(*) FROM forecast_questions WHERE target_variable='kalshi_benchmark'"
+    )
+    assert (await cursor.fetchone())[0] >= 1
+
+
+async def test_purge_cascade_order(store):
+    """All child rows (resolutions, mappings, questions) cleaned up."""
+    run = _make_forecast_run("bench", "actor", "kalshi_benchmark")
+    await store.save_forecast_run(run)
+    qid = run.questions[0].question_id
+
+    # Add a resolution
+    await store.set_forecast_resolution(ForecastResolution(
+        forecast_question_id=qid,
+        outcome_status="resolved",
+        resolved_bool=False,
+        brier_score=0.25,
+    ))
+
+    result = await store.purge_forecast_runs(target_variable="kalshi_benchmark", dry_run=False)
+    assert result["runs_deleted"] == 1
+    assert result["questions_deleted"] == 1
+    assert result["resolutions_deleted"] >= 1
+
+    # Verify everything is gone
+    for table in ("forecast_runs", "forecast_questions", "forecast_resolutions"):
+        cursor = await store.db.execute(f"SELECT COUNT(*) FROM {table}")
+        assert (await cursor.fetchone())[0] == 0, f"{table} not empty"
+
+
+async def test_purge_empty_noop(store):
+    """Purge on empty DB returns zeros without error."""
+    result = await store.purge_forecast_runs(target_variable="kalshi_benchmark", dry_run=False)
+    assert result["runs_deleted"] == 0
+    assert result["questions_deleted"] == 0

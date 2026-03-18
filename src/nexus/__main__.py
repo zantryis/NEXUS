@@ -104,6 +104,12 @@ def run_engine():
 
     do_capture = "--capture" in sys.argv
     do_backtest = "--backtest" in sys.argv
+    do_quick = "--quick" in sys.argv
+
+    if do_quick:
+        config.audio.enabled = False
+        config.future_projection.enabled = False
+        print("Quick mode: max_ingest=20, audio off, projections off")
 
     if do_backtest:
         from nexus.engine.pipeline import run_backtest
@@ -139,11 +145,13 @@ def run_engine():
         asyncio.run(run_backtest(config, llm, data_dir, label=label, max_days=max_days))
     else:
         elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+        quick_cap = 20 if do_quick else None
         briefing_path = asyncio.run(run_pipeline(
             config, llm, data_dir, capture=do_capture,
             gemini_api_key=api_key,
             openai_api_key=openai_api_key,
             elevenlabs_api_key=elevenlabs_api_key,
+            max_ingest=quick_cap,
         ))
         print(f"Briefing generated: {briefing_path}")
 
@@ -1855,6 +1863,51 @@ def run_audit_sources():
     print(f"\nSummary: {keeps} keep, {reviews} review, {drops} drop, {deads} dead")
 
 
+def run_enrich_entities():
+    """Backfill Wikipedia thumbnails and URLs for all entities."""
+    load_dotenv()
+    from nexus.engine.knowledge.store import KnowledgeStore
+    from nexus.web.thumbnails import populate_thumbnails
+
+    data_dir = Path("data")
+
+    async def _run():
+        store = KnowledgeStore(data_dir / "knowledge.db")
+        await store.initialize()
+        try:
+            stats = await populate_thumbnails(store)
+            print(f"Enriched: {stats['fetched']}, Skipped: {stats['skipped']}, Failed: {stats['failed']}")
+        finally:
+            await store.close()
+
+    asyncio.run(_run())
+
+
+def run_purge_empty_threads():
+    """Purge threads with 0 events (orphaned by thread merges)."""
+    from nexus.engine.knowledge.store import KnowledgeStore
+
+    data_dir = Path("data")
+    execute = "--execute" in sys.argv
+
+    async def _run():
+        store = KnowledgeStore(data_dir / "knowledge.db")
+        await store.initialize()
+        try:
+            result = await store.purge_empty_threads(dry_run=not execute)
+            if result["dry_run"]:
+                print(f"DRY RUN: Would purge {result['purged']} empty threads")
+                if result["thread_ids"]:
+                    print(f"Thread IDs: {result['thread_ids'][:20]}{'...' if len(result['thread_ids']) > 20 else ''}")
+                print("Run with --execute to actually delete")
+            else:
+                print(f"Purged {result['purged']} empty threads")
+        finally:
+            await store.close()
+
+    asyncio.run(_run())
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -1866,7 +1919,7 @@ def main():
               "Commands:\n"
               "  setup      Interactive setup wizard (start here)\n"
               "  run        Start all services (dashboard + scheduler + Telegram)\n"
-              "  engine     Run the pipeline once\n"
+              "  engine     Run the pipeline once (--quick for fast first run)\n"
               "  serve      Start dashboard only\n"
               "  sources    Manage feeds (check | list | build | discover)\n"
               "  evaluate   Judge synthesis quality\n"
@@ -1875,7 +1928,9 @@ def main():
               "  benchmark  Fast benchmark: Suite A on saved fixtures (~3-5 min)\n"
               "  experiment Controlled experiment suites for README claims\n"
               "  test       Run E2E smoke test with real APIs\n"
-              "  audit-sources  Score each feed's relevance to a topic\n")
+              "  audit-sources  Score each feed's relevance to a topic\n"
+              "  enrich-entities  Backfill Wikipedia thumbnails + URLs for entities\n"
+              "  purge-empty-threads  Remove 0-event threads (--execute to confirm)\n")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -1905,6 +1960,10 @@ def main():
         run_test()
     elif command == "audit-sources":
         run_audit_sources()
+    elif command == "enrich-entities":
+        run_enrich_entities()
+    elif command == "purge-empty-threads":
+        run_purge_empty_threads()
     else:
         print(f"Unknown command: {command}")
         sys.exit(1)

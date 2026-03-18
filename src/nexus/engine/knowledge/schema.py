@@ -6,7 +6,7 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 15
+CURRENT_VERSION = 16
 
 DDL = """
 -- Schema version tracking
@@ -691,6 +691,12 @@ CREATE INDEX IF NOT EXISTS idx_feed_health_status ON feed_health(status);
 """
 
 
+MIGRATION_V16 = """
+-- Reasoning persistence for forecast questions (v16)
+ALTER TABLE forecast_questions ADD COLUMN reasoning_json TEXT NOT NULL DEFAULT '{}';
+"""
+
+
 async def initialize_schema(db: aiosqlite.Connection) -> None:
     """Create all tables and indexes. Idempotent."""
     await db.executescript(DDL)
@@ -765,6 +771,10 @@ async def initialize_schema(db: aiosqlite.Connection) -> None:
     if current < 15 and not await _has_table(db, "feed_health"):
         await db.executescript(MIGRATION_V15)
         logger.info("Applied migration v15: feed_health table")
+
+    if current < 16 and not await _has_column(db, "forecast_questions", "reasoning_json"):
+        await db.executescript(MIGRATION_V16)
+        logger.info("Applied migration v16: forecast reasoning_json column")
 
     if current < CURRENT_VERSION:
         await db.execute(

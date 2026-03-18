@@ -619,6 +619,117 @@ a.entity-tag:hover {
 
 /* ── Topic Tabs ── */
 
+/* ── Stats Bar ── */
+.briefing-stats-bar {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+.stat-card {
+    display: flex;
+    flex-direction: column;
+    padding: 0.6rem 1rem;
+    background: var(--nx-glass);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    min-width: 100px;
+}
+.stat-value {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--nx-heading);
+    line-height: 1.2;
+}
+.stat-sub {
+    font-size: 0.72rem;
+    font-weight: 400;
+    color: var(--nx-text-dim);
+    margin-left: 0.2rem;
+}
+.stat-label {
+    font-size: 0.68rem;
+    color: var(--nx-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* ── Topic Highlight ── */
+.topic-highlight {
+    background: var(--nx-accent-soft);
+    border: 1px solid rgba(6, 182, 212, 0.15);
+    border-radius: var(--nx-radius);
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+}
+.topic-highlight-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--nx-accent);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.4rem;
+}
+.topic-highlight-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.topic-highlight-list li {
+    font-size: 0.82rem;
+    color: var(--nx-text);
+    line-height: 1.45;
+    padding: 0.15rem 0;
+    padding-left: 0.8rem;
+    position: relative;
+}
+.topic-highlight-list li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.55rem;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--nx-accent);
+}
+
+/* ── Sidebar Forecast ── */
+.sidebar-forecast {
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--nx-glass-border);
+}
+.sidebar-forecast:last-of-type { border-bottom: none; }
+.sidebar-forecast-context {
+    font-size: 0.68rem;
+    color: var(--nx-text-dim);
+    margin-bottom: 0.1rem;
+}
+.sidebar-forecast-question {
+    font-size: 0.8rem;
+    color: var(--nx-text);
+    line-height: 1.35;
+    margin-bottom: 0.25rem;
+}
+.sidebar-forecast-probs {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.72rem;
+}
+.sidebar-forecast-prob {
+    font-weight: 600;
+    color: var(--nx-heading);
+}
+.sidebar-forecast-vs {
+    color: var(--nx-text-dim);
+}
+.sidebar-empty {
+    font-size: 0.78rem;
+    color: var(--nx-text-dim);
+    padding: 0.3rem 0;
+}
+
 .topic-tabs {
     display: flex;
     flex-wrap: wrap;
@@ -763,8 +874,8 @@ a.entity-tag:hover {
 }
 
 .briefing-event {
-    padding: 0.5rem 0.65rem;
-    margin: 0.4rem 0;
+    padding: 0.35rem 0.55rem;
+    margin: 0.25rem 0;
     border-radius: 6px;
     background: var(--nx-bg-raised);
     border-left: 3px solid var(--nx-border);
@@ -798,10 +909,10 @@ a.entity-tag:hover {
 }
 
 .briefing-event-summary {
-    font-size: 0.88rem;
-    line-height: 1.5;
+    font-size: 0.82rem;
+    line-height: 1.45;
     color: var(--nx-text);
-    margin-bottom: 0.35rem;
+    margin-bottom: 0.25rem;
 }
 
 .briefing-event-sources {
@@ -1090,8 +1201,8 @@ a.entity-tag:hover {
     font-weight: 600;
     padding: 1px 5px;
     border-radius: 3px;
-    background: var(--nx-surface);
-    color: var(--nx-muted);
+    background: var(--nx-glass);
+    color: var(--nx-text-dim);
     margin-left: 0.3rem;
 }
 
@@ -3122,6 +3233,12 @@ a.entity-tag:hover {
     margin-bottom: 0.5rem;
 }
 
+.pred-card-context {
+    font-size: 0.72rem;
+    color: var(--nx-text-dim, #5a5a6e);
+    margin-bottom: 0.15rem;
+    line-height: 1.3;
+}
 .pred-card-question {
     font-size: 0.9rem;
     font-weight: 500;
@@ -3787,6 +3904,293 @@ a.entity-tag:hover {
 .pred-filter-sep {
     color: var(--nx-text-dim);
     align-self: center;
+}
+
+/* ── Experimental engine toggle ── */
+
+.pred-toggle-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    font-size: 0.78rem;
+    color: var(--nx-text-dim);
+}
+.pred-toggle-input {
+    accent-color: var(--nx-accent);
+}
+.pred-toggle-text {
+    user-select: none;
+}
+
+/* ── New source badges ── */
+
+.source-freeform {
+    background: var(--nx-purple-soft, #ede9fe);
+    color: var(--nx-purple, #6d28d9);
+}
+.source-thread {
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+}
+
+/* ── Featured card styling ── */
+
+.pred-card-featured {
+    border-left: 3px solid var(--nx-accent);
+}
+
+.pred-cards-featured {
+    gap: 0.75rem;
+}
+
+/* ── Verdict large display ── */
+
+.pred-verdict-large {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0.3rem 0 0.5rem;
+    letter-spacing: 0.02em;
+}
+.pred-verdict-large-yes { color: var(--nx-green); }
+.pred-verdict-large-no { color: var(--nx-red); }
+.pred-verdict-large-uncertain { color: var(--nx-orange); }
+
+/* ── Countdown badge (enhanced) ── */
+
+.pred-countdown {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    background: var(--nx-glass);
+    color: var(--nx-text-dim);
+    flex-shrink: 0;
+}
+.pred-countdown-urgent {
+    background: var(--nx-red-soft);
+    color: var(--nx-red);
+}
+.pred-countdown-soon {
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+}
+
+/* ── Primary engine name ── */
+
+.pred-erow-primary .pred-erow-name {
+    font-weight: 600;
+}
+
+/* ── Reasoning panel ── */
+
+.pred-reasoning-panel {
+    margin: 0.4rem 0 0.2rem;
+    border-top: 1px solid var(--nx-glass);
+    padding-top: 0.3rem;
+}
+.pred-reasoning-toggle {
+    font-size: 0.78rem;
+    color: var(--nx-accent);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    padding: 0.15rem 0;
+}
+.pred-reasoning-toggle::-webkit-details-marker { display: none; }
+.pred-reasoning-toggle::before {
+    content: "\25B8 ";
+    font-size: 0.7rem;
+}
+.pred-reasoning-panel[open] .pred-reasoning-toggle::before {
+    content: "\25BE ";
+}
+.pred-reasoning-body {
+    padding: 0.4rem 0 0.2rem;
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+.pred-actor-row {
+    padding: 0.3rem 0;
+    border-bottom: 1px solid var(--nx-glass);
+}
+.pred-actor-row:last-child { border-bottom: none; }
+.pred-actor-name {
+    font-weight: 600;
+    color: var(--nx-text-primary);
+}
+.pred-actor-direction {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-left: 0.3rem;
+}
+.pred-actor-dir-increases { color: var(--nx-green); }
+.pred-actor-dir-decreases { color: var(--nx-red); }
+.pred-actor-dir-neutral { color: var(--nx-text-dim); }
+.pred-actor-shift {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--nx-text-secondary);
+    margin-left: 0.3rem;
+}
+.pred-actor-reasoning {
+    color: var(--nx-text-secondary);
+    margin-top: 0.15rem;
+}
+.pred-actor-uncertainty {
+    color: var(--nx-orange);
+    font-size: 0.72rem;
+    margin-top: 0.1rem;
+}
+.pred-synthesis {
+    color: var(--nx-text-secondary);
+    margin-top: 0.4rem;
+    padding-top: 0.3rem;
+    border-top: 1px solid var(--nx-glass);
+    font-style: italic;
+}
+.pred-contrarian-view {
+    color: var(--nx-orange);
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+}
+
+/* ── Tags (contrarian, experimental) ── */
+
+.pred-tag {
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.08rem 0.35rem;
+    border-radius: 3px;
+}
+.pred-tag-contrarian {
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+}
+.pred-tag-experimental {
+    background: var(--nx-glass);
+    color: var(--nx-text-dim);
+}
+
+/* ── Trend indicator ── */
+
+.pred-trend {
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+.pred-trend-up { color: var(--nx-green); }
+.pred-trend-down { color: var(--nx-red); }
+.pred-trend-stable { color: var(--nx-text-dim); }
+
+/* ── Event group heading ── */
+
+.pred-event-heading {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--nx-text-secondary);
+    padding: 0.5rem 0 0.3rem;
+    border-bottom: 1px solid var(--nx-glass);
+    margin-bottom: 0.5rem;
+}
+
+/* ── Mini prediction cards (topic page) ── */
+
+.pred-mini-card {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--nx-glass);
+}
+.pred-mini-card:last-of-type { border-bottom: none; }
+.pred-mini-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+.pred-mini-question {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--nx-text-primary);
+}
+.pred-mini-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-top: 0.2rem;
+}
+.pred-see-all {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.78rem;
+    color: var(--nx-accent);
+    text-decoration: none;
+}
+.pred-see-all:hover { text-decoration: underline; }
+
+/* ── Benchmark table ── */
+
+.benchmark-table-wrap {
+    overflow-x: auto;
+    margin-top: 0.5rem;
+}
+.benchmark-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+}
+.benchmark-table th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--nx-text-dim);
+    padding: 0.4rem 0.6rem;
+    border-bottom: 2px solid var(--nx-glass);
+    white-space: nowrap;
+}
+.benchmark-table td {
+    padding: 0.35rem 0.6rem;
+    border-bottom: 1px solid var(--nx-glass);
+    vertical-align: middle;
+}
+.benchmark-table tr:hover td {
+    background: var(--nx-glass);
+}
+.benchmark-q-cell {
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Hit/miss verdict badges for benchmark table */
+.bench-verdict {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.bench-hit {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--nx-green);
+}
+.bench-miss {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--nx-red);
+}
+
+/* Contrarian/contested tags for topic predictions */
+.pred-tag-contrarian {
+    background: rgba(251, 146, 60, 0.15);
+    color: #fb923c;
+}
+.pred-tag-contested {
+    background: rgba(250, 204, 21, 0.15);
+    color: #facc15;
 }
 
 /* ── Staleness badges ── */

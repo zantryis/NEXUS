@@ -259,6 +259,7 @@ async def setup_complete(request: Request):
         "audio": audio_config,
         "breaking_news": {"enabled": True, "threshold": 7},
         "telegram": {"enabled": False},
+        "sources": {"discover_new_sources": True},
     }
 
     write_config(data_dir, config_dict)

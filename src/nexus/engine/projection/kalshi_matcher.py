@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from nexus.engine.projection.models import ForecastQuestion
 
@@ -71,60 +71,100 @@ def _score_market_against_entities(
     return score, matched
 
 
+def _parse_close_date(market: dict) -> date | None:
+    """Extract close_date from a Kalshi market's close_time field."""
+    close_time_str = market.get("close_time") or ""
+    if not close_time_str:
+        return None
+    try:
+        close_dt = datetime.fromisoformat(close_time_str.replace("Z", "+00:00"))
+        return close_dt.date()
+    except (ValueError, TypeError):
+        return None
+
+
 async def scan_kalshi_markets(
     client,
     *,
     entity_names: list[str],
     topic_name: str,
     max_markets: int = 10,
+    run_date: date | None = None,
+    max_horizon_days: int = 90,
+    min_horizon_days: int = 1,
 ) -> list[dict]:
     """Scan open Kalshi events, score against our entities.
 
     Returns list of matched markets sorted by match_score descending.
+    Filters out markets without close_time or outside the horizon window.
     Zero LLM calls -- pure keyword/entity matching.
     """
-    try:
-        response = await client.list_events(status="open", limit=200)
-    except Exception as exc:
-        logger.warning("Kalshi market scan failed: %s", exc)
-        return []
-
-    events = response.get("events", [])
+    effective_run = run_date or date.today()
     candidates: list[dict] = []
+    cursor: str | None = None
+    pages = 0
+    max_pages = 20  # safety limit
 
-    for event in events:
-        event_title = event.get("title", "")
-        event_ticker = event.get("event_ticker", "")
+    while pages < max_pages:
+        pages += 1
+        try:
+            response = await client.list_events(status="open", limit=200, cursor=cursor)
+        except Exception as exc:
+            logger.warning("Kalshi market scan failed: %s", exc)
+            break
 
-        for market in event.get("markets", []):
-            if market.get("status", "").lower() not in ("open", "active", ""):
-                continue
+        events = response.get("events", [])
+        if not events:
+            break
 
-            market_title = market.get("title", "")
-            market_subtitle = market.get("subtitle", "")
-            combined_text = f"{event_title} {market_title} {market_subtitle}"
+        for event in events:
+            event_title = event.get("title", "")
+            event_ticker = event.get("event_ticker", "")
 
-            score, matched = _score_market_against_entities(
-                combined_text, entity_names, topic_name,
-            )
+            for market in event.get("markets", []):
+                if market.get("status", "").lower() not in ("open", "active", ""):
+                    continue
 
-            if score == 0:
-                continue
+                # Horizon filtering: reject markets without close_time or outside window
+                close_date = _parse_close_date(market)
+                if close_date is None:
+                    continue
+                days_to_close = (close_date - effective_run).days
+                if days_to_close < min_horizon_days or days_to_close > max_horizon_days:
+                    continue
 
-            implied = _extract_implied_probability(market)
+                market_title = market.get("title", "")
+                market_subtitle = market.get("subtitle", "")
+                combined_text = f"{event_title} {market_title} {market_subtitle}"
 
-            candidates.append({
-                "ticker": market.get("ticker", ""),
-                "title": market_title,
-                "event_title": event_title,
-                "event_ticker": event_ticker,
-                "subtitle": market_subtitle,
-                "implied_probability": implied,
-                "match_score": score,
-                "matched_entities": matched,
-                "volume": market.get("volume_fp") or market.get("volume"),
-                "open_interest": market.get("open_interest_fp") or market.get("open_interest"),
-            })
+                score, matched = _score_market_against_entities(
+                    combined_text, entity_names, topic_name,
+                )
+
+                if score == 0:
+                    continue
+
+                implied = _extract_implied_probability(market)
+
+                candidates.append({
+                    "ticker": market.get("ticker", ""),
+                    "title": market_title,
+                    "event_title": event_title,
+                    "event_ticker": event_ticker,
+                    "subtitle": market_subtitle,
+                    "implied_probability": implied,
+                    "match_score": score,
+                    "matched_entities": matched,
+                    "volume": market.get("volume_fp") or market.get("volume"),
+                    "open_interest": market.get("open_interest_fp") or market.get("open_interest"),
+                    "close_date": close_date.isoformat(),
+                    "days_to_close": days_to_close,
+                })
+
+        next_cursor = response.get("cursor")
+        if not next_cursor:
+            break
+        cursor = next_cursor
 
     # Sort by match score descending, then by volume
     candidates.sort(
@@ -164,24 +204,37 @@ async def generate_aligned_forecasts(
         ticker = market["ticker"]
         event_title = market.get("event_title", "")
         contract_title = market.get("title", "")
-        _subtitle = market.get("subtitle", "")  # noqa: F841
+        subtitle = market.get("subtitle", "")
         # Build a descriptive question: prefer "Event: Contract" for multi-option markets
         if contract_title and event_title and contract_title.lower() != event_title.lower():
             contract_clean = contract_title.rstrip("?")
             market_title = f"{event_title}: {contract_clean}"
+        elif subtitle:
+            # Multi-option markets often have identical title/event_title
+            # but a subtitle like "ChatGPT:: OpenAI" that disambiguates
+            sub_clean = subtitle.split("::")[0].strip() if "::" in subtitle else subtitle
+            market_title = f"{event_title}: {sub_clean}"
         else:
             market_title = event_title or contract_title
         raw_implied = market.get("implied_probability") or 0.5
         implied = max(0.05, min(0.95, raw_implied))
         matched_entities = market.get("matched_entities", [])
 
-        horizon_days = 14
-        resolution_date = run_date + timedelta(days=horizon_days)
+        # Use real close_date from market scan if available
+        close_date_str = market.get("close_date")
+        if close_date_str:
+            resolution_date = date.fromisoformat(close_date_str)
+            actual_days = (resolution_date - run_date).days
+            horizon_days = 3 if actual_days <= 3 else (7 if actual_days <= 7 else 14)
+        else:
+            horizon_days = 14
+            resolution_date = run_date + timedelta(days=horizon_days)
 
         our_probability = implied  # Default: trust market
         verdict = None
         confidence = None
         evidence_entities: list[str] = []
+        actor_reasoning: dict = {}
 
         if llm is not None:
             try:
@@ -197,6 +250,18 @@ async def generate_aligned_forecasts(
                     evidence_entities = [
                         e.get("name", "") for e in evidence.entities if e.get("name")
                     ]
+                    actor_reasoning = {
+                        "engine": "structural",
+                        "reasoning": assessment.reasoning[:500],
+                        "contrarian_view": assessment.contrarian_view[:300],
+                        "base_rate_reasoning": assessment.base_rate_reasoning[:300],
+                        "key_uncertainties": assessment.key_uncertainties,
+                        "signposts": assessment.signposts,
+                        "factors": [
+                            {"factor": f.factor, "direction": f.direction, "weight": f.weight}
+                            for f in assessment.factors
+                        ],
+                    }
                 elif engine == "actor":
                     from nexus.engine.projection.actor_engine import predict
                     prediction = await predict(
@@ -209,6 +274,27 @@ async def generate_aligned_forecasts(
                     verdict = prediction.verdict
                     confidence = prediction.confidence
                     evidence_entities = [a.actor for a in prediction.actors]
+                    actor_reasoning = {
+                        "engine": "actor",
+                        "actor_analyses": [
+                            {
+                                "actor": a.actor,
+                                "direction": a.direction,
+                                "magnitude": a.magnitude,
+                                "shift": a.probability_shift,
+                                "reasoning": a.reasoning,
+                                "uncertainty": a.key_uncertainty,
+                            }
+                            for a in prediction.actors
+                        ],
+                        "synthesis_reasoning": prediction.reasoning_chain,
+                        "calibration": {
+                            "raw": prediction.raw_probability,
+                            "calibrated": prediction.calibrated_probability,
+                        },
+                        "key_uncertainties": prediction.key_uncertainties,
+                        "signposts": prediction.signposts,
+                    }
                 elif engine in ("naked", "graphrag", "perspective", "debate"):
                     # BenchmarkEngine protocol: predict_probability() → float
                     if engine == "naked":
@@ -248,6 +334,18 @@ async def generate_aligned_forecasts(
             metadata["confidence"] = confidence
         if evidence_entities:
             metadata["evidence_entities"] = evidence_entities
+        # Store lightweight reasoning summaries in metadata for card display
+        if actor_reasoning:
+            if actor_reasoning.get("actor_analyses"):
+                metadata["actor_analyses"] = [
+                    {"actor": a["actor"], "direction": a["direction"], "shift": a["shift"],
+                     "reasoning": a["reasoning"][:200], "uncertainty": a["uncertainty"]}
+                    for a in actor_reasoning["actor_analyses"]
+                ]
+                metadata["synthesis_reasoning"] = (actor_reasoning.get("synthesis_reasoning") or "")[:300]
+            elif actor_reasoning.get("engine") == "structural":
+                metadata["structural_reasoning"] = (actor_reasoning.get("reasoning") or "")[:300]
+                metadata["contrarian_view"] = (actor_reasoning.get("contrarian_view") or "")[:200]
 
         # Snapshot market price in ledger if available
         if ledger is not None:
@@ -273,6 +371,7 @@ async def generate_aligned_forecasts(
             signpost=f"Kalshi market: {market['title']}",
             external_ref=ticker,
             target_metadata=metadata,
+            reasoning=actor_reasoning if actor_reasoning else {},
             signals_cited=[
                 f"kalshi:implied={implied:.3f}",
                 f"kalshi:our={our_probability:.3f}",

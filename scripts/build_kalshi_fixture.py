@@ -317,6 +317,16 @@ async def ingest_benchmark_results(store, report_path: Path, *, run_label: str):
         print(f"  No per-question data in {report_path}")
         return
 
+    # Load fixture for settlement_date lookup (report JSONs don't include it)
+    fixture_path = Path(__file__).parent.parent / "data" / "fixtures" / "kalshi_benchmark_full.json"
+    settlement_lookup: dict[tuple[str, str], str] = {}
+    settlement_by_ticker: dict[str, str] = {}  # ticker-only fallback
+    if fixture_path.exists():
+        for item in json.loads(fixture_path.read_text()):
+            key = (item["ticker"], item.get("cutoff_date", ""))
+            settlement_lookup[key] = item["settlement_date"]
+            settlement_by_ticker[item["ticker"]] = item["settlement_date"]
+
     ingested = 0
     for engine_name in engines:
         questions: list[ForecastQuestion] = []
@@ -330,7 +340,14 @@ async def ingest_benchmark_results(store, report_path: Path, *, run_label: str):
 
             outcome = q.get("outcome", False)
             market_prob = q.get("market_prob")
-            settlement = q.get("settlement_date", "2026-01-01")
+            ticker_key = q.get("ticker", "")
+            cutoff_key = q.get("cutoff_date", "")
+            settlement = (
+                q.get("settlement_date")
+                or settlement_lookup.get((ticker_key, cutoff_key))
+                or settlement_by_ticker.get(ticker_key)
+                or "2026-01-01"
+            )
             cutoff = q.get("cutoff_date", "2025-12-01")
 
             # Map horizon to allowed Literal[3, 7, 14]
@@ -351,6 +368,7 @@ async def ingest_benchmark_results(store, report_path: Path, *, run_label: str):
                 signpost="Kalshi benchmark (backtested)",
                 target_metadata={
                     "kalshi_ticker": q.get("ticker", ""),
+                    "kalshi_implied": market_prob,
                     "market_prob": market_prob,
                     "market_brier": q.get("market_brier"),
                     "run_label": run_label,

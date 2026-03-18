@@ -71,12 +71,24 @@ def _prompt_api_key(required_key: str) -> str:
 
 
 def _prompt_topics() -> list[dict]:
-    """Prompt for topic selection + optional custom topic."""
-    print("\nAvailable topics:\n")
+    """Prompt for topic selection — custom first, then pre-configured options."""
+    selected = []
+
+    # Custom topics first
+    print("\nEnter any topics you want to track (sources will be auto-discovered).")
+    print("Press Enter to skip.\n")
+    while True:
+        prompt = "Topic name: " if not selected else "Another topic (Enter to continue): "
+        custom = input(prompt).strip()
+        if not custom:
+            break
+        selected.append({"name": custom, "priority": "high"})
+
+    # Pre-configured options
+    print("\nWe also have these pre-configured with curated sources (ready to go):\n")
     for i, (_, name) in enumerate(TOPIC_CHOICES, 1):
         print(f"  {i}. {name}")
-    picks = input("\nSelect topics (comma-separated numbers, e.g. 1,3): ").strip()
-    selected = []
+    picks = input("\nAdd any? (comma-separated numbers, or Enter to skip): ").strip()
     for p in picks.split(","):
         try:
             idx = int(p.strip()) - 1
@@ -84,12 +96,7 @@ def _prompt_topics() -> list[dict]:
                 slug, name = TOPIC_CHOICES[idx]
                 selected.append({"name": name, "priority": "high"})
         except ValueError:
-            continue  # skip invalid entries
-
-    # Custom topic option
-    custom = input("\nAdd a custom topic? (name or Enter to skip): ").strip()
-    if custom:
-        selected.append({"name": custom, "priority": "medium"})
+            continue
 
     if not selected:
         selected = [{"name": TOPIC_CHOICES[0][1], "priority": "high"}]

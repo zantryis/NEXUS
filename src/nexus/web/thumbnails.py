@@ -51,7 +51,10 @@ async def fetch_wikipedia_info(name: str, size: int = 100) -> dict:
     }
     result = {"thumbnail_url": None, "wikipedia_url": None}
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(
+            timeout=10,
+            headers={"User-Agent": "nexus-claude/1.0 (news intelligence tool)"},
+        ) as client:
             resp = await client.get(WIKIPEDIA_API, params=params)
             resp.raise_for_status()
             data = resp.json()
