@@ -1197,8 +1197,8 @@ class KnowledgeStore:
                 "INSERT INTO forecast_questions "
                 "(forecast_run_id, forecast_key, question, forecast_type, target_variable, target_metadata_json, probability, base_rate, "
                 "resolution_criteria, resolution_date, horizon_days, signpost, expected_direction, signals_cited_json, "
-                "evidence_event_ids_json, evidence_thread_ids_json, cross_topic_signal_ids_json, status, external_ref) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "evidence_event_ids_json, evidence_thread_ids_json, cross_topic_signal_ids_json, status, external_ref, reasoning_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     run_id,
                     question.forecast_key,
@@ -1219,6 +1219,7 @@ class KnowledgeStore:
                     json.dumps(question.cross_topic_signal_ids),
                     question.status,
                     question.external_ref,
+                    json.dumps(question.reasoning),
                 ),
             )
             question_id = question_cursor.lastrowid
@@ -1505,7 +1506,8 @@ class KnowledgeStore:
             "SELECT fr.topic_slug, fr.topic_name, fr.engine, fr.generated_for, fq.id, fq.forecast_key, fq.question, "
             "fq.forecast_type, fq.target_variable, fq.target_metadata_json, fq.probability, fq.base_rate, "
             "fq.resolution_criteria, fq.resolution_date, fq.horizon_days, fq.expected_direction, "
-            "fres.outcome_status, fres.resolved_bool, fres.brier_score, fres.log_loss "
+            "fres.outcome_status, fres.resolved_bool, fres.brier_score, fres.log_loss, "
+            "fq.reasoning_json, fq.external_ref "
             "FROM forecast_questions fq "
             "JOIN forecast_runs fr ON fq.forecast_run_id = fr.id "
             "LEFT JOIN forecast_resolutions fres ON fres.forecast_question_id = fq.id "
@@ -1548,9 +1550,122 @@ class KnowledgeStore:
                 "resolved_bool": None if row[17] is None else bool(row[17]),
                 "brier_score": row[18],
                 "log_loss": row[19],
+                "reasoning": json.loads(row[20]) if row[20] else {},
+                "external_ref": row[21],
             }
             for row in rows
         ]
+
+    async def get_prediction_history(
+        self,
+        identifier: str,
+        *,
+        lookback_days: int = 30,
+        engine: str | None = None,
+        run_label: str | None = None,
+    ) -> list[dict]:
+        """Return probability trajectory for a question over time.
+
+        Uses external_ref (Kalshi ticker) as identifier.
+        Optionally filter by engine and run_label to avoid mixing different
+        engine/run combinations (which produces fake "trends").
+        Returns list of {generated_for, probability, market_prob} ordered by date.
+        """
+        cutoff = (date.today() - timedelta(days=lookback_days)).isoformat()
+        conditions = ["fq.external_ref = ?", "fr.generated_for >= ?"]
+        params: list = [identifier, cutoff]
+        if engine:
+            conditions.append("fr.engine = ?")
+            params.append(engine)
+        if run_label:
+            conditions.append(
+                "json_extract(fq.target_metadata_json, '$.run_label') = ?"
+            )
+            params.append(run_label)
+        where = " AND ".join(conditions)
+        cursor = await self.db.execute(
+            "SELECT fr.generated_for, fq.probability, "
+            "json_extract(fq.target_metadata_json, '$.kalshi_implied') as market_prob "
+            "FROM forecast_questions fq "
+            "JOIN forecast_runs fr ON fq.forecast_run_id = fr.id "
+            f"WHERE {where} "
+            "ORDER BY fr.generated_for ASC",
+            params,
+        )
+        rows = await cursor.fetchall()
+        return [
+            {
+                "generated_for": row[0],
+                "probability": row[1],
+                "market_prob": row[2],
+            }
+            for row in rows
+        ]
+
+    async def get_featured_predictions(
+        self,
+        topic_slug: str,
+        *,
+        limit: int = 5,
+    ) -> list[dict]:
+        """Return pending predictions for a topic, ordered by recency.
+
+        Returns raw forecast question dicts (caller should enrich and score).
+        """
+        today = date.today()
+        start = today - timedelta(days=90)
+        cursor = await self.db.execute(
+            "SELECT fr.topic_slug, fr.topic_name, fr.engine, fr.generated_for, "
+            "fq.id, fq.forecast_key, fq.question, fq.forecast_type, fq.target_variable, "
+            "fq.target_metadata_json, fq.probability, fq.base_rate, "
+            "fq.resolution_criteria, fq.resolution_date, fq.horizon_days, fq.expected_direction, "
+            "fres.outcome_status, fres.resolved_bool, fres.brier_score, fres.log_loss, "
+            "fq.reasoning_json, fq.external_ref "
+            "FROM forecast_questions fq "
+            "JOIN forecast_runs fr ON fq.forecast_run_id = fr.id "
+            "LEFT JOIN forecast_resolutions fres ON fres.forecast_question_id = fq.id "
+            "WHERE fr.topic_slug = ? "
+            "AND fr.generated_for >= ? "
+            "AND (fres.outcome_status IS NULL OR fres.outcome_status = 'pending') "
+            "ORDER BY fr.generated_for DESC, fq.id DESC "
+            "LIMIT ?",
+            (topic_slug, start.isoformat(), limit * 3),  # fetch extra for dedup
+        )
+        rows = await cursor.fetchall()
+        seen_questions: set[str] = set()
+        results: list[dict] = []
+        for row in rows:
+            question_text = row[6]
+            if question_text in seen_questions:
+                continue
+            seen_questions.add(question_text)
+            results.append({
+                "topic_slug": row[0],
+                "topic_name": row[1],
+                "engine": row[2],
+                "generated_for": row[3],
+                "forecast_question_id": row[4],
+                "forecast_key": row[5],
+                "question": question_text,
+                "forecast_type": row[7],
+                "target_variable": row[8],
+                "target_metadata": json.loads(row[9]) if row[9] else {},
+                "probability": row[10],
+                "base_rate": row[11],
+                "resolution_criteria": row[12],
+                "resolution_date": row[13],
+                "horizon_days": row[14],
+                "expected_direction": row[15],
+                "outcome_status": row[16],
+                "resolved_bool": None if row[17] is None else bool(row[17]),
+                "brier_score": row[18],
+                "log_loss": row[19],
+                "reasoning": json.loads(row[20]) if row[20] else {},
+                "external_ref": row[21],
+            })
+            if len(results) >= limit:
+                break
+        return results
 
     async def backfill_forecast_keys(
         self,
@@ -1798,6 +1913,105 @@ class KnowledgeStore:
 
         await self.db.commit()
         return result
+
+    async def purge_forecast_runs(
+        self,
+        *,
+        target_variable: str | None = None,
+        topic_slug: str | None = None,
+        dry_run: bool = True,
+    ) -> dict:
+        """Delete forecast runs and all dependent rows (resolutions, mappings, questions).
+
+        Filter by target_variable (on forecast_questions) and/or topic_slug (on forecast_runs).
+        Deletes in FK order: resolutions → mappings → questions → scenarios → runs.
+        """
+        # Build filter conditions
+        conditions = []
+        params: list = []
+        if target_variable:
+            conditions.append("fq.target_variable = ?")
+            params.append(target_variable)
+        if topic_slug:
+            conditions.append("fr.topic_slug = ?")
+            params.append(topic_slug)
+        if not conditions:
+            return {"runs_deleted": 0, "questions_deleted": 0, "resolutions_deleted": 0,
+                    "mappings_deleted": 0, "dry_run": dry_run}
+
+        where = " AND ".join(conditions)
+
+        # Find matching run IDs
+        cursor = await self.db.execute(
+            f"SELECT DISTINCT fr.id FROM forecast_runs fr "
+            f"JOIN forecast_questions fq ON fq.forecast_run_id = fr.id "
+            f"WHERE {where}",
+            params,
+        )
+        run_ids = [row[0] for row in await cursor.fetchall()]
+
+        if not run_ids:
+            return {"runs_deleted": 0, "questions_deleted": 0, "resolutions_deleted": 0,
+                    "mappings_deleted": 0, "dry_run": dry_run,
+                    "runs_found": 0, "questions_found": 0}
+
+        # Collect question IDs
+        ph_runs = ",".join("?" * len(run_ids))
+        cursor = await self.db.execute(
+            f"SELECT id FROM forecast_questions WHERE forecast_run_id IN ({ph_runs})",
+            run_ids,
+        )
+        question_ids = [row[0] for row in await cursor.fetchall()]
+
+        if dry_run:
+            return {
+                "runs_found": len(run_ids),
+                "questions_found": len(question_ids),
+                "dry_run": True,
+            }
+
+        # Delete in FK order
+        ph_qs = ",".join("?" * len(question_ids)) if question_ids else "''"
+        res_deleted = 0
+        map_deleted = 0
+
+        if question_ids:
+            cursor = await self.db.execute(
+                f"DELETE FROM forecast_resolutions WHERE forecast_question_id IN ({ph_qs})",
+                question_ids,
+            )
+            res_deleted = cursor.rowcount
+            cursor = await self.db.execute(
+                f"DELETE FROM forecast_mappings WHERE forecast_question_id IN ({ph_qs})",
+                question_ids,
+            )
+            map_deleted = cursor.rowcount
+
+        cursor = await self.db.execute(
+            f"DELETE FROM forecast_questions WHERE forecast_run_id IN ({ph_runs})",
+            run_ids,
+        )
+        qs_deleted = cursor.rowcount
+
+        await self.db.execute(
+            f"DELETE FROM forecast_scenarios WHERE forecast_run_id IN ({ph_runs})",
+            run_ids,
+        )
+
+        cursor = await self.db.execute(
+            f"DELETE FROM forecast_runs WHERE id IN ({ph_runs})",
+            run_ids,
+        )
+        runs_deleted = cursor.rowcount
+
+        await self.db.commit()
+        return {
+            "runs_deleted": runs_deleted,
+            "questions_deleted": qs_deleted,
+            "resolutions_deleted": res_deleted,
+            "mappings_deleted": map_deleted,
+            "dry_run": False,
+        }
 
     async def get_filter_log_dates(self, topic_slug: str | None = None) -> list[str]:
         """Get all dates with filter log entries, most recent first."""
@@ -2940,6 +3154,62 @@ class KnowledgeStore:
             }
             for r in await cursor.fetchall()
         ]
+
+    async def count_events_for_date(self, target_date) -> int:
+        """Count events ingested on a specific date."""
+        date_str = target_date.isoformat() if hasattr(target_date, "isoformat") else str(target_date)
+        cursor = await self.db.execute(
+            "SELECT COUNT(*) FROM events WHERE date = ?", (date_str,),
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+    async def count_threads_updated_since(self, target_date) -> int:
+        """Count threads updated on or after a given date."""
+        date_str = target_date.isoformat() if hasattr(target_date, "isoformat") else str(target_date)
+        cursor = await self.db.execute(
+            "SELECT COUNT(*) FROM threads WHERE updated_at >= ?", (date_str,),
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+    async def count_threads_created_since(self, target_date) -> int:
+        """Count threads created on or after a given date."""
+        date_str = target_date.isoformat() if hasattr(target_date, "isoformat") else str(target_date)
+        cursor = await self.db.execute(
+            "SELECT COUNT(*) FROM threads WHERE created_at >= ?", (date_str,),
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+    async def purge_empty_threads(self, dry_run: bool = True) -> dict:
+        """Delete threads with 0 events (orphaned by thread merges).
+
+        Returns: {purged: int, thread_ids: list}
+        """
+        cursor = await self.db.execute(
+            "SELECT t.id FROM threads t "
+            "LEFT JOIN thread_events te ON te.thread_id = t.id "
+            "GROUP BY t.id HAVING COUNT(te.id) = 0"
+        )
+        rows = await cursor.fetchall()
+        thread_ids = [r[0] for r in rows]
+
+        if dry_run or not thread_ids:
+            return {"purged": len(thread_ids), "thread_ids": thread_ids, "dry_run": dry_run}
+
+        placeholders = ",".join("?" for _ in thread_ids)
+        # FK-ordered delete: snapshots first, then threads
+        await self.db.execute(
+            f"DELETE FROM thread_snapshots WHERE thread_id IN ({placeholders})",
+            thread_ids,
+        )
+        await self.db.execute(
+            f"DELETE FROM threads WHERE id IN ({placeholders})",
+            thread_ids,
+        )
+        await self.db.commit()
+        return {"purged": len(thread_ids), "thread_ids": thread_ids, "dry_run": False}
 
     async def get_daily_cost(self, date: str) -> float:
         """Get total cost for a specific date. Returns 0.0 if no data."""

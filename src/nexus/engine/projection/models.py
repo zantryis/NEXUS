@@ -118,6 +118,7 @@ class ForecastQuestion(BaseModel):
     cross_topic_signal_ids: list[int] = Field(default_factory=list)
     status: ForecastQuestionStatus = "open"
     external_ref: str | None = None
+    reasoning: dict = Field(default_factory=dict)
 
 
 class ForecastScenario(BaseModel):

@@ -207,10 +207,13 @@ def _load_runtime_config(config_path: Path):
         return None
 
 
-async def _build_topics_data(store, max_threads: int = 3, max_events: int = 2):
+async def _build_topics_data(store, max_threads: int = 3, max_events: int = 1):
     """Build structured topic data for the web briefing."""
+    from nexus.web.routes.predictions import _enrich_forecast, _compute_interest_score
+
     topic_stats = await store.get_topic_stats()
     topics_data = []
+    today = date.today()
 
     for ts in topic_stats:
         slug = ts["topic_slug"]
@@ -254,11 +257,28 @@ async def _build_topics_data(store, max_threads: int = 3, max_events: int = 2):
                 "divergence": divergence[:1] if divergence else [],
             })
 
-        projection = await store.get_latest_projection(slug)
-        cross_topic = await store.get_cross_topic_signals(slug, limit=6)
+        # Today's Highlight (LLM-generated, cached as page)
+        highlight_page = await store.get_page(f"highlight:{slug}:{today.isoformat()}")
+        highlight_bullets = []
+        if highlight_page and highlight_page.get("content_md"):
+            highlight_bullets = [
+                line.lstrip("- ").strip()
+                for line in highlight_page["content_md"].strip().splitlines()
+                if line.strip().startswith("- ")
+            ]
 
-        # Enrich cross-topic signals with event summaries and deduplicate by event pair
-        enriched_bridges = await _enrich_cross_topic_signals(store, cross_topic)
+        # Featured predictions for this topic
+        featured_predictions = []
+        try:
+            raw_preds = await store.get_featured_predictions(slug, limit=3)
+            for p in raw_preds:
+                _enrich_forecast(p, today)
+                _compute_interest_score(p)
+            featured_predictions = sorted(
+                raw_preds, key=lambda p: p.get("interest_score", 0), reverse=True,
+            )[:3]
+        except Exception:
+            pass
 
         topics_data.append({
             "slug": slug,
@@ -266,8 +286,8 @@ async def _build_topics_data(store, max_threads: int = 3, max_events: int = 2):
             "event_count": ts["event_count"],
             "thread_count": ts.get("thread_count", len(threads_raw)),
             "threads": topic_threads,
-            "projection": projection,
-            "cross_topic_signals": enriched_bridges,
+            "highlight_bullets": highlight_bullets,
+            "featured_predictions": featured_predictions,
         })
 
     return topics_data
@@ -302,6 +322,11 @@ async def homepage(request: Request):
     today_cost = await store.get_daily_cost(today.isoformat())
     total_events = sum(ts["event_count"] for ts in topic_stats)
     source_stats = await store.get_source_stats()
+
+    # Stats bar data
+    articles_today = await store.count_events_for_date(today)
+    threads_updated = await store.count_threads_updated_since(today)
+    threads_created = await store.count_threads_created_since(today)
 
     # Breaking alerts (last 24h, grouped by topic)
     raw_alerts = await store.get_recent_breaking_alerts(hours=24)
@@ -363,6 +388,9 @@ async def homepage(request: Request):
         "today_cost": today_cost,
         "total_events": total_events,
         "total_sources": len(source_stats),
+        "articles_today": articles_today,
+        "threads_updated": threads_updated,
+        "threads_created": threads_created,
         "breaking_alerts": breaking_alerts,
         "breaking_fp_rate": breaking_fp_rate,
         "kalshi_sidebar": kalshi_sidebar,

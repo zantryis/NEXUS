@@ -104,6 +104,8 @@ class KalshiBenchmarkConfig(BaseModel):
     auto_scan: bool = False
     auto_match_min_score: int = Field(default=2, ge=1)
     max_markets_per_topic: int = Field(default=5, ge=1, le=20)
+    max_horizon_days: int = Field(default=90, ge=1)
+    min_horizon_days: int = Field(default=1, ge=0)
 
 
 class FutureProjectionConfig(BaseModel):

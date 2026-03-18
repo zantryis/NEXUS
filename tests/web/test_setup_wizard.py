@@ -378,6 +378,24 @@ async def test_telegram_poll_finds_chat_id(mock_poll, app_no_config):
 
 
 @pytest.mark.asyncio
+async def test_setup_complete_enables_discovery(app_no_config, tmp_path):
+    """Setup wizard should enable discover_new_sources by default."""
+    import yaml
+    data_dir = tmp_path / "data"
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post("/setup/step/1", data={"provider": "ollama", "preset": "free"})
+        await client.post("/setup/step/2", data={"topics": "ai-ml-research"})
+
+        with patch("nexus.web.routes.setup._auto_launch_pipeline"):
+            await client.post("/setup/complete", follow_redirects=False)
+
+    config_path = data_dir / "config.yaml"
+    raw = yaml.safe_load(config_path.read_text())
+    assert raw["sources"]["discover_new_sources"] is True
+
+
+@pytest.mark.asyncio
 async def test_setup_shows_3_steps(app_no_config):
     """Setup wizard should show 3 step indicators (not 6)."""
     transport = ASGITransport(app=app_no_config)

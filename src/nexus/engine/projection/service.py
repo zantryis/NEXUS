@@ -605,6 +605,9 @@ async def run_kalshi_loop(
             entity_names=entity_names,
             topic_name=topic_name,
             max_markets=kalshi_config.max_markets_per_topic,
+            run_date=run_date,
+            max_horizon_days=getattr(kalshi_config, "max_horizon_days", 90),
+            min_horizon_days=getattr(kalshi_config, "min_horizon_days", 1),
         )
 
         matched = [
@@ -630,18 +633,19 @@ async def run_kalshi_loop(
         divergences = compute_divergences(questions)
         all_divergences.extend(divergences)
 
-    if all_questions:
-        from nexus.engine.projection.models import ForecastRun
-        kalshi_run = ForecastRun(
-            topic_slug="kalshi-aligned",
-            topic_name="Kalshi Market Alignment",
-            engine=engine,
-            generated_for=run_date,
-            summary=f"Kalshi-aligned forecasts: {len(all_questions)} markets matched.",
-            questions=all_questions,
-            metadata={"kalshi_aligned": True, "markets_matched": len(all_questions)},
-        )
-        await store.save_forecast_run(kalshi_run)
+        # Save per-topic forecast run (so predictions are scoped to their topic)
+        if questions:
+            from nexus.engine.projection.models import ForecastRun
+            kalshi_run = ForecastRun(
+                topic_slug=slug,
+                topic_name=topic_name,
+                engine=engine,
+                generated_for=run_date,
+                summary=f"Kalshi-aligned forecasts for {topic_name}: {len(questions)} markets.",
+                questions=questions,
+                metadata={"kalshi_aligned": True, "markets_matched": len(questions)},
+            )
+            await store.save_forecast_run(kalshi_run)
 
     return {
         "markets_matched": len(all_questions),

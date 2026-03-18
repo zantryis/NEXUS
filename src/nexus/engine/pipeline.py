@@ -32,6 +32,50 @@ from nexus.testing.fixtures import FixtureCapture, partition_by_date
 logger = logging.getLogger(__name__)
 
 
+async def _generate_topic_highlight(
+    store: KnowledgeStore, llm: LLMClient, slug: str, topic_name: str, today_date: date,
+) -> None:
+    """Generate LLM-powered 'Today's Highlight' bullets for a topic, cached as a page."""
+    page_slug = f"highlight:{slug}:{today_date.isoformat()}"
+    existing = await store.get_page(page_slug)
+    if existing:
+        return  # Already generated today
+
+    events = await store.get_recent_events(slug, days=1, reference_date=today_date)
+    if not events:
+        return
+
+    events_sorted = sorted(events, key=lambda e: e.significance, reverse=True)
+    event_text = "\n".join(
+        f"- [{e.significance}/10] {e.summary}" for e in events_sorted[:10]
+    )
+
+    prompt = (
+        f"You are a concise intelligence analyst. Given today's events for the topic "
+        f"'{topic_name}', write 2-3 bullet points summarizing the key developments. "
+        f"Each bullet should be one sentence, capturing the most important takeaway. "
+        f"Be direct and specific — no filler.\n\n"
+        f"Today's events:\n{event_text}\n\n"
+        f"Write the bullets as a simple list, one per line, starting with '- '."
+    )
+
+    try:
+        resp = await llm.generate(prompt, task="fast")
+        bullets = resp.text.strip()
+        await store.save_page(
+            slug=page_slug,
+            title=f"Today's Highlight — {topic_name}",
+            page_type="highlight",
+            content_md=bullets,
+            topic_slug=slug,
+            ttl_days=1,
+            prompt_hash="",
+        )
+        logger.info(f"[{topic_name}] Generated today's highlight")
+    except Exception as e:
+        logger.warning(f"[{topic_name}] Highlight generation failed (non-fatal): {e}")
+
+
 def load_source_registry(data_dir: Path, topic: TopicConfig) -> list[dict]:
     """Load source registry for a topic. Returns full source metadata dicts."""
     slug = topic.name.lower().replace(" ", "-").replace("/", "-")
@@ -494,6 +538,11 @@ async def run_pipeline(
         metrics_path = save_metrics(data_dir, metrics)
         logger.info(f"Saved metrics: {metrics_path}")
 
+        # Generate per-topic "Today's Highlight" TLDR (cached as pages)
+        for syn in syntheses:
+            slug = _topic_slug(syn.topic_name)
+            await _generate_topic_highlight(store, llm, slug, syn.topic_name, today_date)
+
         # Refresh stale narrative pages
         topic_slugs = [_topic_slug(t.name) for t in config.topics]
         topic_names = {_topic_slug(t.name): t.name for t in config.topics}
@@ -565,6 +614,31 @@ async def run_pipeline(
             run_id, article_count=total_articles,
             event_count=total_events, cost_usd=total_cost,
         )
+
+        # Post-pipeline background tasks (non-blocking, fire-and-forget)
+        async def _post_pipeline_tasks():
+            try:
+                from nexus.web.thumbnails import populate_thumbnails
+                stats = await populate_thumbnails(store)
+                if stats["fetched"]:
+                    logger.info(f"Post-pipeline: enriched {stats['fetched']} entities")
+            except Exception as e:
+                logger.warning(f"Post-pipeline entity enrichment failed (non-fatal): {e}")
+
+            try:
+                kalshi_config = getattr(config, "kalshi", None)
+                if kalshi_config and getattr(kalshi_config, "enabled", False):
+                    from nexus.engine.projection.service import run_kalshi_loop
+                    result = await run_kalshi_loop(
+                        store, llm, config,
+                        engines=["structural", "actor"],
+                    )
+                    logger.info(f"Post-pipeline: Kalshi loop matched {result.get('markets_matched', 0)} markets")
+            except Exception as e:
+                logger.warning(f"Post-pipeline Kalshi loop failed (non-fatal): {e}")
+
+        task = asyncio.create_task(_post_pipeline_tasks())
+        bg_tasks.append(task)
 
         total_time = time.monotonic() - pipeline_start
         logger.info(f"Briefing saved to {briefing_path} (total pipeline: {total_time:.1f}s)")

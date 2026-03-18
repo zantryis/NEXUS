@@ -142,7 +142,7 @@ async def test_dashboard_shows_briefing_or_empty(client):
     """Dashboard shows briefing content or welcome message."""
     resp = await client.get("/")
     # Should show either briefing content or empty state
-    assert "Intelligence Briefing" in resp.text or "Welcome to Nexus" in resp.text
+    assert "Daily Brief" in resp.text or "Welcome to Nexus" in resp.text
 
 
 async def test_dashboard_shows_sidebar(client):

@@ -1,9 +1,12 @@
 """Predictions dashboard — grouped by market, engine comparison inline."""
 
+import re
 from collections import OrderedDict
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Request
+
+_MD_BOLD_RE = re.compile(r"\*{1,2}(.+?)\*{1,2}")
 
 from nexus.web.app import get_store, get_templates
 
@@ -26,35 +29,43 @@ RESOLVING_SOON_DAYS = 7
 ENGINE_INFO = {
     "structural": {
         "label": "Structural", "class": "production", "uses_kg": True,
-        "has_verdict": True, "calls": "3",
+        "has_verdict": True, "calls": "3", "tier": "production",
         "desc": "3 LLM passes: base-rate analyst, contrarian, supervisor.",
     },
     "actor": {
         "label": "Actor", "class": "production", "uses_kg": True,
-        "has_verdict": True, "calls": "3-6",
+        "has_verdict": True, "calls": "3-6", "tier": "production",
         "desc": "Per-actor reasoning with market-anchored synthesis.",
     },
     "graphrag": {
         "label": "GraphRAG", "class": "production", "uses_kg": True,
-        "has_verdict": True, "calls": "2",
+        "has_verdict": True, "calls": "2", "tier": "experimental",
         "desc": "Graph traversal + holistic system reasoning.",
     },
     "naked": {
         "label": "Naked", "class": "strawman", "uses_kg": False,
-        "has_verdict": False, "calls": "1",
+        "has_verdict": False, "calls": "1", "tier": "experimental",
         "desc": "LLM world knowledge only — KG contribution baseline.",
     },
     "perspective": {
         "label": "Perspective", "class": "research", "uses_kg": True,
-        "has_verdict": False, "calls": "4-6",
+        "has_verdict": False, "calls": "4-6", "tier": "experimental",
         "desc": "Multiple analyst personas, geometric mean aggregation.",
     },
     "debate": {
         "label": "Debate", "class": "research", "uses_kg": True,
-        "has_verdict": False, "calls": "11",
+        "has_verdict": False, "calls": "11", "tier": "experimental",
         "desc": "Multi-agent debate round. Most expensive.",
     },
 }
+
+PRODUCTION_ENGINES = {k for k, v in ENGINE_INFO.items() if v.get("tier") == "production"}
+EXPERIMENTAL_ENGINES = {k for k, v in ENGINE_INFO.items() if v.get("tier") == "experimental"}
+
+# Source types excluded from the main predictions page (shown on /benchmark)
+BENCHMARK_SOURCES = {"benchmark", "hindcast"}
+
+FEATURED_MAX = 8
 
 # Canonical engine display order
 ENGINE_ORDER = ["structural", "actor", "graphrag", "naked", "perspective", "debate"]
@@ -95,6 +106,8 @@ def _enrich_forecast(q: dict, today: date) -> dict:
 
     # Clean question text
     group_title, display_q = _clean_question(q.get("question", ""))
+    display_q = _MD_BOLD_RE.sub(r"\1", display_q)
+    group_title = _MD_BOLD_RE.sub(r"\1", group_title) if group_title else group_title
     q["group_title"] = group_title
     q["display_question"] = display_q
 
@@ -104,6 +117,10 @@ def _enrich_forecast(q: dict, today: date) -> dict:
         q["source_type"] = "kalshi"
     elif tv == "kg_native":
         q["source_type"] = "kg"
+    elif tv == "topic_claim":
+        q["source_type"] = "freeform"
+    elif tv == "thread_development":
+        q["source_type"] = "thread"
     elif tv == "hindcast":
         q["source_type"] = "hindcast"
     elif tv == "kalshi_benchmark":
@@ -115,7 +132,7 @@ def _enrich_forecast(q: dict, today: date) -> dict:
     if q["run_label"] is None:
         if q["source_type"] == "kalshi":
             q["run_label"] = "anchored"
-        elif q["source_type"] in ("kg", "hindcast", "other"):
+        elif q["source_type"] in ("kg", "freeform", "thread", "hindcast", "other"):
             q["run_label"] = "independent"
 
     # Gap vs market
@@ -145,6 +162,70 @@ def _enrich_forecast(q: dict, today: date) -> dict:
         q["status_label"] = "pending"
 
     return q
+
+
+def _compute_interest_score(f: dict) -> float:
+    """Score a prediction's interest level for prioritization.
+
+    Additive scoring (~10 max): temporal urgency, contrarian signal,
+    engine disagreement, reasoning depth, source type.
+    Mutates f to add 'interest_score' and optional '_tag_contrarian'.
+    """
+    score = 0.0
+
+    # Temporal urgency — resolving soon is inherently interesting
+    days = f.get("days_until_resolution")
+    if days is not None:
+        if days <= 3:
+            score += 4.0
+        elif days <= 7:
+            score += 3.0
+        elif days <= 14:
+            score += 1.5
+
+    # Contrarian signal — we disagree with the market
+    gap = f.get("gap_pp")
+    if gap is not None:
+        if gap >= 25:
+            score += 3.0
+        elif gap >= 15:
+            score += 2.0
+        elif gap >= 8:
+            score += 1.0
+
+    # Engine disagreement
+    spread = f.get("spread_pp")
+    if spread is not None and spread >= 20:
+        score += 1.0
+
+    # Rich reasoning available
+    meta = f.get("target_metadata") or {}
+    if meta.get("actor_analyses"):
+        score += 0.5
+
+    # Source type bonus — freeform claims are inherently interesting
+    if f.get("source_type") == "freeform":
+        score += 1.0
+
+    # Directional contrarian tag — we say YES but market says NO, or vice versa
+    prob = f.get("probability")
+    market = f.get("market_prob")
+    if prob is not None and market is not None:
+        if (prob >= 0.65 and market <= 0.4) or (prob <= 0.35 and market >= 0.6):
+            f["_tag_contrarian"] = True
+            score += 1.5
+
+    # Bold claim tag — high-confidence forward-looking predictions without market price
+    if prob is not None and market is None and f.get("source_type") in ("freeform", "thread", "kg"):
+        if prob >= 0.7:
+            f["_tag_bold"] = True
+            score += 2.0
+        elif prob <= 0.15:
+            f["_tag_bold"] = True
+            score += 1.5
+
+    f["interest_score"] = round(score, 1)
+    return score
 
 
 def _group_by_market(forecasts: list[dict]) -> list[dict]:
@@ -266,146 +347,120 @@ async def predictions_page(request: Request):
 
     all_forecasts = [_enrich_forecast(q, today) for q in questions]
 
+    # Exclude benchmark/hindcast from main predictions page
+    live_forecasts = [q for q in all_forecasts if q["source_type"] not in BENCHMARK_SOURCES]
+
     # Split by resolution status
     resolved_raw = []
     pending_raw = []
-    for q in all_forecasts:
+    for q in live_forecasts:
         if q.get("outcome_status") == "resolved":
             resolved_raw.append(q)
         else:
             pending_raw.append(q)
 
-    # Group pending by market, then by event
+    # Compute interest scores for pending forecasts
+    for q in pending_raw:
+        _compute_interest_score(q)
+
+    # Group pending by market, then split into featured vs all
     pending_markets = _group_by_market(pending_raw)
+
+    # Compute market-level interest score (max of engine interest scores)
+    for market in pending_markets:
+        engine_scores = []
+        for _, eq in market.get("engine_list", []):
+            s = eq.get("interest_score", 0)
+            if s:
+                engine_scores.append(s)
+        market["interest_score"] = max(engine_scores) if engine_scores else 0
+        # Propagate contrarian tag if any engine has it
+        market["_tag_contrarian"] = any(
+            eq.get("_tag_contrarian") for _, eq in market.get("engine_list", [])
+        )
+        # Propagate spread_pp to interest score (computed at market level)
+        if market.get("spread_pp") and market["spread_pp"] >= 20:
+            market["interest_score"] = round(market["interest_score"] + 1.0, 1)
+
+    # Featured: top N by interest score (must have score > 0)
+    featured_markets = sorted(
+        [m for m in pending_markets if m["interest_score"] > 0],
+        key=lambda m: m["interest_score"],
+        reverse=True,
+    )[:FEATURED_MAX]
+    featured_keys = {m["key"] for m in featured_markets}
+
+    # All active: remaining markets grouped by event
+    remaining_markets = [m for m in pending_markets if m["key"] not in featured_keys]
+    all_active_events = _group_by_event(remaining_markets)
+
+    # Also provide old-style pending_events for backwards compat
     pending_events = _group_by_event(pending_markets)
+
+    # Fetch trend data for featured markets
+    for market in featured_markets:
+        ticker = market.get("ticker")
+        if ticker:
+            try:
+                # Use primary engine (first in engine_list) to avoid mixing
+                # different engine runs, which produces fake "trends"
+                primary_engine = market["engine_list"][0][0] if market.get("engine_list") else None
+                history = await store.get_prediction_history(
+                    ticker, lookback_days=14,
+                    engine=primary_engine,
+                    run_label=market.get("run_label"),
+                )
+                if len(history) >= 2:
+                    delta = history[-1]["probability"] - history[0]["probability"]
+                    market["trend_delta"] = round(delta * 100, 1)
+                    market["trend_direction"] = "up" if delta > 0.02 else "down" if delta < -0.02 else "stable"
+                    market["trend_points"] = history
+            except Exception:
+                pass
 
     # Group resolved by market
     resolved_markets = _group_by_market(resolved_raw)
 
-    # Group resolved by source type
+    # Group resolved by source type (exclude benchmark/hindcast)
     resolved_by_source: OrderedDict[str, list] = OrderedDict()
-    for source in ["benchmark", "kalshi", "hindcast", "kg", "other"]:
+    for source in ["kalshi", "freeform", "thread", "kg", "other"]:
         source_markets = [m for m in resolved_markets if m["source_type"] == source]
         if source_markets:
             resolved_by_source[source] = source_markets
 
     # Count unique markets and engines involved
     all_engines_seen = set()
-    for q in all_forecasts:
+    for q in live_forecasts:
         all_engines_seen.add(q.get("engine", ""))
     engines_active = [e for e in ENGINE_ORDER if e in all_engines_seen]
 
-    # ── Per-engine analytics ──
-    engine_stats: dict[str, dict] = {}
-    for q in resolved_raw:
-        eng = q.get("engine", "")
-        if not eng:
-            continue
-        if eng not in engine_stats:
-            engine_stats[eng] = {
-                "brier_sum": 0, "count": 0, "hits": 0,
-                "by_source": {}, "by_run_label": {},
-            }
-        bs = q.get("brier_score")
-        if bs is not None:
-            engine_stats[eng]["brier_sum"] += bs
-            engine_stats[eng]["count"] += 1
-            if bs < 0.25:
-                engine_stats[eng]["hits"] += 1
-            # By source
-            src = q.get("source_type", "other")
-            if src not in engine_stats[eng]["by_source"]:
-                engine_stats[eng]["by_source"][src] = {"brier_sum": 0, "count": 0}
-            engine_stats[eng]["by_source"][src]["brier_sum"] += bs
-            engine_stats[eng]["by_source"][src]["count"] += 1
-            # By run label
-            rl = q.get("run_label") or "unknown"
-            if rl not in engine_stats[eng]["by_run_label"]:
-                engine_stats[eng]["by_run_label"][rl] = {"brier_sum": 0, "count": 0, "hits": 0}
-            engine_stats[eng]["by_run_label"][rl]["brier_sum"] += bs
-            engine_stats[eng]["by_run_label"][rl]["count"] += 1
-            if bs < 0.25:
-                engine_stats[eng]["by_run_label"][rl]["hits"] += 1
-
-    # Finalize stats
-    for stats in engine_stats.values():
-        stats["mean_brier"] = round(stats["brier_sum"] / stats["count"], 4) if stats["count"] else None
-        stats["hit_rate"] = round(stats["hits"] / stats["count"] * 100, 1) if stats["count"] else None
-        for sub in list(stats["by_source"].values()) + list(stats["by_run_label"].values()):
-            sub["mean_brier"] = round(sub["brier_sum"] / sub["count"], 4) if sub["count"] else None
-            sub["hit_rate"] = round(sub.get("hits", 0) / sub["count"] * 100, 1) if sub["count"] else None
-
-    # ── Market baseline Brier ──
-    market_briers = []
-    for q in resolved_raw:
-        mp = q.get("market_prob")
-        if mp is not None and q.get("resolved_bool") is not None:
-            outcome = 1.0 if q["resolved_bool"] else 0.0
-            market_briers.append((float(mp) - outcome) ** 2)
-    market_mean_brier = round(sum(market_briers) / len(market_briers), 4) if market_briers else None
-
-    # ── Build analytics tables (sorted by Brier, split by run mode) ──
-    def _build_analytics_table(run_label: str) -> list[dict]:
-        rows = []
-        for eng, stats in engine_stats.items():
-            rl_stats = stats.get("by_run_label", {}).get(run_label)
-            if not rl_stats or rl_stats["mean_brier"] is None:
-                continue
-            info = ENGINE_INFO.get(eng, {})
-            vs_market = (rl_stats["mean_brier"] - market_mean_brier) if market_mean_brier is not None else 0
-            rows.append({
-                "engine": eng,
-                "label": info.get("label", eng),
-                "engine_class": info.get("class", "unknown"),
-                "brier": rl_stats["mean_brier"],
-                "vs_market": round(vs_market, 4),
-                "hit_rate": rl_stats.get("hit_rate", 0),
-                "count": rl_stats["count"],
-            })
-        return sorted(rows, key=lambda r: r["brier"])
-
-    analytics_anchored = _build_analytics_table("anchored")
-    analytics_independent = _build_analytics_table("independent")
-
-    # ── Best engine per run mode ──
-    best_by_run: dict[str, dict] = {}
-    for table, label in [(analytics_anchored, "anchored"), (analytics_independent, "independent")]:
-        if table:
-            best = table[0]  # already sorted
-            best_by_run[label] = {
-                "engine": best["engine"],
-                "label": best["label"],
-                "brier": best["brier"],
-                "vs_market": best["vs_market"],
-            }
-
-    # Pick overall best for summary display (prefer anchored if available)
-    best_engine = best_by_run.get("anchored") or best_by_run.get("independent")
-    best_run_mode = "anchored" if "anchored" in best_by_run else ("independent" if "independent" in best_by_run else None)
-    beat_market = best_engine["vs_market"] < 0 if best_engine and best_engine.get("vs_market") is not None else None
+    # Engine analytics live on /benchmark — predictions page focuses on live forecasts
 
     # Summary stats
-    unique_markets = len(set(q.get("ticker") or q["display_question"] for q in all_forecasts))
+    unique_markets = len(set(q.get("ticker") or q["display_question"] for q in live_forecasts))
     summary = {
         "unique_markets": unique_markets,
         "engines_active": len(engines_active),
-        "total_forecasts": len(all_forecasts),
+        "total_forecasts": len(live_forecasts),
         "pending": len(pending_raw),
         "resolved": len(resolved_raw),
-        "best_engine": best_engine,
-        "best_run_mode": best_run_mode,
-        "best_by_run": best_by_run,
-        "market_mean_brier": market_mean_brier,
-        "beat_market": beat_market,
+        "best_engine": None,
+        "best_run_mode": None,
+        "best_by_run": {},
+        "market_mean_brier": None,
+        "beat_market": None,
     }
 
     return templates.TemplateResponse(request, "predictions.html", {
+        "featured_markets": featured_markets,
+        "all_active_events": all_active_events,
         "pending_events": pending_events,
         "resolved_by_source": resolved_by_source,
-        "analytics_anchored": analytics_anchored,
-        "analytics_independent": analytics_independent,
+        "analytics_anchored": [],
+        "analytics_independent": [],
         "summary": summary,
         "engines_active": engines_active,
         "engine_info": ENGINE_INFO,
         "engine_order": ENGINE_ORDER,
+        "production_engines": PRODUCTION_ENGINES,
     })

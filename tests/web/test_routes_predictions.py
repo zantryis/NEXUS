@@ -15,6 +15,7 @@ from nexus.engine.projection.models import ForecastQuestion, ForecastRun
 from nexus.web.app import create_app
 from nexus.web.routes.predictions import (
     _clean_question,
+    _compute_interest_score,
     _derive_verdict,
     _enrich_forecast,
     _group_by_event,
@@ -154,6 +155,127 @@ class TestEnrichForecast:
         }
         result = _enrich_forecast(q, date(2026, 3, 17))
         assert result["gap_pp"] is None
+
+    def test_topic_claim_source_type(self):
+        q = {
+            "engine": "actor",
+            "question": "Sanctions will escalate?",
+            "probability": 0.72,
+            "target_variable": "topic_claim",
+            "target_metadata": {},
+        }
+        result = _enrich_forecast(q, date(2026, 3, 17))
+        assert result["source_type"] == "freeform"
+        assert result["run_label"] == "independent"
+
+    def test_thread_development_source_type(self):
+        q = {
+            "engine": "structural",
+            "question": "Thread will accelerate?",
+            "probability": 0.60,
+            "target_variable": "thread_development",
+            "target_metadata": {},
+        }
+        result = _enrich_forecast(q, date(2026, 3, 17))
+        assert result["source_type"] == "thread"
+        assert result["run_label"] == "independent"
+
+
+# ── Unit tests: _compute_interest_score ──
+
+
+class TestComputeInterestScore:
+    def _make(self, **overrides):
+        base = {
+            "days_until_resolution": None,
+            "gap_pp": None,
+            "spread_pp": None,
+            "probability": 0.5,
+            "market_prob": None,
+            "source_type": "kalshi",
+            "target_metadata": {},
+        }
+        base.update(overrides)
+        return base
+
+    def test_imminent_resolution(self):
+        f = self._make(days_until_resolution=2)
+        score = _compute_interest_score(f)
+        assert score >= 4.0
+
+    def test_this_week_resolution(self):
+        f = self._make(days_until_resolution=5)
+        score = _compute_interest_score(f)
+        assert 3.0 <= score < 4.0
+
+    def test_two_week_resolution(self):
+        f = self._make(days_until_resolution=10)
+        score = _compute_interest_score(f)
+        assert 1.0 <= score < 3.0
+
+    def test_no_urgency(self):
+        f = self._make(days_until_resolution=30)
+        score = _compute_interest_score(f)
+        assert score == 0.0
+
+    def test_strong_contrarian_gap(self):
+        f = self._make(gap_pp=28)
+        score = _compute_interest_score(f)
+        assert score >= 3.0
+
+    def test_notable_gap(self):
+        f = self._make(gap_pp=18)
+        score = _compute_interest_score(f)
+        assert 2.0 <= score < 3.0
+
+    def test_mild_gap(self):
+        f = self._make(gap_pp=10)
+        score = _compute_interest_score(f)
+        assert 1.0 <= score < 2.0
+
+    def test_engine_disagreement(self):
+        f = self._make(spread_pp=25)
+        score = _compute_interest_score(f)
+        assert score >= 1.0
+
+    def test_freeform_bonus(self):
+        f = self._make(source_type="freeform")
+        score = _compute_interest_score(f)
+        assert score >= 1.0
+
+    def test_reasoning_bonus(self):
+        f = self._make(target_metadata={"actor_analyses": [{"actor": "Iran"}]})
+        score = _compute_interest_score(f)
+        assert score >= 0.5
+
+    def test_directional_contrarian_tag(self):
+        f = self._make(probability=0.75, market_prob=0.30)
+        score = _compute_interest_score(f)
+        assert f.get("_tag_contrarian") is True
+        assert score >= 1.5
+
+    def test_combined_high_interest(self):
+        f = self._make(
+            days_until_resolution=3,
+            gap_pp=20,
+            spread_pp=22,
+            source_type="freeform",
+            probability=0.80,
+            market_prob=0.35,
+            target_metadata={"actor_analyses": [{"actor": "Test"}]},
+        )
+        score = _compute_interest_score(f)
+        assert score >= 8.0  # stacks multiple signals
+
+    def test_score_stored_on_dict(self):
+        f = self._make(days_until_resolution=5)
+        _compute_interest_score(f)
+        assert "interest_score" in f
+
+    def test_zero_for_boring_prediction(self):
+        f = self._make()
+        score = _compute_interest_score(f)
+        assert score == 0.0
 
 
 # ── Unit tests: _group_by_market ──
@@ -316,7 +438,7 @@ async def predictions_app(tmp_path):
         questions=[
             ForecastQuestion(
                 question="Did Y happen?",
-                target_variable="kalshi_benchmark",
+                target_variable="kalshi_aligned",
                 target_metadata={"kalshi_ticker": "Y-YES", "kalshi_implied": 0.40, "run_label": "anchored"},
                 probability=0.80,
                 resolution_criteria="Y resolved by market close",

@@ -358,6 +358,7 @@ async def run_benchmark(
             "ticker": q.ticker,
             "question": q.question,
             "outcome": q.outcome,
+            "settlement_date": q.settlement_date.isoformat(),
             "cutoff_date": q.cutoff_date.isoformat(),
             "market_prob": q.market_prob_at_cutoff,
         }

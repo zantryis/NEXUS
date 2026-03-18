@@ -47,6 +47,64 @@
         </div>
         {% endif %}
 
+        {% if featured_predictions %}
+        <div class="analysis-panel" style="margin-bottom: 1.5rem;">
+            <div class="analysis-card">
+                <div class="analysis-card-header">Predictions
+                    {% if featured_predictions|selectattr('_tag_contrarian', 'defined')|selectattr('_tag_contrarian')|list %}
+                    <span class="pred-tag pred-tag-contrarian" style="margin-left: 0.5rem; font-size: 0.7rem;">hot takes</span>
+                    {% endif %}
+                    {% if featured_predictions|selectattr('_tag_bold', 'defined')|selectattr('_tag_bold')|list %}
+                    <span class="pred-tag pred-tag-contrarian" style="margin-left: 0.5rem; font-size: 0.7rem;">bold calls</span>
+                    {% endif %}
+                </div>
+                <div class="analysis-card-body">
+                    {% for p in featured_predictions %}
+                    <div class="pred-mini-card">
+                        <div class="pred-mini-header">
+                            {% if p.group_title and p.group_title != p.display_question and p.display_question|length < 50 %}
+                            <span class="pred-card-context">{{ p.group_title }}</span>
+                            {% endif %}
+                            <span class="pred-mini-question">{{ p.display_question }}</span>
+                            {% if p.days_until_resolution is not none and p.days_until_resolution <= 7 %}
+                            <span class="pred-countdown pred-countdown-soon">{{ p.days_until_resolution }}d</span>
+                            {% endif %}
+                        </div>
+                        <div class="pred-verdict-large pred-verdict-large-{{ p.verdict or 'uncertain' }}">
+                            {{ (p.verdict or 'uncertain')|upper }} ({{ "%.0f"|format(p.probability * 100) }}%)
+                        </div>
+                        <div class="pred-mini-meta">
+                            {% if p.market_prob is not none %}
+                            <span class="pred-meta-dim">vs Market {{ "%.0f"|format(p.market_prob * 100) }}%</span>
+                            {% endif %}
+                            <span class="source-badge source-{{ p.source_type }}">{{ p.source_type }}</span>
+                            {% if p.run_label %}
+                            <span class="run-badge run-badge-{{ p.run_label }}">{{ p.run_label }}</span>
+                            {% endif %}
+                            {% if p.get('_tag_contrarian') %}
+                            <span class="pred-tag pred-tag-contrarian">contrarian</span>
+                            {% endif %}
+                            {% if p.get('_tag_bold') %}
+                            <span class="pred-tag pred-tag-contrarian">bold</span>
+                            {% endif %}
+                            {% if p.get('spread_pp') and p.spread_pp >= 25 %}
+                            <span class="pred-tag pred-tag-contested">contested</span>
+                            {% endif %}
+                            {% if p.trend_direction is defined and p.trend_direction %}
+                            <span class="pred-trend pred-trend-{{ p.trend_direction }}">
+                                {{ "▲" if p.trend_direction == "up" else "▼" if p.trend_direction == "down" else "→" }}
+                                {{ "%+.0f"|format(p.trend_delta) }}pp
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    <a href="/predictions" class="pred-see-all">All predictions &rarr;</a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         {% if cross_topic_signals %}
         <div class="analysis-panel" style="margin-bottom: 1.5rem;">
             <div class="analysis-card divergence">

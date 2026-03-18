@@ -382,6 +382,7 @@ class TestKalshiLoopKeywordFallback:
                     "status": "open",
                     "last_price": 0.25,
                     "volume": 5000,
+                    "close_time": "2026-06-01T00:00:00Z",
                 }],
             }],
         })

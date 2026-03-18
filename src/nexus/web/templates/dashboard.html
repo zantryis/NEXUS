@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Nexus &mdash; Intelligence Briefing{% endblock %}
+{% block title %}Nexus &mdash; Daily Brief{% endblock %}
 {% block nav_briefing %}active{% endblock %}
 {% block content %}
 
@@ -37,7 +37,7 @@
 <div class="briefing-header">
     <div class="briefing-header-top">
         <div class="briefing-header-left">
-            <h2>&#9670; Intelligence Briefing</h2>
+            <h2>&#9670; Daily Brief</h2>
             <div class="briefing-date">
                 {{ briefing_date.strftime('%B %d, %Y') }}
                 <span class="staleness-badge staleness-{{ staleness_level }}">{{ staleness_label }}</span>
@@ -109,6 +109,26 @@
 </div>
 
 {% if topics_data %}
+{# ── Stats Bar ── #}
+<div class="briefing-stats-bar">
+    <div class="stat-card">
+        <span class="stat-value">{{ articles_today }}</span>
+        <span class="stat-label">Articles today</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">{{ threads_updated }}<span class="stat-sub">/{{ threads_created }} new</span></span>
+        <span class="stat-label">Threads updated</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">${{ "%.2f"|format(today_cost) }}</span>
+        <span class="stat-label">Today's cost</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">{{ total_events }}</span>
+        <span class="stat-label">Total events</span>
+    </div>
+</div>
+
 {# ── Topic Tabs ── #}
 <div class="topic-tabs">
     {% for topic in topics_data %}
@@ -132,6 +152,17 @@
                     <span class="topic-section-stats">{{ topic.event_count }} events &middot; {{ topic.thread_count }} threads</span>
                 </div>
             </div>
+
+            {% if topic.highlight_bullets %}
+            <div class="topic-highlight">
+                <div class="topic-highlight-title">Today's Highlights</div>
+                <ul class="topic-highlight-list">
+                    {% for bullet in topic.highlight_bullets %}
+                    <li>{{ bullet }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
 
             {% for thread in topic.threads %}
             <div class="briefing-thread-card">
@@ -162,7 +193,7 @@
                         <span class="briefing-event-date">{{ ev.date }}</span>
                         <span class="briefing-event-sig">{{ ev.significance }}</span>
                     </div>
-                    <div class="briefing-event-summary">{{ ev.summary }}</div>
+                    <div class="briefing-event-summary">{{ ev.summary[:150] }}{% if ev.summary|length > 150 %}...{% endif %}</div>
                     <div class="briefing-event-sources">
                         {% for s in ev.sources %}
                         <a href="{{ s.url }}" target="_blank" rel="noopener" class="source-badge-link">
@@ -206,9 +237,10 @@
         </div>
 
         <div class="sidebar">
-            {% if breaking_alerts %}
+            {# 1. Breaking Alerts — always show #}
             <div class="sidebar-section">
                 <div class="sidebar-title">&#128680; Breaking Alerts{% if breaking_fp_rate is defined and breaking_fp_rate > 0 %} <span class="fp-rate-badge" title="User-reported false positive rate">FP {{ (breaking_fp_rate * 100) | round(0) | int }}%</span>{% endif %}</div>
+                {% if breaking_alerts %}
                 {% for slug, alerts in breaking_alerts.items() %}
                 <div class="sidebar-breaking-topic">
                     <span class="sidebar-breaking-topic-name">{{ topic_emoji(slug) | safe }} {{ slug | replace('-', ' ') | title }}</span>
@@ -222,66 +254,44 @@
                     {% endfor %}
                 </div>
                 {% endfor %}
+                {% else %}
+                <div class="sidebar-empty">No alerts in last 24h</div>
+                {% endif %}
             </div>
-            {% endif %}
 
-            {% if topic.projection %}
+            {# 2. Featured Forecast (bombshell) #}
+            {% if topic.featured_predictions %}
             <div class="sidebar-section">
-                <div class="sidebar-title">Forward Look</div>
-                {% if topic.projection.items %}
-                {% for item in topic.projection.items[:3] %}
-                <div class="sidebar-insight">
-                    <div class="sidebar-insight-claim">{{ item.claim }}</div>
-                    {% if item.signals_cited %}
-                        {% for sig in item.signals_cited %}
-                            {% if sig.startswith('reasoning:') %}
-                    <div class="sidebar-insight-reasoning">{{ sig[10:] }}</div>
-                            {% endif %}
-                        {% endfor %}
+                <div class="sidebar-title">&#9889; Featured Forecast</div>
+                {% for p in topic.featured_predictions %}
+                <div class="sidebar-forecast">
+                    {% if p.group_title and p.group_title != p.display_question and p.display_question|length < 50 %}
+                    <div class="sidebar-forecast-context">{{ p.group_title }}</div>
                     {% endif %}
-                    <div style="display:flex;gap:0.3rem;flex-wrap:wrap;margin-top:0.25rem;">
-                        <span class="source-badge source-badge-{{ item.confidence }}">{{ item.confidence }}</span>
-                        <span class="source-badge">{{ item.horizon_days }}d</span>
-                        {% if item.evidence_thread_ids %}
-                        <span class="source-badge">{{ item.evidence_thread_ids | length }} thread{{ 's' if item.evidence_thread_ids | length > 1 }}</span>
+                    <div class="sidebar-forecast-question">{{ p.display_question[:80] }}{% if p.display_question|length > 80 %}...{% endif %}</div>
+                    <div class="sidebar-forecast-probs">
+                        <span class="pred-verdict-dot pred-verdict-dot-{{ p.verdict or 'uncertain' }}"></span>
+                        <span class="sidebar-forecast-prob">{{ "%.0f"|format(p.probability * 100) }}%</span>
+                        {% if p.market_prob is not none %}
+                        <span class="sidebar-forecast-vs">vs Mkt {{ "%.0f"|format(p.market_prob * 100) }}%</span>
+                        {% endif %}
+                        {% if p.days_until_resolution is not none %}
+                        <span class="sidebar-time">{{ p.days_until_resolution }}d</span>
                         {% endif %}
                     </div>
                 </div>
                 {% endfor %}
-                {% else %}
-                <div class="sidebar-insight">
-                    <div class="sidebar-insight-claim">{{ topic.projection.summary or 'Not enough history yet.' }}</div>
+                <div style="margin-top: 0.5rem;">
+                    <a href="/predictions" class="section-link">All predictions &rarr;</a>
                 </div>
-                {% endif %}
             </div>
             {% endif %}
 
-            {% if topic.cross_topic_signals %}
-            <div class="sidebar-section">
-                <div class="sidebar-title">Cross-Topic Bridges</div>
-                {% for signal in topic.cross_topic_signals %}
-                <div class="sidebar-bridge">
-                    <div class="sidebar-bridge-entity">{{ signal.shared_entity }}</div>
-                    {% if signal.source_summary %}
-                    <div class="sidebar-bridge-event">
-                        {% if signal.source_thread_slug %}<a href="/threads/{{ signal.source_thread_slug }}">{{ signal.source_summary }}</a>{% else %}{{ signal.source_summary }}{% endif %}
-                    </div>
-                    {% endif %}
-                    {% if signal.related_summary %}
-                    <div class="sidebar-bridge-event sidebar-bridge-related">
-                        {% if signal.related_thread_slug %}<a href="/threads/{{ signal.related_thread_slug }}">{{ signal.related_summary }}</a>{% else %}{{ signal.related_summary }}{% endif %}
-                    </div>
-                    {% endif %}
-                    <span class="sidebar-time">{{ signal.observed_at }} &middot; {{ signal.related_topic_slug | replace('-', ' ') }}</span>
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
-
-            {% if active_threads %}
+            {# 3. Active Threads (scoped to topic, top 3) #}
+            {% if topic.threads %}
             <div class="sidebar-section">
                 <div class="sidebar-title">Active Threads</div>
-                {% for t in active_threads %}
+                {% for t in topic.threads[:3] %}
                 <div class="sidebar-thread">
                     <a href="/threads/{{ t.slug }}">{{ t.headline }}</a>
                     <div style="display:flex;align-items:center;gap:0.4rem;">
@@ -298,6 +308,7 @@
             </div>
             {% endif %}
 
+            {# 4. Kalshi Markets #}
             {% if kalshi_sidebar %}
             <div class="sidebar-section">
                 <div class="sidebar-title">Kalshi Markets</div>
@@ -320,66 +331,21 @@
             </div>
             {% endif %}
 
-            <div class="sidebar-section">
-                <div class="sidebar-title">Topics</div>
-                {% for ts in topic_stats %}
-                <a href="/topics/{{ ts.topic_slug }}" class="sidebar-topic">
-                    <span>{{ topic_emoji(ts.topic_slug) | safe }} {{ ts.topic_slug | replace('-', ' ') | title }}</span>
-                    <span class="topic-count">{{ ts.event_count }} events</span>
-                </a>
-                {% endfor %}
-            </div>
-
-            {% if health %}
+            {# System health — only show if issues #}
+            {% if health and health.issues %}
             <div class="sidebar-section health-section">
                 <div class="sidebar-title">System Health</div>
                 <div class="health-overview health-{{ health.status }}">
                     <span class="health-dot"></span>
                     <span class="health-label">{{ health.status | upper }}</span>
                 </div>
-                <div class="sidebar-metric">
-                    <span class="sidebar-metric-label">Last run coverage</span>
-                    <span class="sidebar-metric-value">{{ health.pipeline.last_run_topic_count }}/{{ health.pipeline.configured_topic_count }}</span>
-                </div>
-                <div class="sidebar-metric">
-                    <span class="sidebar-metric-label">Today's outputs</span>
-                    <span class="sidebar-metric-value">{{ 'briefing' if health.deliverables.briefing_today else '—' }}{{ ' + podcast' if health.deliverables.audio_today else '' }}</span>
-                </div>
-                {% if health.litellm.used %}
-                <div class="sidebar-metric">
-                    <span class="sidebar-metric-label">LiteLLM token</span>
-                    <span class="sidebar-metric-value">
-                        {% if health.litellm.token_ttl_minutes is not none %}
-                            {{ health.litellm.token_ttl_minutes }}m
-                        {% elif health.litellm.configured %}
-                            configured
-                        {% else %}
-                            missing
-                        {% endif %}
-                    </span>
-                </div>
-                {% endif %}
-                {% if health.issues %}
                 <div class="health-issues">
                     {% for issue in health.issues[:3] %}
                     <div class="health-issue health-issue-{{ issue.severity }}">{{ issue.message }}</div>
                     {% endfor %}
                 </div>
-                {% endif %}
             </div>
             {% endif %}
-
-            <div class="sidebar-section">
-                <div class="sidebar-title">System</div>
-                <div class="sidebar-metric">
-                    <span class="sidebar-metric-label">Events tracked</span>
-                    <span class="sidebar-metric-value">{{ total_events }}</span>
-                </div>
-                <div class="sidebar-metric">
-                    <span class="sidebar-metric-label">Today's cost</span>
-                    <span class="sidebar-metric-value">${{ "%.2f"|format(today_cost) }}</span>
-                </div>
-            </div>
         </div>
     </div>
 </div>
