@@ -1,0 +1,217 @@
+# Auto-discovered sources — gemini-3-flash-preview, 2026-03-17
+#
+# Review before preloading. Duplicates and low-quality feeds removed.
+# Google News feeds included as catch-all fallbacks (tier B).
+# origin: registry | google_news | web_discovery
+
+# ══════════════════════════════════════════════════════════════
+# BEAUTY INDUSTRY
+# Feeds: 5  (registry: 0, google: 2, web: 3)
+# Diversity: geo=0.97 affil=0.00 lang=0.00 overall=0.39
+#   ⚠ All sources are private, English-only
+# ══════════════════════════════════════════════════════════════
+
+beauty_industry:
+  - id: allure
+    name: "Allure"
+    url: "https://www.allure.com/feed/rss"
+    language: en
+    tier: A
+    affiliation: private
+    country: US
+    origin: web_discovery
+
+  - id: theindustry-beauty
+    name: "TheIndustry.beauty"
+    url: "https://theindustry.beauty/feed"
+    language: en
+    tier: B
+    affiliation: private
+    country: GB
+    origin: web_discovery
+
+  - id: aesthetics-journal
+    name: "Aesthetics Journal"
+    url: "https://aestheticsjournal.com/feed/"
+    language: en
+    tier: B
+    affiliation: private
+    country: GB
+    origin: web_discovery
+
+  - id: gnews-beauty
+    name: "Google News: Beauty Industry"
+    url: "https://news.google.com/rss/search?q=Beauty+Industry&hl=en-US&gl=US&ceid=US:en"
+    language: en
+    tier: B
+    affiliation: private
+    country: US
+    origin: google_news
+
+  - id: gnews-skincare
+    name: "Google News: Skincare Trends"
+    url: "https://news.google.com/rss/search?q=skincare+trends&hl=en-US&gl=US&ceid=US:en"
+    language: en
+    tier: B
+    affiliation: private
+    country: US
+    origin: google_news
+
+# ══════════════════════════════════════════════════════════════
+# FASHION INDUSTRY
+# Feeds: 4  (registry: 0, google: 2, web: 2)
+# Diversity: geo=0.00 affil=0.98 overall=0.39
+#   ⚠ Geographic concentration: all US/EN
+# ══════════════════════════════════════════════════════════════
+
+fashion_industry:
+  - id: usfashion-news
+    name: "US Fashion Industry Association — News"
+    url: "https://www.usfashionindustry.com/news?format=feed&type=rss"
+    language: en
+    tier: B
+    affiliation: nonprofit
+    country: US
+    origin: web_discovery
+
+  - id: sustainfashion
+    name: "Sustainable Fashion"
+    url: "https://sustainfashion.info/news/feed/"
+    language: en
+    tier: C
+    affiliation: private
+    country: US
+    origin: web_discovery
+
+  - id: gnews-fashion
+    name: "Google News: Fashion Industry"
+    url: "https://news.google.com/rss/search?q=Fashion+Industry&hl=en-US&gl=US&ceid=US:en"
+    language: en
+    tier: B
+    affiliation: private
+    country: US
+    origin: google_news
+
+  - id: gnews-luxury-brands
+    name: "Google News: Luxury Brands"
+    url: "https://news.google.com/rss/search?q=luxury+brands&hl=en-US&gl=US&ceid=US:en"
+    language: en
+    tier: B
+    affiliation: private
+    country: US
+    origin: google_news
+
+# ══════════════════════════════════════════════════════════════
+# INTERNATIONAL RUGBY UNION
+# Feeds: 6  (registry: 0, google: 2, web: 4)
+# Diversity: geo=1.56 affil=0.59 overall=0.86
+# ══════════════════════════════════════════════════════════════
+
+international_rugby_union:
+  - id: world-rugby
+    name: "World Rugby: Latest News"
+    url: "https://www.world.rugby/rss.xml"
+    language: en
+    tier: A
+    affiliation: nonprofit
+    country: IE
+    origin: web_discovery
+
+  - id: rugbypass
+    name: "RugbyPass"
+    url: "https://www.rugbypass.com/feeds/rss/"
+    language: en
+    tier: A
+    affiliation: private
+    country: IE
+    origin: web_discovery
+
+  - id: planet-rugby
+    name: "Planet Rugby"
+    url: "https://www.planetrugby.com/rss"
+    language: en
+    tier: A
+    affiliation: private
+    country: GB
+    origin: web_discovery
+
+  - id: oval-insights
+    name: "Oval Insights"
+    url: "https://ovalinsights.com/feed/"
+    language: en
+    tier: B
+    affiliation: private
+    country: GB
+    origin: web_discovery
+
+  - id: gnews-rugby
+    name: "Google News: Rugby Union"
+    url: "https://news.google.com/rss/search?q=International+Rugby+Union&hl=en-US&gl=US&ceid=US:en"
+    language: en
+    tier: B
+    affiliation: private
+    country: US
+    origin: google_news
+
+  - id: gnews-six-nations
+    name: "Google News: Six Nations"
+    url: "https://news.google.com/rss/search?q=Six+Nations&hl=en-US&gl=US&ceid=US:en"
+    language: en
+    tier: B
+    affiliation: private
+    country: US
+    origin: google_news
+
+# ══════════════════════════════════════════════════════════════
+# RWANDA NEWS & POLITICS
+# Feeds: 5  (registry: 2, google: 2, web: 1)
+# Diversity: geo=1.56 affil=0.59 overall=0.86
+# ══════════════════════════════════════════════════════════════
+
+rwanda_news_and_politics:
+  - id: africanews
+    name: "Africanews"
+    url: "https://www.africanews.com/feed/"
+    language: en
+    tier: B
+    affiliation: private
+    country: FR
+    tags: [world, africa, politics]
+    origin: registry
+
+  - id: rfi-en
+    name: "RFI English"
+    url: "https://www.rfi.fr/en/rss"
+    language: en
+    tier: A
+    affiliation: public
+    country: FR
+    tags: [world, africa, politics]
+    origin: registry
+
+  - id: ktpress
+    name: "KT Press"
+    url: "https://www.ktpress.rw/feed/"
+    language: en
+    tier: A
+    affiliation: private
+    country: RW
+    origin: web_discovery
+
+  - id: gnews-rwanda
+    name: "Google News: Rwanda"
+    url: "https://news.google.com/rss/search?q=Rwanda+News+%26+Politics&hl=en-US&gl=US&ceid=US:en"
+    language: en
+    tier: B
+    affiliation: private
+    country: US
+    origin: google_news
+
+  - id: gnews-kagame
+    name: "Google News: Kagame"
+    url: "https://news.google.com/rss/search?q=Kagame+government&hl=en-US&gl=US&ceid=US:en"
+    language: en
+    tier: B
+    affiliation: private
+    country: US
+    origin: google_news
