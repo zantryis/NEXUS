@@ -1,0 +1,65 @@
+sources:
+- affiliation: private
+  country: US
+  id: discovered-"international-rugby-389cecb6
+  language: en
+  name: 'Google News: International Rugby Union'
+  tier: B
+  type: rss
+  url: https://news.google.com/rss/search?q=International+Rugby+Union&hl=en-US&gl=US&ceid=US:en
+- affiliation: private
+  country: US
+  id: discovered-"six-nations"---goog-851cd8af
+  language: en
+  name: 'Google News: International Rugby Union'
+  tier: B
+  type: rss
+  url: https://news.google.com/rss/search?q=Six+Nations&hl=en-US&gl=US&ceid=US:en
+- affiliation: private
+  country: GB
+  id: discovered-world-rugby-hub-a13b9831
+  language: en
+  name: World rugby hub
+  tier: C
+  type: rss
+  url: https://worldrugbyhub.com/feed
+- affiliation: private
+  country: GB
+  id: discovered-rugby-world-ac0890eb
+  language: en
+  name: Rugby World
+  tier: A
+  type: rss
+  url: https://www.rugbyworld.com/feed
+- affiliation: nonprofit
+  country: IE
+  id: discovered-world-rugby:-latest--ec5badde
+  language: en
+  name: 'World Rugby: Latest News'
+  tier: A
+  type: rss
+  url: https://web.worldrugby-rims.pulselive.com/rss.xml
+- affiliation: private
+  country: ZA
+  id: discovered-diamond-fields-adver-d8407c51
+  language: en
+  name: Diamond Fields Advertiser &gt; Sport
+  tier: B
+  type: rss
+  url: https://www.dfa.co.za/rss/diamond-fields-advertiser/sport/
+- affiliation: nonprofit
+  country: AE
+  id: discovered-asia-rugby-6af0f066
+  language: en
+  name: Asia Rugby
+  tier: B
+  type: rss
+  url: https://www.asiarugby.com/feed
+- affiliation: private
+  country: ZA
+  id: discovered-keo.co.za-089132a5
+  language: en
+  name: KEO.co.za
+  tier: B
+  type: rss
+  url: https://www.keo.co.za/feed/
