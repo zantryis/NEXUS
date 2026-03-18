@@ -56,8 +56,30 @@ def _clip_probability(value: float) -> float:
     return round(max(0.05, min(0.95, value)), 3)
 
 
+# Engine classification for benchmark/docs purposes.
+# Production: validated via Kalshi benchmark, used in daily pipeline.
+# Experimental: research methods for methodology exploration.
+ENGINE_TIERS: dict[str, str] = {
+    "actor": "production",       # Default projection engine, best overall on benchmarks
+    "structural": "production",  # Daily/KG-native predictions, evidence-based
+    "graphrag": "experimental",  # Massive alpha on knowledge-covered topics, volatile on uncovered
+    "naked": "experimental",     # Baseline (no context), useful for A/B comparison
+    "perspective": "experimental",  # Multi-perspective ensemble
+    "debate": "experimental",    # Agent-to-agent debate
+}
+
+
 def get_forecast_engine(engine_name: str) -> ForecastEngine:
-    """Resolve a quantified forecast engine by name."""
+    """Resolve a quantified forecast engine by name.
+
+    Production engines (actor, structural): validated on Kalshi benchmark,
+    used in the daily pipeline. Actor is the default projection engine;
+    structural powers KG-native daily predictions.
+
+    Experimental engines (graphrag, naked, perspective, debate): research
+    methods for methodology exploration and benchmarking. GraphRAG shows
+    strong alpha on knowledge-covered topics but is volatile elsewhere.
+    """
     normalized = engine_name.strip().lower()
     if normalized in {"actor", "native"}:
         from nexus.engine.projection.actor_engine import ActorForecastEngine
