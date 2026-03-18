@@ -28,6 +28,7 @@ class TopicConfig(BaseModel):
     perspective_diversity: Literal["low", "medium", "high"] = "high"
     filter_threshold: float = Field(default=4.0, ge=0.0, le=10.0)
     scope: Literal["narrow", "medium", "broad"] = "medium"
+    pairwise_filtering: bool = False  # opt-in hybrid funnel with pairwise comparison
     max_events: Optional[int] = None  # override auto-calculated event cap
     projection_eligible: bool = True  # set False to skip future-projection pipeline
 
