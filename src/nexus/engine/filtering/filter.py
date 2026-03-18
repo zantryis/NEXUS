@@ -13,6 +13,12 @@ from datetime import date
 from typing import Optional
 
 from nexus.config.models import TopicConfig
+from nexus.engine.filtering.pairwise import (
+    detect_degenerate,
+    pairwise_fallback,
+    resolve_maybe_items,
+    triage_split,
+)
 from nexus.engine.sources.polling import ContentItem
 from nexus.llm.client import LLMClient
 
@@ -320,7 +326,7 @@ async def filter_items(
         item_logs[item.url] = entry
 
     # --- Pass 1: Relevance ---
-    pass1_results = []
+    scored_items = []
     for batch_start in range(0, len(items), BATCH_SIZE):
         batch = items[batch_start:batch_start + BATCH_SIZE]
         scores = await score_batch(llm, batch, topic)
@@ -330,15 +336,77 @@ async def filter_items(
             log = item_logs[item.url]
             log["relevance_score"] = score
             log["relevance_reason"] = reason
+            scored_items.append(item)
 
-            if score >= effective_threshold:
+    # --- Hybrid funnel (pairwise) or simple threshold ---
+    if topic.pairwise_filtering:
+        all_scores = [item.relevance_score or 0 for item in scored_items]
+        is_degenerate = detect_degenerate(all_scores)
+
+        if is_degenerate:
+            logger.warning("Degenerate score distribution detected — using full pairwise fallback")
+            eff_div_max = diversity_max_items if diversity_max_items is not None else DIVERSITY_MAX_ITEMS
+            pass1_results = await pairwise_fallback(llm, scored_items, topic, max_keep=eff_div_max)
+
+            for item in scored_items:
+                log = item_logs[item.url]
+                log["triage_band"] = "degenerate"
+                log["filter_mode"] = "pairwise_fallback"
+                if item in pass1_results:
+                    log["passed_pass1"] = True
+                    log["pairwise_promoted"] = True
+                else:
+                    log["outcome"] = "rejected_relevance"
+                    log["pairwise_promoted"] = False
+
+            logger.info(f"Pass 1 (fallback): {len(pass1_results)}/{len(scored_items)} items selected via full pairwise")
+        else:
+            keep, maybe, drop = triage_split(scored_items)
+
+            # Log triage bands
+            for item in keep:
+                item_logs[item.url]["passed_pass1"] = True
+                item_logs[item.url]["triage_band"] = "keep"
+                item_logs[item.url]["filter_mode"] = "hybrid"
+            for item in maybe:
+                item_logs[item.url]["triage_band"] = "maybe"
+                item_logs[item.url]["filter_mode"] = "hybrid"
+            for item in drop:
+                item_logs[item.url]["outcome"] = "rejected_relevance"
+                item_logs[item.url]["triage_band"] = "drop"
+                item_logs[item.url]["filter_mode"] = "hybrid"
+
+            # Resolve MAYBE items via pairwise comparison
+            promoted = await resolve_maybe_items(llm, maybe, keep, topic)
+            promoted_urls = {item.url for item in promoted}
+
+            for item in maybe:
+                log = item_logs[item.url]
+                if item.url in promoted_urls:
+                    log["passed_pass1"] = True
+                    log["pairwise_promoted"] = True
+                else:
+                    log["outcome"] = "rejected_relevance"
+                    log["pairwise_promoted"] = False
+
+            pass1_results = keep + promoted
+            logger.info(
+                f"Pass 1 (hybrid): {len(keep)} KEEP + {len(promoted)}/{len(maybe)} "
+                f"MAYBE promoted + {len(drop)} DROP = {len(pass1_results)} survivors"
+            )
+    else:
+        # Simple threshold cut (original behavior)
+        pass1_results = []
+        for item in scored_items:
+            log = item_logs[item.url]
+            if (item.relevance_score or 0) >= effective_threshold:
                 log["passed_pass1"] = True
                 pass1_results.append(item)
             else:
                 log["outcome"] = "rejected_relevance"
-                logger.debug(f"Pass 1 filtered out (score={score}): {item.title}")
+                logger.debug(f"Pass 1 filtered out (score={item.relevance_score}): {item.title}")
 
-    logger.info(f"Pass 1: {len(pass1_results)}/{len(items)} passed relevance filter (threshold={effective_threshold})")
+        logger.info(f"Pass 1: {len(pass1_results)}/{len(items)} passed relevance filter (threshold={effective_threshold})")
 
     if not pass1_results:
         log_entries = list(item_logs.values())
