@@ -6,9 +6,7 @@ topic emoji mapping.
 """
 
 import pytest
-from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from datetime import date
 
 from httpx import AsyncClient, ASGITransport
 
@@ -18,7 +16,6 @@ from nexus.web.routes.dashboard import (
     _find_audio,
     _find_briefing,
     _topic_emoji,
-    briefing_age_badge,
 )
 
 

@@ -14,7 +14,6 @@ from nexus.engine.synthesis.knowledge import TopicSynthesis, NarrativeThread
 from nexus.engine.synthesis.renderers import (
     _build_synthesis_context,
     render_text_briefing,
-    EDITORIAL_STANCE,
 )
 
 

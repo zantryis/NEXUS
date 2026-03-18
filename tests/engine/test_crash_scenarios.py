@@ -5,7 +5,6 @@ Block 3C: Pipeline crash mid-topic, all providers down, TTS partial failure.
 
 import pytest
 import time
-from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from nexus.config.models import NexusConfig, UserConfig, TopicConfig, AudioConfig
@@ -15,7 +14,6 @@ from nexus.engine.audio.script import DialogueScript, DialogueTurn
 from nexus.engine.synthesis.knowledge import TopicSynthesis, NarrativeThread
 from nexus.llm.client import (
     CircuitBreaker, CircuitOpenError, UsageTracker,
-    CIRCUIT_FAILURE_THRESHOLD,
 )
 
 

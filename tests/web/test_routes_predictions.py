@@ -5,7 +5,7 @@ _group_by_event, predictions page with seeded forecast data.
 """
 
 import pytest
-from datetime import date, timedelta
+from datetime import date
 
 from httpx import AsyncClient, ASGITransport
 

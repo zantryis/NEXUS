@@ -2,7 +2,7 @@
 
 import pytest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from nexus.engine.sources.polling import ContentItem, filter_recent
 from nexus.engine.sources.rss import RSSAdapter
