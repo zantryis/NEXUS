@@ -1,9 +1,6 @@
 """Tests for --quick mode in the engine CLI."""
 
-import sys
 from unittest.mock import patch, MagicMock, AsyncMock
-
-import pytest
 
 
 def _make_config():

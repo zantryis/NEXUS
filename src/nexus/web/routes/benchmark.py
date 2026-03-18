@@ -4,7 +4,6 @@ Separated from predictions page to keep live predictions clean.
 Shows benchmark fixtures, hindcast results (dev mode), and engine Brier scores.
 """
 
-from collections import OrderedDict
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Request

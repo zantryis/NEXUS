@@ -3,7 +3,6 @@
 Run with: .venv/bin/pytest tests/integration/test_discovery_live.py -v -s -m integration
 """
 
-import asyncio
 import logging
 import os
 import pytest
@@ -21,11 +20,9 @@ from nexus.engine.sources.discovery import (
     _generate_search_queries,
     _find_rss_feeds,
     _validate_feed,
-    _evaluate_feed_relevance,
     _discover_from_google_news,
     _match_from_global_registry,
     _load_global_registry,
-    classify_feed_metadata,
     discover_sources,
 )
 
