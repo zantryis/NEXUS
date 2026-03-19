@@ -26,7 +26,7 @@
 
     {# ── Status filter ── #}
     <div class="type-filters" style="margin-top: 0.35rem;">
-        <a href="/threads/{{ '?topic=' ~ filter_topic if filter_topic else '' }}"
+        <a href="/threads/?status=all{{ '&topic=' ~ filter_topic if filter_topic else '' }}"
            class="type-filter {{ 'active' if not filter_status }}">All</a>
         <a href="/threads/?status=active{{ '&topic=' ~ filter_topic if filter_topic else '' }}"
            class="type-filter {{ 'active' if filter_status == 'active' }}">Active</a>

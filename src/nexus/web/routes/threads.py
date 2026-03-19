@@ -13,7 +13,9 @@ async def thread_list(request: Request):
     store = get_store(request)
     templates = get_templates(request)
 
-    status = request.query_params.get("status")
+    status = request.query_params.get("status", "active")
+    if status == "all":
+        status = None
     topic = request.query_params.get("topic")
     threads = await store.get_all_threads(topic_slug=topic, status=status)
     # Sort by most recently updated first

@@ -629,11 +629,12 @@ a.entity-tag:hover {
 .stat-card {
     display: flex;
     flex-direction: column;
-    padding: 0.6rem 1rem;
+    flex: 1;
+    padding: 0.75rem 1.2rem;
     background: var(--nx-glass);
     border: 1px solid var(--nx-border);
     border-radius: var(--nx-radius);
-    min-width: 100px;
+    min-width: 120px;
 }
 .stat-value {
     font-size: 1.2rem;
