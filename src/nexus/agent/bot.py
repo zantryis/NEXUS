@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from nexus.config.models import NexusConfig
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.llm.budget import BudgetExceededError
-from nexus.llm.client import LLMClient
+from nexus.llm.client import CircuitOpenError, LLMClient
 from nexus.agent.qa import answer_question
 from nexus.agent.delivery import (
     deliver_briefing, md_to_telegram_html_light, split_message,
@@ -248,7 +248,7 @@ class NexusBot:
                         text=f"{frame} {phase}",
                     )
                 except Exception:
-                    pass
+                    logger.debug("Animation edit failed", exc_info=True)
                 i += 1
 
         animation_task = asyncio.create_task(_animate())
@@ -283,7 +283,7 @@ class NexusBot:
                             text=chunks[0],
                         )
                     except Exception:
-                        pass
+                        logger.debug("Fallback edit failed", exc_info=True)
 
                 # Overflow chunks as new messages
                 for chunk in chunks[1:]:
@@ -352,7 +352,7 @@ class NexusBot:
                     text="\u26a0\ufe0f Breaking news check failed.",
                 )
             except Exception:
-                pass
+                logger.debug("Error message edit failed", exc_info=True)
 
     async def _handle_status(self, update, context):
         """Handle /status — system status."""
@@ -430,7 +430,7 @@ class NexusBot:
                         text=f"{frame} Analyzing\u2026",
                     )
                 except Exception:
-                    pass
+                    logger.debug("Animation edit failed", exc_info=True)
                 i += 1
 
         animation_task = asyncio.create_task(_animate())
@@ -462,7 +462,7 @@ class NexusBot:
                         text=chunks[0],
                     )
                 except Exception:
-                    pass
+                    logger.debug("Fallback edit failed", exc_info=True)
 
             # Additional chunks as new messages
             for chunk in chunks[1:]:
@@ -485,7 +485,33 @@ class NexusBot:
                     text="Daily budget reached. Try again tomorrow or increase your budget in Settings.",
                 )
             except Exception:
-                pass
+                logger.debug("Budget message edit failed", exc_info=True)
+
+        except CircuitOpenError:
+            done.set()
+            await animation_task
+            logger.warning(f"Q&A circuit open for chat {chat_id}")
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=loading_msg.message_id,
+                    text="\u26a0\ufe0f AI provider is temporarily unavailable. Try again in a minute.",
+                )
+            except Exception:
+                logger.debug("Error message edit failed", exc_info=True)
+
+        except (TimeoutError, asyncio.TimeoutError):
+            done.set()
+            await animation_task
+            logger.warning(f"Q&A timed out for chat {chat_id}")
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=loading_msg.message_id,
+                    text="\u26a0\ufe0f Request timed out. Try a simpler question or try again later.",
+                )
+            except Exception:
+                logger.debug("Error message edit failed", exc_info=True)
 
         except Exception as e:
             done.set()
@@ -498,7 +524,7 @@ class NexusBot:
                     text="\u26a0\ufe0f Sorry, I couldn't process that question.",
                 )
             except Exception:
-                pass
+                logger.debug("Error message edit failed", exc_info=True)
 
     async def _handle_callback(self, update, context):
         """Handle inline keyboard callbacks (briefing feedback + breaking feedback)."""

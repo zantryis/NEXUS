@@ -25,5 +25,8 @@ jobs:
       - name: Lint
         run: ruff check src tests
 
+      - name: Dependency audit
+        run: pip install pip-audit && pip-audit --strict --desc
+
       - name: Run tests
         run: pytest -m "not integration" -v

@@ -160,11 +160,13 @@ async def setup_step2_get(request: Request):
     """Step 2: Topic selection."""
     templates = get_templates(request)
     session_id, session = _get_session(request)
+    error = session.pop("_error", None)
     response = templates.TemplateResponse(request, "setup/step2_topics.html", {
         "topic_choices": TOPIC_CHOICES,
         "selected_topics": session.get("topics", []),
         "step": 2,
         "total_steps": TOTAL_STEPS,
+        "error": error,
     })
     return _set_cookie(response, session_id)
 
@@ -189,8 +191,9 @@ async def setup_step2_post(request: Request):
         topics.append({"name": ct, "priority": "medium"})
 
     if not topics:
-        # Default to first topic
-        topics = [{"name": TOPIC_CHOICES[0][1], "priority": "high"}]
+        session["_error"] = "Please select at least one topic."
+        response = RedirectResponse(url="/setup/step/2", status_code=303)
+        return _set_cookie(response, session_id)
 
     session["topics"] = topics
 

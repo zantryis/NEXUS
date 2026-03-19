@@ -2,6 +2,11 @@
 {% block wizard_content %}
 <h2>Choose Your Topics</h2>
 <p class="setup-desc">Enter any topic you care about — Nexus will automatically find and evaluate sources for it.</p>
+{% if error %}
+<div style="background: var(--nx-red-soft, rgba(239,68,68,0.1)); border: 1px solid var(--nx-red, #ef4444); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem; color: var(--nx-text);">
+    {{ error }}
+</div>
+{% endif %}
 
 <form method="post" action="/setup/step/2">
     <div style="margin-bottom: 1.5rem;">

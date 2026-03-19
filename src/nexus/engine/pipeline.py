@@ -677,6 +677,8 @@ async def run_pipeline(
             _, pending = await asyncio.wait(bg_tasks, timeout=30)
             for t in pending:
                 t.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
         await llm.flush_usage()
         if own_store:
             await store.close()

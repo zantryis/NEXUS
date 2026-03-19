@@ -667,7 +667,11 @@ class KnowledgeStore:
         )
         updated = 0
         for row in await cursor.fetchall():
-            ids = json.loads(row[1])
+            try:
+                ids = json.loads(row[1])
+            except (json.JSONDecodeError, TypeError):
+                logger.warning("Corrupt JSON in %s.%s row %s, skipping", table, column, row[0])
+                continue
             if absorb_id in ids:
                 ids = list(dict.fromkeys(keep_id if x == absorb_id else x for x in ids))
                 await self.db.execute(

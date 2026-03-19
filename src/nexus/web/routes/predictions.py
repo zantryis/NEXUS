@@ -1,8 +1,11 @@
 """Predictions dashboard — grouped by market, engine comparison inline."""
 
+import logging
 import re
 from collections import OrderedDict
 from datetime import date, timedelta
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Request
 
@@ -416,7 +419,7 @@ async def predictions_page(request: Request):
                     market["trend_direction"] = "up" if delta > 0.02 else "down" if delta < -0.02 else "stable"
                     market["trend_points"] = history
             except Exception:
-                pass
+                logger.debug("Trend history fetch failed for %s", market.get("ticker", "?"), exc_info=True)
 
     # Group resolved by market
     resolved_markets = _group_by_market(resolved_raw)
@@ -481,7 +484,7 @@ async def predictions_page(request: Request):
                 "min_thread_snapshots": 2,
             }
         except Exception:
-            pass
+            logger.debug("Eligibility info computation failed", exc_info=True)
 
     return templates.TemplateResponse(request, "predictions.html", {
         "featured_markets": featured_markets,
