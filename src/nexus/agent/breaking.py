@@ -281,4 +281,16 @@ async def check_breaking_news(
         if result:
             alerts_by_topic[_topic_slug(topic)] = result
 
+    # Emit signal for downstream consumers (reprice, notifications, etc.)
+    if alerts_by_topic:
+        try:
+            from nexus.signals import Signal, SignalType, bus
+
+            for slug, alerts in alerts_by_topic.items():
+                await bus.emit(
+                    Signal(SignalType.BREAKING_ALERT, {"topic": slug, "count": len(alerts)})
+                )
+        except Exception:
+            pass  # Signal bus is non-critical
+
     return alerts_by_topic

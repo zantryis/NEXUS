@@ -800,6 +800,7 @@ Single process, single event loop:
 src/nexus/
 ├── __main__.py              CLI entry point
 ├── runner.py                Unified runner (dashboard + scheduler + bot)
+├── signals.py               Async signal bus (pub/sub for cross-module events)
 ├── config/
 │   ├── models.py            Pydantic config models (10 sub-models)
 │   ├── presets.py           Model preset definitions (10 presets)

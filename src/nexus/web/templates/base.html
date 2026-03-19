@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-density="full">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script>(function(){var t=localStorage.getItem('nexus-theme');if(t)document.documentElement.setAttribute('data-theme',t);else if(window.matchMedia&&matchMedia('(prefers-color-scheme:light)').matches)document.documentElement.setAttribute('data-theme','light')})()</script>
+    <script>(function(){var t=localStorage.getItem('nexus-theme');if(t)document.documentElement.setAttribute('data-theme',t);else if(window.matchMedia&&matchMedia('(prefers-color-scheme:light)').matches)document.documentElement.setAttribute('data-theme','light');var d=localStorage.getItem('nexus-density');if(d)document.documentElement.setAttribute('data-density',d)})()</script>
     <title>{% block title %}Nexus{% endblock %}</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M32 6 L35 16 L32 26 L29 16Z' fill='%2306b6d4' opacity='.5' transform='rotate(15 32 16)'/><path d='M38 32 L48 29 L58 32 L48 35Z' fill='%2322d3ee' opacity='.38' transform='rotate(15 48 32)'/><path d='M32 38 L35 48 L32 58 L29 48Z' fill='%2306b6d4' opacity='.5' transform='rotate(15 32 48)'/><path d='M6 32 L16 29 L26 32 L16 35Z' fill='%2322d3ee' opacity='.38' transform='rotate(15 16 32)'/><path d='M32 27 L37 32 L32 37 L27 32Z' fill='%2306b6d4' opacity='.7'/></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,6 +29,10 @@
                 {% endif %}
             </div>
             <div class="nav-secondary">
+                <button class="density-toggle" onclick="toggleDensity()" aria-label="Toggle info density" title="Toggle comfort/full density">
+                    <span class="density-icon-full" aria-hidden="true">&#9783;</span>
+                    <span class="density-icon-comfort" aria-hidden="true">&#9776;</span>
+                </button>
                 <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme" title="Toggle light/dark mode">
                     <span class="theme-icon-dark">&#9789;</span>
                     <span class="theme-icon-light">&#9728;</span>
@@ -77,6 +81,13 @@
         const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
         html.setAttribute('data-theme', next);
         localStorage.setItem('nexus-theme', next);
+    }
+    // Density toggle (comfort = simplified, full = all details)
+    function toggleDensity() {
+        const html = document.documentElement;
+        const next = html.getAttribute('data-density') === 'comfort' ? 'full' : 'comfort';
+        html.setAttribute('data-density', next);
+        localStorage.setItem('nexus-density', next);
     }
     // Dropdown toggle
     document.querySelectorAll('.nav-more-btn').forEach(btn => {

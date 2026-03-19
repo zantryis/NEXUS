@@ -164,6 +164,33 @@ h3 { font-size: 1.15rem; margin-bottom: 0.75rem; }
 [data-theme="dark"] .theme-icon-light { display: none; }
 [data-theme="light"] .theme-icon-dark { display: none; }
 
+/* Density toggle */
+.density-toggle {
+    background: none;
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    cursor: pointer;
+    padding: 0.25rem 0.45rem;
+    font-size: 0.95rem;
+    color: var(--nx-text-secondary);
+    transition: var(--nx-transition);
+    line-height: 1;
+}
+.density-toggle:hover {
+    border-color: var(--nx-border-hover);
+    color: var(--nx-text);
+}
+[data-density="full"] .density-icon-comfort { display: none; }
+[data-density="comfort"] .density-icon-full { display: none; }
+
+/* Comfort mode — hide detail-heavy elements */
+[data-density="comfort"] .briefing-event { display: none; }
+[data-density="comfort"] .convergence-callout { display: none; }
+[data-density="comfort"] .divergence-callout { display: none; }
+[data-density="comfort"] .briefing-thread-entities { display: none; }
+[data-density="comfort"] .trajectory-badge { display: none; }
+[data-density="comfort"] .sidebar-section:not(:first-child) { display: none; }
+
 .nav-dropdown { position: relative; }
 
 .nav-dropdown-menu {

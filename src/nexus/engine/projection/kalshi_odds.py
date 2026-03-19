@@ -88,4 +88,19 @@ async def refresh_kalshi_odds(
         f"Kalshi odds refresh: {stats['markets_refreshed']} markets, "
         f"{stats['snapshots_inserted']} snapshots, {stats['errors']} errors"
     )
+
+    # Emit signal for downstream consumers
+    if stats["markets_refreshed"]:
+        try:
+            from nexus.signals import Signal, SignalType, bus
+
+            await bus.emit(
+                Signal(
+                    SignalType.KALSHI_ODDS_UPDATED,
+                    {"markets_refreshed": stats["markets_refreshed"]},
+                )
+            )
+        except Exception:
+            pass  # Signal bus is non-critical
+
     return stats

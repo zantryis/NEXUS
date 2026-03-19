@@ -202,6 +202,65 @@ def demo_server(demo_dir):
 
 
 @pytest.fixture(scope="session")
+def setup_dir(tmp_path_factory):
+    """Create a temporary data directory with NO config.yaml (fresh install state)."""
+    data_dir = tmp_path_factory.mktemp("setup_data")
+    # Touch an empty knowledge.db — wizard doesn't need data, just needs the file
+    (data_dir / "knowledge.db").touch()
+    return data_dir
+
+
+@pytest.fixture(scope="session")
+def setup_server(setup_dir):
+    """Start a server with no config — triggers setup wizard redirect."""
+    import uvicorn
+
+    port = _find_free_port()
+    os.environ["NEXUS_SKIP_AUTO_PIPELINE"] = "1"
+    # Ensure demo mode is off — demo_server may have set it in this process
+    saved_demo = os.environ.pop("NEXUS_DEMO_MODE", None)
+
+    from nexus.web.app import create_app
+    app = create_app(db_path=setup_dir / "knowledge.db", data_dir=setup_dir)
+
+    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+    server = uvicorn.Server(config)
+
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    import httpx
+    base_url = f"http://127.0.0.1:{port}"
+    for _ in range(50):
+        try:
+            resp = httpx.get(f"{base_url}/setup", timeout=2.0, follow_redirects=True)
+            if resp.status_code in (200, 302, 307):
+                break
+        except (httpx.ConnectError, httpx.ReadTimeout):
+            pass
+        time.sleep(0.2)
+    else:
+        raise RuntimeError(f"Setup server failed to start on port {port}")
+
+    yield base_url
+
+    os.environ.pop("NEXUS_SKIP_AUTO_PIPELINE", None)
+    if saved_demo is not None:
+        os.environ["NEXUS_DEMO_MODE"] = saved_demo
+    server.should_exit = True
+    thread.join(timeout=5)
+
+
+@pytest.fixture()
+def clean_setup(setup_dir):
+    """Ensure no config.yaml exists before each setup wizard test."""
+    config_path = setup_dir / "config.yaml"
+    config_path.unlink(missing_ok=True)
+    yield setup_dir
+    config_path.unlink(missing_ok=True)
+
+
+@pytest.fixture(scope="session")
 def browser_context_args():
     """Configure Playwright browser context."""
     return {

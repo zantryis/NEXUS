@@ -37,7 +37,7 @@ data/               # Runtime data (gitignored except source registries)
   sources/          # Per-topic source registries (committed)
   config.yaml       # User config (gitignored, see data/config.example.yaml)
   cli/              # Setup wizard, demo seeder
-tests/              # Mirrors src structure, 1,494 tests (unit + 28 E2E)
+tests/              # Mirrors src structure, 1,520 tests (unit + 31 E2E)
 ```
 
 ## Key Concepts

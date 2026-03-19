@@ -264,7 +264,7 @@ src/nexus/
 data/
   sources/        Per-topic RSS source registries (pre-built for 4 topics)
   config.yaml     Your personal configuration (gitignored — created by setup wizard)
-tests/            1,457 tests mirroring src structure (unit + e2e)
+tests/            1,520 tests mirroring src structure (unit + e2e)
 ```
 
 ## License

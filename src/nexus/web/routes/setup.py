@@ -289,6 +289,11 @@ def _auto_launch_pipeline(request: Request, data_dir: Path):
     import os
     from dotenv import load_dotenv
 
+    # Testing gate: skip real pipeline in E2E tests
+    if os.environ.get("NEXUS_SKIP_AUTO_PIPELINE"):
+        request.app.state.pipeline_status = {"stage": "complete", "done": True}
+        return
+
     existing = getattr(request.app.state, "pipeline_status", None)
     if existing and not existing.get("done", True):
         return  # already running

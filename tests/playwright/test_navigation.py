@@ -70,3 +70,23 @@ def test_cost_page_renders(page, demo_server):
     """Cost tracking page should load."""
     page.goto(f"{demo_server}/cost")
     expect(page.locator(".main-content")).to_be_visible()
+
+
+def test_density_toggle(page, demo_server):
+    """Density toggle should switch between comfort and full modes."""
+    page.goto(demo_server)
+
+    toggle = page.locator(".density-toggle")
+    expect(toggle).to_be_visible()
+
+    # Default should be "full"
+    html = page.locator("html")
+    assert html.get_attribute("data-density") == "full"
+
+    # Click to switch to comfort
+    toggle.click()
+    assert html.get_attribute("data-density") == "comfort"
+
+    # Click again to switch back to full
+    toggle.click()
+    assert html.get_attribute("data-density") == "full"

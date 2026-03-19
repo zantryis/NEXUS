@@ -677,6 +677,19 @@ async def run_pipeline(
             except Exception as e:
                 logger.warning(f"Post-pipeline Kalshi loop failed (non-fatal): {e}")
 
+            # Emit pipeline complete signal
+            try:
+                from nexus.signals import Signal, SignalType, bus
+
+                await bus.emit(
+                    Signal(
+                        SignalType.PIPELINE_COMPLETE,
+                        {"topics": [t.slug for t in config.topics]},
+                    )
+                )
+            except Exception:
+                pass  # Signal bus is non-critical
+
         task = asyncio.create_task(_post_pipeline_tasks())
         bg_tasks.append(task)
 
