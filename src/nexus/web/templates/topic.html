@@ -19,6 +19,14 @@
     </div>
 </div>
 
+{% if not active_threads and not recent_events %}
+<div style="background: var(--nx-warning-bg, #3d3000); border: 1px solid var(--nx-warning, #e6a700); border-radius: 8px; padding: 1rem 1.2rem; margin-bottom: 1.5rem; color: var(--nx-text);">
+    <strong>No recent data for this topic.</strong>
+    This may mean the source registry is empty or the last pipeline run skipped this topic.
+    Check <a href="/sources/?topic={{ slug }}" style="color: var(--nx-warning, #e6a700);">source stats</a> or re-run the pipeline.
+</div>
+{% endif %}
+
 <div class="entity-layout">
     <div>
         {% if latest_projection %}

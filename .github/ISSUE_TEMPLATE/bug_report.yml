@@ -1,0 +1,32 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this issue?
+      placeholder: |
+        1. Configure topics for ...
+        2. Run `python -m nexus engine`
+        3. See error ...
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Python version, OS, deployment method (Docker/manual)
+      placeholder: "Python 3.11, Ubuntu 22.04, Docker"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: Paste any error output or logs
+      render: shell

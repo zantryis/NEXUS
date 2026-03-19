@@ -6,7 +6,7 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 16
+CURRENT_VERSION = 17
 
 DDL = """
 -- Schema version tracking
@@ -697,6 +697,12 @@ ALTER TABLE forecast_questions ADD COLUMN reasoning_json TEXT NOT NULL DEFAULT '
 """
 
 
+MIGRATION_V17 = """
+-- Pipeline run observability: skipped topics (v17)
+ALTER TABLE pipeline_runs ADD COLUMN skipped_topics TEXT NOT NULL DEFAULT '[]';
+"""
+
+
 async def initialize_schema(db: aiosqlite.Connection) -> None:
     """Create all tables and indexes. Idempotent."""
     await db.executescript(DDL)
@@ -775,6 +781,10 @@ async def initialize_schema(db: aiosqlite.Connection) -> None:
     if current < 16 and not await _has_column(db, "forecast_questions", "reasoning_json"):
         await db.executescript(MIGRATION_V16)
         logger.info("Applied migration v16: forecast reasoning_json column")
+
+    if current < 17 and not await _has_column(db, "pipeline_runs", "skipped_topics"):
+        await db.executescript(MIGRATION_V17)
+        logger.info("Applied migration v17: pipeline_runs skipped_topics column")
 
     if current < CURRENT_VERSION:
         await db.execute(

@@ -5,7 +5,12 @@
 <div class="page-header">
     <h2>{{ page.title }}</h2>
     <div class="page-subtitle">
-        Generated {{ page.generated_at }} &middot; Stale after {{ page.stale_after }}
+        Generated {{ page.generated_at }}
+        {% if is_stale %}
+        &middot; <span style="color: var(--nx-warning, #e6a700); font-weight: 600;">Content may be outdated — last refreshed {{ page.generated_at }}</span>
+        {% else %}
+        &middot; Refreshes after {{ page.stale_after }}
+        {% endif %}
     </div>
 </div>
 

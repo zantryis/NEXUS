@@ -1,5 +1,7 @@
 """Cached narrative page viewer."""
 
+from datetime import datetime
+
 from fastapi import APIRouter, Request
 
 from nexus.web.app import get_store, get_templates
@@ -21,7 +23,17 @@ async def page_view(request: Request, slug: str):
 
     rendered = safe_markdown(page["content_md"])
 
+    # Determine if page is stale
+    is_stale = False
+    if page.get("stale_after"):
+        try:
+            stale_dt = datetime.fromisoformat(page["stale_after"])
+            is_stale = datetime.now() > stale_dt
+        except (ValueError, TypeError):
+            pass
+
     return templates.TemplateResponse(request, "page.html", {
         "page": page,
         "rendered_html": rendered,
+        "is_stale": is_stale,
     })

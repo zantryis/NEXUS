@@ -634,6 +634,7 @@ async def run_pipeline(
         await store.complete_pipeline_run(
             run_id, article_count=total_articles,
             event_count=total_events, cost_usd=total_cost,
+            skipped_topics=skipped_topics or None,
         )
         if skipped_topics:
             names = ", ".join(t["name"] for t in skipped_topics)

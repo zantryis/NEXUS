@@ -3260,14 +3260,17 @@ class KnowledgeStore:
     async def complete_pipeline_run(
         self, run_id: int, article_count: int = 0,
         event_count: int = 0, cost_usd: float = 0.0,
+        skipped_topics: list[dict] | None = None,
     ) -> None:
         """Mark pipeline run as completed."""
         await self.db.execute(
             "UPDATE pipeline_runs SET status = 'completed', "
             "completed_at = datetime('now'), "
-            "article_count = ?, event_count = ?, cost_usd = ? "
+            "article_count = ?, event_count = ?, cost_usd = ?, "
+            "skipped_topics = ? "
             "WHERE id = ?",
-            (article_count, event_count, cost_usd, run_id),
+            (article_count, event_count, cost_usd,
+             json.dumps(skipped_topics or []), run_id),
         )
         await self.db.commit()
 
@@ -3285,7 +3288,8 @@ class KnowledgeStore:
         """Get most recent pipeline run."""
         cursor = await self.db.execute(
             "SELECT id, started_at, completed_at, status, topics, "
-            "article_count, event_count, cost_usd, error, trigger "
+            "article_count, event_count, cost_usd, error, trigger, "
+            "skipped_topics "
             "FROM pipeline_runs ORDER BY id DESC LIMIT 1"
         )
         row = await cursor.fetchone()
@@ -3296,6 +3300,7 @@ class KnowledgeStore:
             "status": row[3], "topics": json.loads(row[4]),
             "article_count": row[5], "event_count": row[6],
             "cost_usd": row[7], "error": row[8], "trigger": row[9],
+            "skipped_topics": json.loads(row[10]) if row[10] else [],
         }
 
     async def is_pipeline_running(self) -> bool:

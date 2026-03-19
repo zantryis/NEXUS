@@ -263,6 +263,17 @@ async def _gather_context(
     return "\n".join(parts) if parts else "No data available in the knowledge store."
 
 
+def _extract_sources_from_context(context: str) -> list[str]:
+    """Extract unique outlet names from context source attributions."""
+    outlets: list[str] = []
+    for match in re.finditer(r"\(sources?:\s*([^)]+)\)", context):
+        for name in match.group(1).split(","):
+            name = name.strip()
+            if name and name != "?" and name not in outlets:
+                outlets.append(name)
+    return outlets
+
+
 async def answer_question(
     llm: LLMClient,
     store: KnowledgeStore,
@@ -281,6 +292,7 @@ async def answer_question(
 
     # Stage 2: gather targeted context from knowledge store
     context = await _gather_context(store, analysis)
+    used_web = False
 
     # Stage 2.5: supplement with web search if store context is thin
     if _is_context_thin(context):
@@ -290,13 +302,14 @@ async def answer_question(
         web_results = await web_search(search_query, max_results=5)
         if web_results:
             context += "\n" + format_web_results(web_results)
+            used_web = True
 
     # Stage 3: answer
     system_prompt = QA_SYSTEM_PROMPT.format(output_language=response_lang)
     user_prompt = f"Knowledge context:\n{context}\n\nUser question: {question}"
 
     try:
-        return await llm.complete(
+        answer = await llm.complete(
             config_key="agent",
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -304,3 +317,15 @@ async def answer_question(
     except Exception as e:
         logger.warning(f"Q&A generation failed, using store fallback: {e}")
         return await _fallback_answer(store, config, question, analysis)
+
+    # Append source provenance footer
+    sources = _extract_sources_from_context(context)
+    if sources or used_web:
+        parts = []
+        if sources:
+            parts.append(", ".join(sources[:8]))
+        if used_web:
+            parts.append("web search")
+        answer += f"\n\n_Sources: {'; '.join(parts)}_"
+
+    return answer
