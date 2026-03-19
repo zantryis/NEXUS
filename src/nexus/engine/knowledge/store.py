@@ -1498,6 +1498,87 @@ class KnowledgeStore:
             for row in rows
         ]
 
+    async def get_open_forecasts(
+        self,
+        topic_slug: str | None = None,
+    ) -> list[dict]:
+        """Return open (unresolved) forecast questions with run metadata."""
+        query = (
+            "SELECT fq.id, fr.topic_slug, fr.engine, fr.generated_for, "
+            "fq.question, fq.probability, fq.base_rate, fq.resolution_date, "
+            "fq.target_variable, fq.external_ref, fq.updated_at, fq.horizon_days "
+            "FROM forecast_questions fq "
+            "JOIN forecast_runs fr ON fq.forecast_run_id = fr.id "
+            "JOIN forecast_resolutions fres ON fres.forecast_question_id = fq.id "
+            "WHERE fres.outcome_status = 'pending'"
+        )
+        params: list = []
+        if topic_slug:
+            query += " AND fr.topic_slug = ?"
+            params.append(topic_slug)
+        query += " ORDER BY fq.id ASC"
+        cursor = await self.db.execute(query, params)
+        rows = await cursor.fetchall()
+        return [
+            {
+                "forecast_question_id": row[0],
+                "topic_slug": row[1],
+                "engine": row[2],
+                "generated_for": row[3],
+                "question": row[4],
+                "probability": row[5],
+                "base_rate": row[6],
+                "resolution_date": row[7],
+                "target_variable": row[8],
+                "external_ref": row[9],
+                "updated_at": row[10],
+                "horizon_days": row[11],
+            }
+            for row in rows
+        ]
+
+    async def update_forecast_probability(
+        self,
+        question_id: int,
+        new_probability: float,
+        source: str = "reprice",
+        *,
+        market_probability: float | None = None,
+    ) -> None:
+        """Update a forecast question's probability and record the change."""
+        await self.db.execute(
+            "UPDATE forecast_questions SET probability = ?, updated_at = datetime('now') WHERE id = ?",
+            (new_probability, question_id),
+        )
+        await self.db.execute(
+            "INSERT INTO forecast_probability_history "
+            "(forecast_question_id, probability, market_probability, source) "
+            "VALUES (?, ?, ?, ?)",
+            (question_id, new_probability, market_probability, source),
+        )
+        await self.db.commit()
+
+    async def get_forecast_probability_history(
+        self, question_id: int,
+    ) -> list[dict]:
+        """Return probability change history for a forecast question."""
+        cursor = await self.db.execute(
+            "SELECT probability, market_probability, source, recorded_at "
+            "FROM forecast_probability_history "
+            "WHERE forecast_question_id = ? ORDER BY recorded_at ASC",
+            (question_id,),
+        )
+        rows = await cursor.fetchall()
+        return [
+            {
+                "probability": row[0],
+                "market_probability": row[1],
+                "source": row[2],
+                "recorded_at": row[3],
+            }
+            for row in rows
+        ]
+
     async def get_forecast_questions_between(
         self,
         *,

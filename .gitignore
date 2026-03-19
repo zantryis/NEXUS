@@ -36,6 +36,7 @@ data/evaluation/
 data/benchmarks/
 data/experiments/
 data/fixtures/
+data/demo/
 experiments/
 
 # OAuth tokens

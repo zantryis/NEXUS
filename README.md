@@ -76,6 +76,24 @@ python -m nexus run
 
 Dashboard at `http://localhost:8080`. Podcast feed at `http://localhost:8080/feed.xml`.
 
+## Try the Demo
+
+No API keys? Try the demo mode to explore the dashboard with sample data:
+
+```bash
+python -m nexus demo seed --from-scratch   # Create demo DB with sample data
+python -m nexus demo serve                 # Start demo server at localhost:8000
+```
+
+If you already have collected data, seed the demo from your live database instead:
+
+```bash
+python -m nexus demo seed    # Exports a sanitized subset of your data
+python -m nexus demo serve
+```
+
+Demo mode is read-only — settings and setup are locked, all pages render with seeded data.
+
 ## What You Need
 
 Only **one LLM API key** is required to get started. The setup wizard will help you choose:
@@ -117,6 +135,9 @@ python -m nexus benchmark                     # Fast benchmark on saved fixtures
 python -m nexus audit-sources <slug>          # Score feed relevance for a topic
 python -m nexus enrich-entities               # Backfill Wikipedia data for entities
 python -m nexus purge-empty-threads           # Remove orphaned threads with no events
+python -m nexus demo seed                        # Seed demo DB from your collected data
+python -m nexus demo seed --from-scratch         # Seed demo DB with static sample data
+python -m nexus demo serve                       # Start dashboard in demo mode
 python -m nexus test                            # E2E smoke test (runs minimal pipeline)
 python -m nexus evaluate synthesis <path>       # Judge synthesis quality
 python -m nexus evaluate compare <path> <path>  # Compare two syntheses

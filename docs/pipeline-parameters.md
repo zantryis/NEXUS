@@ -319,6 +319,16 @@ momentum = (velocity_7d * 1.5) + acceleration_7d + significance_trend_7d
 | `kalshi.auto_match_min_score` | 2 | `models.py:103` | **Configurable**. Minimum match score (1-based) |
 | `kalshi.max_markets_per_topic` | 5 | `models.py:104` | **Configurable**. Max markets per topic (1-20) |
 | `kalshi.comparison_tolerance_minutes` | 30 | `models.py:100` | **Configurable**. Tolerance for timestamp comparison |
+| `kalshi.odds_refresh_interval_hours` | 6 | `models.py` | **Configurable**. How often to refresh live Kalshi odds |
+
+### Forecast Repricing
+
+| Parameter | Value | Location | Notes |
+|-----------|-------|----------|-------|
+| `max_age_hours` | 24 | `reprice.py:14` | Reprice if forecast older than this |
+| `min_change_pp` | 0.02 | `reprice.py:70` | Minimum probability change to record (2pp) |
+| Extreme threshold | 0.05 / 0.95 | `reprice.py:42` | Skip repricing extreme probabilities without new events |
+| Resolution proximity | 1 day | `reprice.py:35` | Skip repricing if resolving within 24h |
 
 ---
 

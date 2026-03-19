@@ -68,6 +68,11 @@ class KalshiCredentials:
     private_key_pem: str
 
 
+def build_kalshi_client(config: KalshiBenchmarkConfig) -> "KalshiClient":
+    """Factory for KalshiClient — used by scheduler and pipeline."""
+    return KalshiClient(config)
+
+
 class KalshiLedger:
     """Separate benchmark ledger for Kalshi market data."""
 

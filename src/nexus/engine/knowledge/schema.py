@@ -6,7 +6,7 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 17
+CURRENT_VERSION = 18
 
 DDL = """
 -- Schema version tracking
@@ -703,6 +703,24 @@ ALTER TABLE pipeline_runs ADD COLUMN skipped_topics TEXT NOT NULL DEFAULT '[]';
 """
 
 
+MIGRATION_V18 = """
+-- Forecast repricing: probability history tracking (v18)
+ALTER TABLE forecast_questions ADD COLUMN updated_at TEXT;
+
+CREATE TABLE IF NOT EXISTS forecast_probability_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forecast_question_id INTEGER NOT NULL REFERENCES forecast_questions(id),
+    probability REAL NOT NULL,
+    market_probability REAL,
+    source TEXT NOT NULL DEFAULT 'initial',
+    recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_fph_question
+    ON forecast_probability_history(forecast_question_id);
+"""
+
+
 async def initialize_schema(db: aiosqlite.Connection) -> None:
     """Create all tables and indexes. Idempotent."""
     await db.executescript(DDL)
@@ -785,6 +803,10 @@ async def initialize_schema(db: aiosqlite.Connection) -> None:
     if current < 17 and not await _has_column(db, "pipeline_runs", "skipped_topics"):
         await db.executescript(MIGRATION_V17)
         logger.info("Applied migration v17: pipeline_runs skipped_topics column")
+
+    if current < 18 and not await _has_column(db, "forecast_questions", "updated_at"):
+        await db.executescript(MIGRATION_V18)
+        logger.info("Applied migration v18: forecast probability history")
 
     if current < CURRENT_VERSION:
         await db.execute(

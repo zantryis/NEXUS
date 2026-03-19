@@ -155,7 +155,18 @@ async def daily_prediction_job(
             logger.error("KG-native predictions failed: %s", exc, exc_info=True)
             results["kg_native_error"] = str(exc)
 
-    # 3. Resolve settled Kalshi markets
+    # 3. Reprice open forecasts (gate: stale or new evidence)
+    try:
+        from nexus.engine.projection.reprice import run_reprice_pass
+        reprice_result = await run_reprice_pass(store, llm, config, run_date=today)
+        results["reprice"] = reprice_result
+        logger.info("Reprice pass: %d repriced of %d open",
+                     reprice_result.get("repriced", 0), reprice_result.get("total_open", 0))
+    except Exception as exc:
+        logger.error("Reprice pass failed: %s", exc, exc_info=True)
+        results["reprice_error"] = str(exc)
+
+    # 4. Resolve settled Kalshi markets
     if proj_config.kalshi.enabled:
         try:
             from nexus.engine.projection.kalshi import build_kalshi_client
@@ -251,6 +262,36 @@ async def breaking_news_job(
         logger.error(f"Breaking news check failed: {e}", exc_info=True)
 
 
+async def kalshi_odds_refresh_job(
+    config: NexusConfig,
+    llm: LLMClient,
+    store: KnowledgeStore,
+    data_dir: Path,
+) -> None:
+    """Refresh Kalshi market odds for open predictions."""
+    from nexus.engine.projection.kalshi import KalshiLedger, build_kalshi_client
+    from nexus.engine.projection.kalshi_odds import refresh_kalshi_odds
+
+    kalshi_config = config.future_projection.kalshi
+    logger.info("Refreshing Kalshi odds...")
+    try:
+        kalshi_client = build_kalshi_client(kalshi_config)
+        if not kalshi_client.credentials_available():
+            logger.info("Kalshi odds refresh skipped: no credentials configured")
+            return
+
+        ledger = KalshiLedger(Path(kalshi_config.ledger_path))
+        await ledger.initialize()
+        try:
+            result = await refresh_kalshi_odds(store, kalshi_client, ledger)
+            logger.info("Kalshi odds refresh: %s", result)
+        finally:
+            await ledger.close()
+
+    except Exception as e:
+        logger.error(f"Kalshi odds refresh failed: {e}", exc_info=True)
+
+
 def schedule_jobs(
     scheduler,
     config: NexusConfig,
@@ -341,3 +382,18 @@ def schedule_jobs(
             replace_existing=True,
         )
         logger.info(f"Scheduled breaking news every {interval}h")
+
+    # Kalshi odds refresh (if Kalshi enabled)
+    kalshi_config = config.future_projection.kalshi
+    if kalshi_config.enabled:
+        odds_interval = kalshi_config.odds_refresh_interval_hours
+        scheduler.add_job(
+            kalshi_odds_refresh_job,
+            "interval",
+            hours=odds_interval,
+            args=[config, llm, store, data_dir],
+            id="kalshi_odds_refresh",
+            name="Kalshi Odds Refresh",
+            replace_existing=True,
+        )
+        logger.info(f"Scheduled Kalshi odds refresh every {odds_interval}h")

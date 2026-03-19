@@ -651,12 +651,27 @@ async def run_pipeline(
                 logger.warning(f"Post-pipeline entity enrichment failed (non-fatal): {e}")
 
             try:
-                kalshi_config = getattr(config, "kalshi", None)
-                if kalshi_config and getattr(kalshi_config, "enabled", False):
+                from nexus.agent.breaking import check_breaking_news
+                alerts = await check_breaking_news(llm, config, store)
+                total = sum(len(v) for v in alerts.values())
+                if total:
+                    logger.info(f"Post-pipeline: {total} breaking alerts generated")
+            except Exception as e:
+                logger.warning(f"Post-pipeline breaking check failed (non-fatal): {e}")
+
+            try:
+                kalshi_config = config.future_projection.kalshi
+                if kalshi_config.enabled and kalshi_config.auto_scan and syntheses:
+                    from nexus.engine.projection.kalshi import build_kalshi_client
                     from nexus.engine.projection.service import run_kalshi_loop
+                    kalshi_client = build_kalshi_client(kalshi_config)
                     result = await run_kalshi_loop(
-                        store, llm, config,
-                        engines=["structural", "actor"],
+                        store, llm, syntheses,
+                        run_date=today_date,
+                        kalshi_client=kalshi_client,
+                        kalshi_config=kalshi_config,
+                        engine=config.future_projection.daily_engine,
+                        topic_configs=config.topics,
                     )
                     logger.info(f"Post-pipeline: Kalshi loop matched {result.get('markets_matched', 0)} markets")
             except Exception as e:

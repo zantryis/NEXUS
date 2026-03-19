@@ -6,12 +6,12 @@ An agentic news intelligence compiler that polls 52+ RSS feeds across 8 language
 
 | Metric | Value |
 |--------|-------|
-| Source files | ~127 Python modules |
-| Tests passing | 1,457 |
+| Source files | ~130 Python modules |
+| Tests passing | 1,494 (unit + 28 E2E) |
 | Source feeds | 52 global + per-topic registries, 8 languages |
 | LLM providers | Gemini, OpenAI, Anthropic, DeepSeek, Ollama |
 | TTS backends | Gemini native, OpenAI, ElevenLabs |
-| Knowledge store | SQLite, 32 tables, WAL mode, schema v17 |
+| Knowledge store | SQLite, 33 tables, WAL mode, schema v18 |
 | Delivery | Telegram bot + Web dashboard + Podcast RSS |
 
 ---
@@ -352,9 +352,9 @@ NexusConfig
 
 ---
 
-## SQLite Schema (v17)
+## SQLite Schema (v18)
 
-32 tables with WAL mode and foreign keys enabled.
+33 tables with WAL mode and foreign keys enabled.
 
 **Database files:** `knowledge.db` is the main data store used by the pipeline, dashboard, and Telegram bot. `nexus.db` exists only as an alternative path used by the setup wizard (`__main__.py:513`). All production code paths use `knowledge.db`.
 
@@ -572,10 +572,11 @@ last_error TEXT,
 status TEXT DEFAULT 'healthy'  -- 'healthy' | 'degraded' | 'dead'
 ```
 
-### Additional Columns (v16-v17)
+### Additional Columns/Tables (v16-v18)
 
 - **v16**: `forecast_questions.reasoning_json` — Persisted forecast reasoning for audit trail
 - **v17**: `pipeline_runs.skipped_topics` — JSON list of topics skipped during pipeline run
+- **v18**: `forecast_questions.updated_at` — Timestamp for last reprice; `forecast_probability_history` table — tracks probability changes over time with source attribution
 
 ---
 
@@ -826,7 +827,7 @@ src/nexus/
 │   │   └── filter.py        Two-pass LLM filter + perspective diversity
 │   ├── knowledge/
 │   │   ├── store.py         KnowledgeStore (all SQLite CRUD)
-│   │   ├── schema.py        DDL for 32 tables + migrations (v17)
+│   │   ├── schema.py        DDL for 33 tables + migrations (v18)
 │   │   ├── events.py        Event model, extraction, dedup/merge
 │   │   ├── entities.py      Entity resolution (LLM canonicalization)
 │   │   ├── pages.py         Cached narrative pages with TTL
@@ -865,7 +866,9 @@ src/nexus/
 │       ├── engines.py           ProjectionEngineInput protocol
 │       ├── graph.py             Graph snapshot builder
 │       ├── evaluation.py        Projection evaluation metrics
-│       └── historical.py        Historical topic state for replay
+│       ├── historical.py        Historical topic state for replay
+│       ├── reprice.py           Forecast repricing gate + service
+│       └── kalshi_odds.py       Live Kalshi odds refresh
 ├── agent/
 │   ├── bot.py               Telegram bot (commands + Q&A)
 │   ├── qa.py                Knowledge-grounded Q&A + web search
@@ -889,7 +892,8 @@ src/nexus/
 ├── testing/
 │   └── fixtures.py          Fixture capture/replay for backtesting
 ├── cli/
-│   └── setup.py             Interactive setup wizard
+│   ├── setup.py             Interactive setup wizard
+│   └── demo.py              Demo database seeder + serve
 └── utils/
     └── health.py            System health monitoring
 ```

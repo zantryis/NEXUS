@@ -106,6 +106,7 @@ class KalshiBenchmarkConfig(BaseModel):
     max_markets_per_topic: int = Field(default=5, ge=1, le=20)
     max_horizon_days: int = Field(default=90, ge=1)
     min_horizon_days: int = Field(default=1, ge=0)
+    odds_refresh_interval_hours: int = Field(default=6, ge=1)
 
 
 class FutureProjectionConfig(BaseModel):

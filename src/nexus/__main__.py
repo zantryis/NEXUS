@@ -1930,7 +1930,8 @@ def main():
               "  test       Run E2E smoke test with real APIs\n"
               "  audit-sources  Score each feed's relevance to a topic\n"
               "  enrich-entities  Backfill Wikipedia thumbnails + URLs for entities\n"
-              "  purge-empty-threads  Remove 0-event threads (--execute to confirm)\n")
+              "  purge-empty-threads  Remove 0-event threads (--execute to confirm)\n"
+              "  demo       Demo seed/serve (seed [--from-scratch] | serve [--port N])\n")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -1964,6 +1965,25 @@ def main():
         run_enrich_entities()
     elif command == "purge-empty-threads":
         run_purge_empty_threads()
+    elif command == "demo":
+        from nexus.cli.demo import run_demo_seed, run_demo_serve
+        sub = sys.argv[2] if len(sys.argv) > 2 else "seed"
+        data_dir = Path("data")
+        if sub == "seed":
+            from_scratch = "--from-scratch" in sys.argv
+            run_demo_seed(data_dir, from_scratch=from_scratch)
+        elif sub == "serve":
+            host = "127.0.0.1"
+            port = 8000
+            for i, arg in enumerate(sys.argv):
+                if arg == "--host" and i + 1 < len(sys.argv):
+                    host = sys.argv[i + 1]
+                if arg == "--port" and i + 1 < len(sys.argv):
+                    port = int(sys.argv[i + 1])
+            run_demo_serve(data_dir, host=host, port=port)
+        else:
+            print("Usage: python -m nexus demo <seed|serve>")
+            sys.exit(1)
     else:
         print(f"Unknown command: {command}")
         sys.exit(1)

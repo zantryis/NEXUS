@@ -36,7 +36,8 @@ src/nexus/
 data/               # Runtime data (gitignored except source registries)
   sources/          # Per-topic source registries (committed)
   config.yaml       # User config (gitignored, see data/config.example.yaml)
-tests/              # Mirrors src structure, 1,457 tests (unit + e2e)
+  cli/              # Setup wizard, demo seeder
+tests/              # Mirrors src structure, 1,494 tests (unit + 28 E2E)
 ```
 
 ## Key Concepts
@@ -44,6 +45,7 @@ tests/              # Mirrors src structure, 1,457 tests (unit + e2e)
 - Artifacts render FROM X (briefings, audio scripts, etc.)
 - CLI: `python -m nexus run` | `engine` | `serve` | `forecast` | `projection` | `benchmark`
        | `sources` | `evaluate` | `experiment` | `test` | `audit-sources` | `enrich-entities`
+       | `demo seed [--from-scratch]` | `demo serve`
 - Experiment CLI: `python -m nexus experiment --suite A,G --export-fixtures PATH --env cloud`
 - Prediction pipeline: 6 engines (actor/structural/graphrag/debate/perspective/naked),
   calibrated with gamma=0.8, optional Kalshi market benchmarking

@@ -929,6 +929,34 @@ strong { color: var(--nx-text-heading); }
             </div>
         </section>
 
+        <!-- ═══ DEMO ═══ -->
+        <section class="sect" id="demo" data-anim>
+            <div class="sect-title">Try the Demo</div>
+            <p class="sect-sub">See Nexus in action with seeded data &mdash; no API keys needed.</p>
+            <div class="qs-steps">
+                <div class="qs-step anim-child">
+                    <div class="qs-num">1</div>
+                    <div class="qs-body">
+                        <h3>Seed demo data</h3>
+                        <div class="qs-code"><span class="cmt"># from your own collected data</span>
+<span class="cmd">python -m nexus demo seed</span>
+
+<span class="cmt"># or with minimal static data</span>
+<span class="cmd">python -m nexus demo seed --from-scratch</span></div>
+                    </div>
+                </div>
+
+                <div class="qs-step anim-child">
+                    <div class="qs-num">2</div>
+                    <div class="qs-body">
+                        <h3>Launch demo server</h3>
+                        <div class="qs-code"><span class="cmd">python -m nexus demo serve</span></div>
+                        <p style="margin-top:10px">Opens in demo mode: full dashboard with read-only data, all pages functional, settings locked. Perfect for screenshots and walkthroughs.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- ═══ STACK ═══ -->
         <section class="sect" data-anim>
             <div class="stack">
