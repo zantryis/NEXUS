@@ -16,4 +16,10 @@
 - Breaking news detection with wire feed polling + LLM scoring
 - Setup wizard for first-run configuration
 - Docker support (dev, test, production compose files)
-- 1,100+ tests (unit + integration + e2e)
+- Feed health monitoring for source reliability tracking
+- Breaking news feedback system (user reactions on alerts)
+- Pipeline observability: per-stage timing, token usage, topic-level metrics
+- Hindcast backtesting framework for prediction calibration
+- Fixture capture/replay system for deterministic offline testing
+- GitHub Pages showcase: interactive pipeline explorer + system overview
+- 1,457 tests (unit + integration + e2e)

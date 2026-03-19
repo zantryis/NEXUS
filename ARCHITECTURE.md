@@ -6,12 +6,12 @@ An agentic news intelligence compiler that polls 52+ RSS feeds across 8 language
 
 | Metric | Value |
 |--------|-------|
-| Source files | ~89 Python modules |
-| Tests passing | 1081+ |
+| Source files | ~127 Python modules |
+| Tests passing | 1,457 |
 | Source feeds | 52 global + per-topic registries, 8 languages |
 | LLM providers | Gemini, OpenAI, Anthropic, DeepSeek, Ollama |
 | TTS backends | Gemini native, OpenAI, ElevenLabs |
-| Knowledge store | SQLite, 30 tables, WAL mode, schema v13 |
+| Knowledge store | SQLite, 32 tables, WAL mode, schema v17 |
 | Delivery | Telegram bot + Web dashboard + Podcast RSS |
 
 ---
@@ -352,9 +352,9 @@ NexusConfig
 
 ---
 
-## SQLite Schema (v13)
+## SQLite Schema (v17)
 
-30 tables with WAL mode and foreign keys enabled.
+32 tables with WAL mode and foreign keys enabled.
 
 **Database files:** `knowledge.db` is the main data store used by the pipeline, dashboard, and Telegram bot. `nexus.db` exists only as an alternative path used by the setup wizard (`__main__.py:513`). All production code paths use `knowledge.db`.
 
@@ -544,6 +544,39 @@ id, source_entity_id, target_entity_id, relation_type, evidence_text,
 source_event_id, strength, valid_from, valid_until
 ```
 
+### Breaking News Feedback (v14)
+
+**breaking_feedback** — User feedback on breaking alerts
+
+```sql
+id INTEGER PRIMARY KEY,
+headline_hash TEXT NOT NULL,
+topic_slug TEXT NOT NULL,
+feedback TEXT NOT NULL,  -- 'useful' | 'not_breaking'
+created_at TEXT DEFAULT (datetime('now'))
+```
+
+### Feed Health Tracking (v15)
+
+**feed_health** — Source feed reliability monitoring
+
+```sql
+source_url TEXT PRIMARY KEY,
+topic_slug TEXT,
+last_poll_at TEXT,
+last_success_at TEXT,
+consecutive_failures INTEGER DEFAULT 0,
+total_polls INTEGER DEFAULT 0,
+total_successes INTEGER DEFAULT 0,
+last_error TEXT,
+status TEXT DEFAULT 'healthy'  -- 'healthy' | 'degraded' | 'dead'
+```
+
+### Additional Columns (v16-v17)
+
+- **v16**: `forecast_questions.reasoning_json` — Persisted forecast reasoning for audit trail
+- **v17**: `pipeline_runs.skipped_topics` — JSON list of topics skipped during pipeline run
+
 ---
 
 ## Data Models
@@ -681,7 +714,7 @@ Source auto-discovery: `python -m nexus sources discover <slug>` uses LLM to fin
 
 **App factory:** `src/nexus/web/app.py:23` — FastAPI + Jinja2 + HTMX, Pico CSS dark theme
 
-### Routes (16 routers)
+### Routes (21 route modules)
 
 | Route | File | Purpose |
 |-------|------|---------|
@@ -704,8 +737,13 @@ Source auto-discovery: `python -m nexus sources discover <slug>` uses LLM to fin
 | `GET /setup` | setup.py | First-run setup wizard |
 | `GET /graph` | graph.py | Entity relationship graph (SVG) |
 | `GET /explore` | explore.py | Topic exploration page |
+| `GET /explore/entities/` | explore.py | Entity exploration with search and type filters |
+| `GET /explore/graph` | graph.py | Interactive entity relationship graph |
+| `GET /predictions` | predictions.py | Prediction dashboard with engine outputs and calibration |
+| `GET /benchmark` | benchmark.py | Kalshi benchmark results and scoring |
+| `GET /changes/` | changes.py | Recent pipeline changes and diffs |
 | `POST /chat` | chat.py | Web chat Q&A widget (rate-limited) |
-| `GET /oauth/...` | oauth.py | OAuth callback handling |
+| `GET /oauth/...` | oauth.py | OpenAI OAuth flow for token management |
 
 ---
 
@@ -788,7 +826,7 @@ src/nexus/
 │   │   └── filter.py        Two-pass LLM filter + perspective diversity
 │   ├── knowledge/
 │   │   ├── store.py         KnowledgeStore (all SQLite CRUD)
-│   │   ├── schema.py        DDL for 30 tables + migrations (v13)
+│   │   ├── schema.py        DDL for 32 tables + migrations (v17)
 │   │   ├── events.py        Event model, extraction, dedup/merge
 │   │   ├── entities.py      Entity resolution (LLM canonicalization)
 │   │   ├── pages.py         Cached narrative pages with TTL
@@ -845,11 +883,13 @@ src/nexus/
 │   ├── clustering.py        Event clustering for explore view
 │   ├── filters.py           Jinja2 template filters
 │   ├── thumbnails.py        Favicon/thumbnail helpers
-│   ├── routes/              16 route modules
+│   ├── routes/              21 route modules
 │   ├── templates/           Jinja2 templates (Pico CSS + HTMX)
 │   └── static/              CSS + JS assets
 ├── testing/
 │   └── fixtures.py          Fixture capture/replay for backtesting
-└── cli/
-    └── setup.py             Interactive setup wizard
+├── cli/
+│   └── setup.py             Interactive setup wizard
+└── utils/
+    └── health.py            System health monitoring
 ```

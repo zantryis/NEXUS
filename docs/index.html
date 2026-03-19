@@ -8,6 +8,8 @@
     <meta property="og:title" content="Nexus — Agentic News Intelligence Compiler">
     <meta property="og:description" content="Self-hosted intelligence pipeline with convergence/divergence detection and calibrated forecasting.">
     <meta property="og:type" content="website">
+    <!-- og:image requires absolute URL; set when public deployment URL is known -->
+    <!-- <meta property="og:image" content="https://tyan3001.github.io/NEXUS/logo-dark.svg"> -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M32 6 L35 16 L32 26 L29 16Z' fill='%2306b6d4' opacity='.5' transform='rotate(15 32 16)'/><path d='M38 32 L48 29 L58 32 L48 35Z' fill='%2322d3ee' opacity='.38' transform='rotate(15 48 32)'/><path d='M32 38 L35 48 L32 58 L29 48Z' fill='%2306b6d4' opacity='.5' transform='rotate(15 32 48)'/><path d='M6 32 L16 29 L26 32 L16 35Z' fill='%2322d3ee' opacity='.38' transform='rotate(15 16 32)'/><path d='M32 27 L37 32 L32 37 L27 32Z' fill='%2306b6d4' opacity='.7'/></svg>">
     <script>(function(){var t=localStorage.getItem('nexus-theme');if(t)document.documentElement.setAttribute('data-theme',t);else if(window.matchMedia&&matchMedia('(prefers-color-scheme:light)').matches)document.documentElement.setAttribute('data-theme','light')})()</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -898,8 +900,8 @@ strong { color: var(--nx-text-heading); }
                     <div class="qs-num">1</div>
                     <div class="qs-body">
                         <h3>Clone &amp; install</h3>
-                        <div class="qs-code"><span class="cmd">git clone https://github.com/your-username/nexus-claude.git</span>
-<span class="cmd">cd nexus-claude &amp;&amp; pip install -e .</span></div>
+                        <div class="qs-code"><span class="cmd">git clone https://github.com/Tyan3001/NEXUS.git</span>
+<span class="cmd">cd NEXUS &amp;&amp; pip install -e .</span></div>
                     </div>
                 </div>
 
@@ -1114,6 +1116,16 @@ var heroCanvas = document.getElementById('constellation');
 if (heroCanvas) {
     window._constellation = new Constellation(heroCanvas);
 }
+
+// Pause canvas when tab is backgrounded
+document.addEventListener('visibilitychange', function() {
+    if (!window._constellation) return;
+    if (document.hidden) {
+        cancelAnimationFrame(window._constellation.raf);
+    } else {
+        window._constellation.draw();
+    }
+});
 
 /* ── Header scroll-aware opacity ───────────────────────────────────── */
 var siteHdr = document.querySelector('.site-hdr');

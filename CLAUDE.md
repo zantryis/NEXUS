@@ -25,7 +25,8 @@ Agentic news intelligence compiler. Self-hosted, model-agnostic, always-on.
 ```
 src/nexus/
   config/           # Pydantic models, YAML loader
-  engine/           # Pipeline: sources/ ingestion/ filtering/ knowledge/ synthesis/ audio/ evaluation/
+  engine/           # Pipeline: sources/ ingestion/ filtering/ knowledge/ synthesis/ audio/ evaluation/ projection/
+  utils/            # Feed health monitoring
   agent/            # Telegram bot, Q&A, breaking news, delivery, feedback
   scheduler/        # APScheduler job definitions
   web/              # FastAPI dashboard + podcast RSS
@@ -35,14 +36,39 @@ src/nexus/
 data/               # Runtime data (gitignored except source registries)
   sources/          # Per-topic source registries (committed)
   config.yaml       # User config (gitignored, see data/config.example.yaml)
-tests/              # Mirrors src structure, 760+ tests (unit + e2e)
+tests/              # Mirrors src structure, 1,457 tests (unit + e2e)
 ```
 
 ## Key Concepts
 - TopicSynthesis (X): intermediate knowledge object with NarrativeThread, convergence/divergence
 - Artifacts render FROM X (briefings, audio scripts, etc.)
-- CLI: `python -m nexus run` (all services) | `engine` (pipeline only) | `serve` (dashboard only)
+- CLI: `python -m nexus run` | `engine` | `serve` | `forecast` | `projection` | `benchmark`
+       | `sources` | `evaluate` | `experiment` | `test` | `audit-sources` | `enrich-entities`
 - Experiment CLI: `python -m nexus experiment --suite A,G --export-fixtures PATH --env cloud`
+- Prediction pipeline: 6 engines (actor/structural/graphrag/debate/perspective/naked),
+  calibrated with gamma=0.8, optional Kalshi market benchmarking
 - Pipeline parameters (thresholds, scoring rubrics, limits): `docs/pipeline-parameters.md`
 - Cost accounting: `LLMClient` persists usage to SQLite via `set_store()`, budget guard syncs on startup
 - Cross-env comparison: fixture export/import, re-judge mode, `compare.py` quality reports
+
+## Documentation Maintenance
+
+When code changes affect any of the following, update the corresponding docs:
+
+| What Changed | Update These Files |
+|-------------|-------------------|
+| New/removed CLI command | CLAUDE.md (CLI line), README.md (CLI Commands section) |
+| Schema migration (new table/column) | ARCHITECTURE.md (schema version, table count, table DDL) |
+| New web route | ARCHITECTURE.md (Web Dashboard Routes table) |
+| New/changed pipeline stage | `docs/pipeline.html` (node data), `docs/pipeline-parameters.md` (if tunable) |
+| Test count crosses a milestone | README.md, ARCHITECTURE.md, CLAUDE.md |
+| New Python module | ARCHITECTURE.md (Module Map), CLAUDE.md (Project Structure) |
+| Config model changes | ARCHITECTURE.md (Configuration section) |
+| New LLM model preset | ARCHITECTURE.md (Model Presets table), SYSTEM_SPEC.md (AI Provider table) |
+
+Verification commands:
+```bash
+grep -r "def test_" tests/ | wc -l                          # Test count
+find src/nexus -name "*.py" | wc -l                         # Source file count
+grep "CURRENT_VERSION" src/nexus/engine/knowledge/schema.py  # Schema version
+```

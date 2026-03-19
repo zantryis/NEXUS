@@ -27,7 +27,7 @@ All others are code constants — modify in source or wait for future config sup
 
 | Parameter | Value | Location | Notes |
 |-----------|-------|----------|-------|
-| `BATCH_SIZE` | 10 | `filter.py:38` | Articles per LLM call |
+| `BATCH_SIZE` | 10 | `filter.py:44` | Articles per LLM call |
 | `filter_threshold` | 4.0 (default) | `models.py:29` | **Configurable** per-topic. Scale: 1–10, lower = more pass. Benchmark: 4.0 optimal (6.4/10), 5.0 slightly lower (6.1), ≥7.0 collapses quality |
 | Snippet cap | 1000 chars | `filter.py:90` | Max article text per batch item |
 
@@ -39,9 +39,9 @@ All others are code constants — modify in source or wait for future config sup
 
 | Parameter | Value | Location | Notes |
 |-----------|-------|----------|-------|
-| `PASS2_BATCH_SIZE` | 5 | `filter.py:50` | Smaller batches — more text per article |
+| `PASS2_BATCH_SIZE` | 5 | `filter.py:56` | Smaller batches — more text per article |
 | Text cap | 2000 chars | `filter.py:147` | Max article text per batch item |
-| Pass threshold | significance ≥ 4 **OR** `is_novel` | `filter.py:367` | Either condition passes |
+| Pass threshold | significance ≥ 4 **OR** `is_novel` | `filter.py:453` | Either condition passes |
 
 **Rubric** (system prompt at `filter.py:42-48`):
 > Score significance 1–10, assess novelty (boolean) against known events from last 7 days.
@@ -53,7 +53,7 @@ novelty_bonus = 1.0 if is_novel else 0.7
 composite = (relevance × 0.4 + significance × 0.6) × novelty_bonus
 ```
 
-Constants: `RELEVANCE_WEIGHT=0.4`, `SIGNIFICANCE_WEIGHT=0.6`, `NOVEL_BONUS=1.0`, `NON_NOVEL_BONUS=0.7` (`filter.py:362-363`)
+Constants: `RELEVANCE_WEIGHT=0.4`, `SIGNIFICANCE_WEIGHT=0.6`, `NOVEL_BONUS=1.0`, `NON_NOVEL_BONUS=0.7` (`filter.py:59-62`)
 
 ### Perspective Diversity
 
@@ -69,9 +69,9 @@ Constants: `RELEVANCE_WEIGHT=0.4`, `SIGNIFICANCE_WEIGHT=0.6`, `NOVEL_BONUS=1.0`,
 
 | Parameter | Value | Location | Notes |
 |-----------|-------|----------|-------|
-| Event cap (narrow) | 15 | `pipeline.py:92` | Max events per topic per run |
-| Event cap (medium) | 20 | `pipeline.py:92` | |
-| Event cap (broad) | 35 | `pipeline.py:92` | |
+| Event cap (narrow) | 15 | `pipeline.py:146` | Max events per topic per run |
+| Event cap (medium) | 20 | `pipeline.py:146` | |
+| Event cap (broad) | 35 | `pipeline.py:146` | |
 | `max_events` | (override) | `models.py:31` | **Configurable** per-topic |
 | Extraction concurrency | 5 | `pipeline.py:181` | Semaphore for parallel extraction |
 | Entity overlap threshold | 0.6 | `events.py:52` | 60% entity overlap → duplicate event |

@@ -1,6 +1,17 @@
-# Nexus
+<p align="center">
+  <img src="docs/logo-dark.svg" width="80" alt="Nexus">
+</p>
 
-An agentic news intelligence compiler that polls 50+ RSS feeds across 8 languages, extracts structured events via LLM, resolves entities into a knowledge graph, identifies narrative threads with cross-source convergence/divergence analysis, generates daily briefings with podcast audio, and delivers via Telegram.
+<h1 align="center">Nexus</h1>
+
+<p align="center">
+  Agentic news intelligence compiler. Self-hosted, model-agnostic, always-on.<br>
+  <a href="https://tyan3001.github.io/NEXUS/">Explore the pipeline →</a>
+</p>
+
+---
+
+An agentic news intelligence compiler that polls 50+ RSS feeds across 8 languages, extracts structured events via LLM, resolves entities into a knowledge graph, identifies narrative threads with cross-source convergence/divergence analysis, generates daily briefings with podcast audio, delivers via Telegram, and runs 6 competing forecast engines benchmarked against real prediction markets.
 
 ## Features
 
@@ -17,6 +28,7 @@ An agentic news intelligence compiler that polls 50+ RSS feeds across 8 language
 - **Source auto-discovery** — LLM-powered RSS feed discovery for new topics
 - **Multi-provider LLM** — Gemini, OpenAI, Anthropic, DeepSeek, and Ollama (local)
 - **Budget controls** — Daily spend limits with automatic degradation strategies
+- **Prediction pipeline** — 6 competing forecast engines (actor, structural, graphrag, debate, perspective, naked baseline) with calibrated probabilities, Kalshi market benchmarking, and hindcast backtesting
 
 ## Quick Start
 
@@ -97,6 +109,14 @@ python -m nexus setup                   # Interactive CLI setup wizard
 python -m nexus sources check           # Test RSS feed health
 python -m nexus sources list            # List all global sources
 python -m nexus sources discover <slug> # Auto-discover RSS feeds for a topic
+python -m nexus forecast generate             # Generate predictions for eligible topics
+python -m nexus forecast resolve              # Resolve pending predictions against new events
+python -m nexus forecast benchmark            # Run Kalshi market benchmark
+python -m nexus forecast hindcast             # Backtest engines on historical data
+python -m nexus benchmark                     # Fast benchmark on saved fixtures
+python -m nexus audit-sources <slug>          # Score feed relevance for a topic
+python -m nexus enrich-entities               # Backfill Wikipedia data for entities
+python -m nexus purge-empty-threads           # Remove orphaned threads with no events
 python -m nexus test                            # E2E smoke test (runs minimal pipeline)
 python -m nexus evaluate synthesis <path>       # Judge synthesis quality
 python -m nexus evaluate compare <path> <path>  # Compare two syntheses
@@ -164,6 +184,7 @@ POLL -> DEDUP -> INGEST -> FILTER -> EXTRACT -> DEDUP
                           (2-pass LLM)
     -> ENTITY RESOLVE -> SYNTHESIZE -> PERSIST THREADS
     -> REFRESH PAGES -> RENDER BRIEFING -> AUDIO PIPELINE
+    -> PREDICTION (6 engines, calibration, Kalshi benchmark)
     |                    |                    |
     v                    v                    v
 SQLite Knowledge      Telegram Bot         Dashboard
@@ -189,7 +210,7 @@ Controlled experiment across 3 topics, 8 test suites, evaluated by two independe
 
 ### Key Findings
 
-- **Optimal filter threshold: 5.0** — scores 6.5 overall vs 4.9 at threshold 6.0 (threshold sweep, 5 values x 3 topics)
+- **Optimal filter threshold: 4.0** — scores 6.5 overall vs 4.9 at threshold 6.0 (threshold sweep, 5 values x 3 topics)
 - **High source diversity: +43% source balance** — default updated from "low" to "high" (diversity sweep, 3 levels x 3 topics)
 - **Best model config: Flash filter + DeepSeek Reasoner synthesis** — scores 5.5 vs 4.7 for all-Flash (model matrix, 7 combos x 3 topics)
 - **Text quality: 8.2-8.5/10** across all briefing styles (style comparison, 3 styles x 3 topics)
@@ -209,18 +230,20 @@ python -m nexus experiment --suite A,G --export-fixtures data/fixtures/local  # 
 
 ```
 src/nexus/
-  engine/         Pipeline: sources, ingestion, filtering, knowledge, synthesis, audio
+  engine/         Pipeline: sources, ingestion, filtering, knowledge, synthesis, audio, projection
+    projection/   Prediction pipeline: 6 forecast engines, calibration, Kalshi benchmark, hindcast
   agent/          Telegram bot, Q&A, breaking news, delivery, web search
   scheduler/      APScheduler job definitions
   web/            FastAPI dashboard, setup wizard, settings, chat widget
   llm/            Multi-provider async LLM client (Gemini, OpenAI, Anthropic, DeepSeek, Ollama)
   config/         Pydantic config models, presets, config writer
   testing/        E2E smoke test runner
+  utils/          Feed health monitoring
   runner.py       Unified runner (all services on one event loop)
 data/
   sources/        Per-topic RSS source registries (pre-built for 4 topics)
   config.yaml     Your personal configuration (gitignored — created by setup wizard)
-tests/            760+ tests mirroring src structure (unit + e2e)
+tests/            1,457 tests mirroring src structure (unit + e2e)
 ```
 
 ## License

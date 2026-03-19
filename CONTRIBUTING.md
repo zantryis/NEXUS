@@ -39,6 +39,34 @@ We follow **TDD** (test-driven development):
 python -m nexus test
 ```
 
+## Test Markers
+
+Tests that require external services use pytest markers so they're skipped by default:
+
+| Marker | When to use | What it needs |
+|--------|------------|---------------|
+| `@pytest.mark.integration` | Hits a live LLM API | API keys in `.env` |
+| `@pytest.mark.e2e` | Full pipeline smoke test | API keys + network |
+
+Unit tests should mock all LLM and network calls using fixtures. See `tests/conftest.py` for shared fixtures and `src/nexus/testing/` for the fixture capture/replay framework.
+
+## Fixture Capture & Replay
+
+Nexus includes a fixture system for deterministic backtesting without live API calls:
+
+```bash
+# Capture fixtures from a live pipeline run
+python -m nexus experiment --suite A,G --export-fixtures fixtures/
+
+# Replay captured fixtures (no API keys needed)
+python -m nexus experiment --suite A,G --import-fixtures fixtures/
+
+# Compare results across environments
+python -m nexus experiment --suite A,G --compare fixtures/cloud fixtures/local
+```
+
+Fixture files are JSON snapshots of LLM responses. When adding a new pipeline stage that calls an LLM, add fixture capture hooks in `src/nexus/testing/` so the stage can be replayed offline.
+
 ## Code Style
 
 - Keep it minimal — no over-engineering, no premature abstractions
@@ -65,7 +93,7 @@ src/nexus/
   scheduler/  # APScheduler job definitions
   web/        # FastAPI dashboard + setup wizard
   llm/        # Multi-provider async LLM client
-  testing/    # E2E smoke test runner
+  testing/    # Fixture capture/replay for backtesting
 tests/        # Mirrors src structure (unit + e2e)
 ```
 

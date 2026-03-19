@@ -80,6 +80,26 @@ A web-based dashboard lets you explore everything Nexus knows:
 - **Sources:** See the balance of perspectives — how many events came from state media vs. private outlets vs. public broadcasters.
 - **Filter log:** Full transparency into what got filtered out and why — every article Nexus saw is logged with scores and reasons.
 - **Cost tracking:** See how much you're spending on AI calls per day.
+- **Predictions:** Browse quantified forecasts with engine outputs, calibration data, and confidence levels.
+- **Benchmark:** See how Nexus forecasts compare against Kalshi market prices, with Brier scores.
+- **Changes:** View recent pipeline changes — what was extracted, filtered, and synthesized in each run.
+
+### 9. It Makes Predictions
+
+After building the knowledge graph, Nexus can generate calibrated probabilistic forecasts about how tracked stories will develop.
+
+Six competing forecast engines approach each question from different angles:
+
+- **Actor engine** (default) — Identifies relevant actors from the knowledge graph, reasons about each one's likely behavior, then synthesizes a probability
+- **Structural engine** — Three-stage analysis inspired by academic forecasting research: base-rate reasoning, contrarian challenge, supervisor reconciliation
+- **GraphRAG engine** — Walks the knowledge graph to find indirect connections the other engines miss
+- **Debate engine** — Multiple AI personas reason independently, then debate and revise their estimates
+- **Perspective engine** — Three analyst personas (evidence-based, contrarian, historical pattern) reason in parallel
+- **Naked engine** — Baseline control: just the question and today's date, no context. If other engines can't beat this, the knowledge integration is adding noise, not signal.
+
+Raw probabilities are calibrated to correct for LLM overconfidence: a compression function pushes extreme estimates toward 0.5. When a prediction market price is available, the system blends the LLM's estimate with the market anchor rather than replacing it.
+
+Optionally, Nexus integrates with Kalshi prediction markets — scanning their settled markets, generating independent probabilities for the same questions, and comparing performance using Brier scores. A hindcast framework tests engines against historical data with strict date cutoffs so they can't peek at the answer.
 
 ---
 
@@ -99,7 +119,7 @@ Four topics ship with pre-built source registries: Iran-US Relations, AI/ML Rese
 
 ### AI Providers
 
-Nexus works with five AI providers:
+Nexus works with six AI providers:
 
 | Provider | What It Offers | Cost |
 |----------|---------------|------|
@@ -108,6 +128,7 @@ Nexus works with five AI providers:
 | **Google Gemini** | Good balance of cost and quality | ~$0.05/day |
 | **OpenAI** (GPT-4) | High quality | ~$0.03–0.10/day |
 | **Anthropic** (Claude) | High quality | ~$0.10/day |
+| **LiteLLM** (cloud proxy) | Route to any model via OpenAI-compatible proxy | Varies |
 
 You pick a preset (or mix and match per pipeline stage). Different parts of the system use different models — cheap, fast models for filtering and scoring; smarter, slower models for synthesis and dialogue writing.
 
