@@ -157,6 +157,7 @@ async def run_topic_pipeline(
     max_ingest: int | None = None,
     bg_tasks: list | None = None,
     progress_status: dict | None = None,
+    max_age_hours: int = 48,
 ) -> TopicPipelineResult:
     """Run the pipeline for a single topic: poll → ingest → filter → events → synthesize."""
     slug = topic.name.lower().replace(" ", "-").replace("/", "-")
@@ -173,8 +174,8 @@ async def run_topic_pipeline(
     timings["poll"] = time.monotonic() - t0
     logger.info(f"[{topic.name}] Polled {len(raw_items)} items")
 
-    # Drop stale articles (>48h) to keep volume manageable
-    recent_items = filter_recent(raw_items, max_age_hours=48)
+    # Drop stale articles — normally 48h, extended on first run (backfill)
+    recent_items = filter_recent(raw_items, max_age_hours=max_age_hours)
     if len(recent_items) < len(raw_items):
         logger.info(
             f"[{topic.name}] Recency filter: {len(raw_items)} → {len(recent_items)} "
@@ -429,6 +430,83 @@ async def run_topic_pipeline(
     )
 
 
+async def run_backfill(
+    config: NexusConfig, llm: LLMClient, data_dir: Path,
+    max_age_hours: int = 168,
+    progress_status: dict | None = None,
+    store: KnowledgeStore | None = None,
+) -> int:
+    """Backfill historical events from RSS feeds (extended time window).
+
+    Runs poll → ingest → filter → events → entities only (no synthesis,
+    briefing, or audio).  Designed to run after a quick first-run so the
+    knowledge store gets populated with ~7 days of history while the user
+    already has their first briefing.
+
+    Returns the total number of new events added.
+    """
+    own_store = store is None
+    if own_store:
+        store = KnowledgeStore(data_dir / "knowledge.db")
+        await store.initialize()
+
+    run_id = await store.start_pipeline_run(
+        [_topic_slug(t.name) for t in config.topics], trigger="auto_run",
+    )
+    previous_llm_store = getattr(llm, "_store", None)
+    await llm.set_store(store)
+
+    total_new_events = 0
+    bg_tasks: list[asyncio.Task] = []
+
+    def _progress(stage: str, topic_index: int = 0):
+        if progress_status is not None:
+            progress_status["stage"] = stage
+            progress_status["topic_index"] = topic_index
+
+    try:
+        for topic_i, topic in enumerate(config.topics):
+            _progress(f"backfill:{topic.name}", topic_i + 1)
+            sources = load_source_registry(data_dir, topic)
+            if not sources:
+                continue
+            try:
+                result = await run_topic_pipeline(
+                    llm, topic, data_dir, sources,
+                    run_date=date.today(),
+                    store=store,
+                    max_age_hours=max_age_hours,
+                    bg_tasks=bg_tasks,
+                    progress_status=progress_status,
+                )
+                total_new_events += result.extracted_event_count
+            except Exception:
+                logger.exception(f"[{topic.name}] Backfill failed — skipping")
+                continue
+
+        await store.complete_pipeline_run(
+            run_id, event_count=total_new_events, cost_usd=0.0,
+        )
+        logger.info(f"Backfill complete: {total_new_events} new events across {len(config.topics)} topics")
+        return total_new_events
+    except Exception as e:
+        if run_id:
+            await store.fail_pipeline_run(run_id, str(e))
+        raise
+    finally:
+        if bg_tasks:
+            _, pending = await asyncio.wait(bg_tasks, timeout=30)
+            for t in pending:
+                t.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+        await llm.flush_usage()
+        if own_store:
+            await store.close()
+        elif previous_llm_store is not None:
+            await llm.set_store(previous_llm_store)
+
+
 async def run_pipeline(
     config: NexusConfig, llm: LLMClient, data_dir: Path,
     capture: bool = False, fixture_dir: Path | None = None,
@@ -439,6 +517,7 @@ async def run_pipeline(
     trigger: str = "manual",
     progress_status: dict | None = None,
     store: KnowledgeStore | None = None,
+    max_age_hours: int = 48,
 ) -> Path:
     """Run the full daily engine pipeline. Returns path to generated briefing."""
     pipeline_start = time.monotonic()
@@ -515,7 +594,8 @@ async def run_pipeline(
                                                   store=store, capture=cap,
                                                   max_ingest=max_ingest,
                                                   bg_tasks=bg_tasks,
-                                                  progress_status=progress_status)
+                                                  progress_status=progress_status,
+                                                  max_age_hours=max_age_hours)
                 syntheses.append(result.synthesis)
                 all_articles.extend(result.articles)
                 extracted_event_count += result.extracted_event_count

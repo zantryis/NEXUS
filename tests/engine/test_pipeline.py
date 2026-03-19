@@ -1,10 +1,10 @@
 """Tests for the engine pipeline orchestrator."""
 
 import pytest
-from datetime import date
-from unittest.mock import AsyncMock, patch
+from datetime import date, datetime, timedelta
+from unittest.mock import AsyncMock, patch, call
 from nexus.config.models import NexusConfig, UserConfig, TopicConfig, SourcesConfig
-from nexus.engine.pipeline import run_pipeline, _event_cap_for_topic
+from nexus.engine.pipeline import run_pipeline, run_backfill, _event_cap_for_topic
 from nexus.llm.client import UsageTracker
 
 
@@ -269,3 +269,182 @@ async def test_run_pipeline_skips_topic_when_no_sources_and_discovery_disabled(d
 
         # run_topic_pipeline should NOT be called since sources are empty
         mock_topic.assert_not_called()
+
+
+# ── max_age_hours pass-through ──
+
+
+@pytest.mark.asyncio
+async def test_run_topic_pipeline_uses_custom_max_age_hours(config, data_dir):
+    """run_topic_pipeline should pass max_age_hours to filter_recent."""
+    mock_llm = FakePipelineLLM()
+
+    with patch("nexus.engine.pipeline.poll_all_feeds") as mock_poll, \
+         patch("nexus.engine.pipeline.filter_recent") as mock_filter_recent, \
+         patch("nexus.engine.pipeline.dedup_items") as mock_dedup, \
+         patch("nexus.engine.pipeline.async_ingest_items") as mock_ingest, \
+         patch("nexus.engine.pipeline.filter_items") as mock_filter, \
+         patch("nexus.engine.pipeline.extract_event") as mock_extract, \
+         patch("nexus.engine.pipeline.synthesize_topic") as mock_synth, \
+         patch("nexus.engine.pipeline.maybe_compress"):
+
+        from nexus.engine.sources.polling import ContentItem
+        from nexus.engine.synthesis.knowledge import TopicSynthesis, NarrativeThread
+        from nexus.engine.pipeline import run_topic_pipeline
+        from nexus.engine.knowledge.store import KnowledgeStore
+
+        item = ContentItem(
+            title="Old News", url="https://example.com", source_id="test",
+            full_text="Text", relevance_score=8,
+        )
+        mock_poll.return_value = [item]
+        mock_filter_recent.return_value = [item]
+        mock_dedup.return_value = [item]
+        mock_ingest.return_value = [item]
+        from nexus.engine.filtering.filter import FilterResult
+        mock_filter.return_value = FilterResult(accepted=[], log_entries=[])
+        mock_synth.return_value = TopicSynthesis(
+            topic_name="AI Research",
+            threads=[NarrativeThread(headline="Stub", significance=5)],
+        )
+
+        store = KnowledgeStore(data_dir / "knowledge.db")
+        await store.initialize()
+
+        topic = config.topics[0]
+        sources = [{"url": "https://feed.com/rss", "id": "test"}]
+
+        # Default: 48h
+        await run_topic_pipeline(
+            mock_llm, topic, data_dir, sources, store=store,
+        )
+        mock_filter_recent.assert_called_with(mock_poll.return_value, max_age_hours=48)
+
+        # Custom: 168h (backfill)
+        mock_filter_recent.reset_mock()
+        await run_topic_pipeline(
+            mock_llm, topic, data_dir, sources, store=store,
+            max_age_hours=168,
+        )
+        mock_filter_recent.assert_called_with(mock_poll.return_value, max_age_hours=168)
+
+        await store.close()
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_forwards_max_age_hours(config, data_dir):
+    """run_pipeline should forward max_age_hours to run_topic_pipeline."""
+    mock_llm = FakePipelineLLM()
+
+    with patch("nexus.engine.pipeline.load_source_registry") as mock_registry, \
+         patch("nexus.engine.pipeline.run_topic_pipeline", new_callable=AsyncMock) as mock_topic, \
+         patch("nexus.engine.pipeline.render_text_briefing") as mock_render, \
+         patch("nexus.engine.pipeline.run_audio_pipeline", new_callable=AsyncMock) as mock_audio:
+
+        from nexus.engine.synthesis.knowledge import TopicSynthesis, NarrativeThread
+
+        mock_registry.return_value = [{"url": "https://feed.com/rss", "id": "test"}]
+        mock_topic.return_value = type("R", (), {
+            "synthesis": TopicSynthesis(
+                topic_name="AI Research",
+                threads=[NarrativeThread(headline="Stub", significance=5)],
+            ),
+            "articles": [],
+            "extracted_event_count": 0,
+        })()
+        mock_render.return_value = "# Briefing"
+        mock_audio.return_value = None
+
+        await run_pipeline(config, mock_llm, data_dir, max_age_hours=168)
+
+        # Verify max_age_hours was passed through
+        call_kwargs = mock_topic.call_args.kwargs
+        assert call_kwargs["max_age_hours"] == 168
+
+
+# ── run_backfill ──
+
+
+@pytest.mark.asyncio
+async def test_run_backfill_uses_extended_window(config, data_dir):
+    """run_backfill should call run_topic_pipeline with 168h window and no synthesis output."""
+    mock_llm = FakePipelineLLM()
+
+    with patch("nexus.engine.pipeline.load_source_registry") as mock_registry, \
+         patch("nexus.engine.pipeline.run_topic_pipeline", new_callable=AsyncMock) as mock_topic:
+
+        from nexus.engine.synthesis.knowledge import TopicSynthesis, NarrativeThread
+
+        mock_registry.return_value = [{"url": "https://feed.com/rss", "id": "test"}]
+        mock_topic.return_value = type("R", (), {
+            "synthesis": TopicSynthesis(
+                topic_name="AI Research",
+                threads=[NarrativeThread(headline="Stub", significance=5)],
+            ),
+            "articles": [],
+            "extracted_event_count": 7,
+        })()
+
+        total = await run_backfill(config, mock_llm, data_dir, max_age_hours=168)
+
+        assert total == 7
+        call_kwargs = mock_topic.call_args.kwargs
+        assert call_kwargs["max_age_hours"] == 168
+
+
+@pytest.mark.asyncio
+async def test_run_backfill_skips_topics_without_sources(data_dir):
+    """run_backfill should skip topics that have no source registry."""
+    config = NexusConfig(
+        user=UserConfig(name="Test"),
+        topics=[TopicConfig(name="No Sources Topic")],
+    )
+    mock_llm = FakePipelineLLM()
+
+    with patch("nexus.engine.pipeline.load_source_registry") as mock_registry, \
+         patch("nexus.engine.pipeline.run_topic_pipeline", new_callable=AsyncMock) as mock_topic:
+
+        mock_registry.return_value = []  # No sources
+
+        total = await run_backfill(config, mock_llm, data_dir)
+
+        assert total == 0
+        mock_topic.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_backfill_continues_on_topic_failure(data_dir):
+    """run_backfill should continue to next topic if one fails."""
+    config = NexusConfig(
+        user=UserConfig(name="Test"),
+        topics=[
+            TopicConfig(name="Topic A"),
+            TopicConfig(name="Topic B"),
+        ],
+    )
+    mock_llm = FakePipelineLLM()
+
+    with patch("nexus.engine.pipeline.load_source_registry") as mock_registry, \
+         patch("nexus.engine.pipeline.run_topic_pipeline", new_callable=AsyncMock) as mock_topic:
+
+        from nexus.engine.synthesis.knowledge import TopicSynthesis, NarrativeThread
+
+        mock_registry.return_value = [{"url": "https://feed.com/rss", "id": "test"}]
+
+        # First topic fails, second succeeds
+        mock_topic.side_effect = [
+            RuntimeError("boom"),
+            type("R", (), {
+                "synthesis": TopicSynthesis(
+                    topic_name="Topic B",
+                    threads=[NarrativeThread(headline="Stub", significance=5)],
+                ),
+                "articles": [],
+                "extracted_event_count": 3,
+            })(),
+        ]
+
+        total = await run_backfill(config, mock_llm, data_dir)
+
+        assert total == 3
+        assert mock_topic.call_count == 2

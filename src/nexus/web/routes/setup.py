@@ -318,7 +318,7 @@ def _auto_launch_pipeline(request: Request, data_dir: Path):
         try:
             from nexus.config.loader import load_config
             from nexus.llm.client import LLMClient
-            from nexus.engine.pipeline import run_pipeline
+            from nexus.engine.pipeline import run_pipeline, run_backfill
 
             status = request.app.state.pipeline_status
 
@@ -411,6 +411,23 @@ def _auto_launch_pipeline(request: Request, data_dir: Path):
             elif config.telegram.enabled and not config.telegram.chat_id:
                 status["telegram_delivered"] = False
                 status["telegram_error"] = "No chat_id — send /start to your bot"
+
+            # Phase 2: Backfill historical events (7 days) in the background.
+            # The user already has their quick briefing — now silently enrich
+            # the knowledge store so subsequent runs have richer context.
+            status["stage"] = "backfill"
+            try:
+                backfill_count = await run_backfill(
+                    config, llm, data_dir,
+                    max_age_hours=168,  # 7 days
+                    progress_status=status,
+                )
+                status["backfill_events"] = backfill_count
+                logger.info(f"Post-setup backfill added {backfill_count} historical events")
+            except Exception as bf_err:
+                logger.warning(f"Post-setup backfill failed (non-blocking): {bf_err}")
+            finally:
+                status["stage"] = "complete"
         except Exception as e:
             logger.error(f"Background pipeline failed: {e}", exc_info=True)
             request.app.state.pipeline_status = {

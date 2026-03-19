@@ -155,6 +155,15 @@ def run_engine():
         ))
         print(f"Briefing generated: {briefing_path}")
 
+        # After quick mode: backfill 7 days of historical events
+        if do_quick and "--no-backfill" not in sys.argv:
+            from nexus.engine.pipeline import run_backfill
+            print("Backfilling historical events (7 days)...")
+            new_events = asyncio.run(run_backfill(
+                config, llm, data_dir, max_age_hours=168,
+            ))
+            print(f"Backfill complete: {new_events} historical events added")
+
 
 def run_sources():
     """Source registry management: check, build."""
