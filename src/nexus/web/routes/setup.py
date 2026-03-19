@@ -16,7 +16,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse, HTMLResponse
 
 from nexus.cli.setup import PROVIDER_INFO, PROVIDER_TIERS, TOPIC_CHOICES
-from nexus.config.writer import write_config, write_env
+from nexus.config.writer import build_initial_config, write_config, write_env
 from nexus.utils.runtime_env import load_runtime_env, runtime_env_path
 from nexus.web.app import get_templates
 
@@ -259,23 +259,11 @@ async def setup_complete(request: Request):
     # Determine audio config
     audio_config = {"enabled": not is_free}
 
-    config_dict = {
-        "preset": preset,
-        "user": {
-            "name": "User",
-            "timezone": "UTC",
-            "output_language": "en",
-        },
-        "topics": session.get("topics", [{"name": "AI/ML Research", "priority": "high"}]),
-        "briefing": {
-            "schedule": "06:00",
-            "style": "analytical",
-        },
-        "audio": audio_config,
-        "breaking_news": {"enabled": True, "threshold": 7},
-        "telegram": {"enabled": False},
-        "sources": {"discover_new_sources": True},
-    }
+    config_dict = build_initial_config(
+        preset=preset,
+        topics=session.get("topics", [{"name": "AI/ML Research", "priority": "high"}]),
+    )
+    config_dict["audio"] = audio_config
 
     write_config(data_dir, config_dict)
 

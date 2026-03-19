@@ -9,7 +9,7 @@ pytestmark = [pytest.mark.e2e]
 _NAV_ROUTES = [
     ("/", "Briefing"),
     ("/threads/", "Threads"),
-    ("/predictions", "Predictions"),
+    ("/forward-look", "Forward Look"),
     ("/explore/", "Explore"),
     ("/sources/", "Sources"),
     ("/cost", "Cost"),
@@ -46,6 +46,13 @@ def test_mobile_hamburger_menu(page, demo_server):
     # Click again to close
     hamburger.click()
     expect(nav_primary).not_to_be_visible()
+
+
+def test_benchmark_hidden_from_primary_nav(page, demo_server):
+    """Benchmark should stay reachable directly but absent from normal nav."""
+    page.goto(f"{demo_server}/forward-look")
+    expect(page.locator(".nav-primary")).to_contain_text("Forward Look")
+    expect(page.locator(".site-nav")).not_to_contain_text("Benchmark")
 
 
 def test_threads_page_renders(page, demo_server):

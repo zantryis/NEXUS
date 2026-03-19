@@ -6,6 +6,38 @@ from pathlib import Path
 
 import yaml
 
+DEFAULT_BOOTSTRAP_TOPIC = {"name": "AI/ML Research", "priority": "high"}
+DEFAULT_BOOTSTRAP_BRIEFING = {"schedule": "06:00", "style": "analytical"}
+DEFAULT_BOOTSTRAP_BREAKING_NEWS = {"enabled": True, "threshold": 7}
+DEFAULT_BOOTSTRAP_TELEGRAM = {"enabled": True}
+DEFAULT_BOOTSTRAP_SOURCES = {"discover_new_sources": True}
+
+
+def build_initial_config(
+    *,
+    preset: str,
+    topics: list[dict] | None = None,
+    user_name: str = "User",
+    timezone: str = "UTC",
+    output_language: str = "en",
+) -> dict:
+    """Build the canonical first-run config used by setup flows."""
+    selected_topics = [dict(topic) for topic in (topics or [DEFAULT_BOOTSTRAP_TOPIC])]
+    return {
+        "preset": preset,
+        "user": {
+            "name": user_name,
+            "timezone": timezone,
+            "output_language": output_language,
+        },
+        "topics": selected_topics,
+        "briefing": dict(DEFAULT_BOOTSTRAP_BRIEFING),
+        "audio": {"enabled": preset != "free"},
+        "breaking_news": dict(DEFAULT_BOOTSTRAP_BREAKING_NEWS),
+        "telegram": dict(DEFAULT_BOOTSTRAP_TELEGRAM),
+        "sources": dict(DEFAULT_BOOTSTRAP_SOURCES),
+    }
+
 
 def write_config(data_dir: Path, config_dict: dict) -> Path:
     """Write config.yaml from a dict. Creates data_dir if needed. Returns path."""

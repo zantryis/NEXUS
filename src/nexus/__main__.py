@@ -937,7 +937,7 @@ def run_projection():
 
 
 def run_forecast():
-    """Quantified forecast utilities: generate, replay, resolve, benchmark, backfill, readiness."""
+    """Forward Look utilities: generate, resolve, and optional Kalshi tooling."""
     load_dotenv()
     import shutil
     import sqlite3
@@ -1105,7 +1105,7 @@ def run_forecast():
 
             if subcommand in {"kalshi-sync", "kalshi-bootstrap", "kalshi-auth-check"}:
                 store = None
-            elif subcommand in {"benchmark", "replay", "audit-leakage", "export-graph", "readiness", "kalshi-compare", "kalshi-benchmark"}:
+            elif subcommand in {"audit-leakage", "export-graph", "kalshi-compare", "kalshi-benchmark"}:
                 temp_dir = Path(tempfile.mkdtemp(prefix="nexus-forecast-benchmark-"))
                 snapshot_path = temp_dir / "knowledge.db"
                 _snapshot_sqlite_db(db_path, snapshot_path)
@@ -1120,7 +1120,7 @@ def run_forecast():
                 if config is None:
                     raise SystemExit(
                         "Usage: python -m nexus forecast generate [--date YYYY-MM-DD] "
-                        "[--engine actor|native] [--min-thread-snapshots N] [--topic topic-slug]"
+                        "[--engine actor] [--min-thread-snapshots N] [--topic topic-slug]"
                     )
                 llm = _optional_llm(config, engine or "actor")
                 result = await generate_forecasts_from_store(
@@ -1724,7 +1724,17 @@ def run_forecast():
                 return
 
             raise SystemExit(
-                "Usage: python -m nexus forecast <generate|replay|resolve|benchmark|audit-leakage|audit-predictions|backfill|backfill-keys|backfill-syntheses|export-graph|readiness|kalshi-bootstrap|kalshi-auth-check|kalshi-sync|kalshi-compare|kalshi-scan|kalshi-loop|kalshi-benchmark|hindcast> [args...]"
+                "Usage: python -m nexus forecast <generate|resolve|kalshi-loop> [args...]\n"
+                "\n"
+                "Primary release-facing commands:\n"
+                "  generate       Generate actor-based Forward Look forecasts\n"
+                "  resolve        Resolve Kalshi-linked forecasts against settled markets\n"
+                "  kalshi-loop    Optional Kalshi-aligned forward-look run\n"
+                "\n"
+                "Advanced/internal commands:\n"
+                "  kalshi-bootstrap | kalshi-auth-check | kalshi-sync | kalshi-scan | kalshi-compare\n"
+                "  kalshi-benchmark | hindcast | calibrate | audit-leakage | export-graph\n"
+                "  backfill | backfill-keys | backfill-syntheses"
             )
         finally:
             if store is not None:
@@ -1924,9 +1934,7 @@ def main():
               "  sources    Manage feeds (check | list | build | discover)\n"
               "  evaluate   Judge synthesis quality\n"
               "  projection Projection generate/backfill/evaluation/compare utilities\n"
-              "  forecast   Quantified forecast generate/replay/resolve/benchmark utilities\n"
-              "  benchmark  Fast benchmark: Suite A on saved fixtures (~3-5 min)\n"
-              "  experiment Controlled experiment suites for README claims\n"
+              "  forecast   Forward Look generation/resolution with optional Kalshi tools\n"
               "  test       Run E2E smoke test with real APIs\n"
               "  audit-sources  Score each feed's relevance to a topic\n"
               "  enrich-entities  Backfill Wikipedia thumbnails + URLs for entities\n"

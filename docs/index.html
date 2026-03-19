@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Nexus — Agentic News Intelligence Compiler</title>
-    <meta name="description" content="Self-hosted, model-agnostic intelligence pipeline. Tracks convergence, detects editorial divergence, and runs 6 competing forecast engines against real prediction markets.">
+    <meta name="description" content="Self-hosted, model-agnostic news intelligence. Tracks convergence, detects editorial divergence, and ships actor-based Forward Look with optional Kalshi comparison.">
     <meta property="og:title" content="Nexus — Agentic News Intelligence Compiler">
-    <meta property="og:description" content="Self-hosted intelligence pipeline with convergence/divergence detection and calibrated forecasting.">
+    <meta property="og:description" content="Self-hosted intelligence system with convergence/divergence detection, daily briefings, and actor-based Forward Look.">
     <meta property="og:type" content="website">
     <!-- og:image requires absolute URL; set when public deployment URL is known -->
     <!-- <meta property="og:image" content="https://tyan3001.github.io/NEXUS/logo-dark.svg"> -->
@@ -755,7 +755,7 @@ strong { color: var(--nx-text-heading); }
     <header class="site-hdr">
         <a href="index.html" class="brand"><svg width="16" height="16" viewBox="0 0 64 64" style="vertical-align:-2px"><path d="M32 6 L35 16 L32 26 L29 16Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 16)"/><path d="M38 32 L48 29 L58 32 L48 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 48 32)"/><path d="M32 38 L35 48 L32 58 L29 48Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 48)"/><path d="M6 32 L16 29 L26 32 L16 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 16 32)"/><path d="M32 27 L37 32 L32 37 L27 32Z" fill="#06b6d4" opacity=".7"/></svg> Nexus</a>
         <div class="site-hdr-right">
-            <a href="pipeline.html">Pipeline</a>
+            <a href="pipeline.html">System Map</a>
             <button class="theme-btn" onclick="toggleTheme()" aria-label="Toggle theme">
                 <span class="theme-dark">&#9789;</span>
                 <span class="theme-light">&#9728;</span>
@@ -778,12 +778,13 @@ strong { color: var(--nx-text-heading); }
                 Nexus ingests hundreds of sources across languages, extracts structured events,
                 and builds a persistent knowledge graph. It tracks <strong>convergence</strong> when
                 independent sources confirm the same fact, and detects <strong>divergence</strong> when
-                the same event gets different editorial framing across outlets. Six competing
-                forecast engines generate calibrated predictions benchmarked against real
-                prediction markets.
+                the same event gets different editorial framing across outlets. Then it turns
+                that context into briefings, persistent threads, and actor-based
+                <strong>Forward Look</strong> forecasts. If you connect Kalshi, you also get optional
+                market comparison and anchored odds.
             </p>
             <div class="hero-actions">
-                <a href="pipeline.html" class="btn btn-primary">Explore the Pipeline &rarr;</a>
+                <a href="pipeline.html" class="btn btn-primary">Explore the System Map &rarr;</a>
                 <a href="#quickstart" class="btn btn-ghost">Quick Start</a>
             </div>
         </div>
@@ -817,8 +818,8 @@ strong { color: var(--nx-text-heading); }
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke-linecap="round"/></svg>
                     </div>
-                    <h3>Prediction</h3>
-                    <p>Six engines with distinct philosophies (actor-based reasoning, graph traversal, structured debate) compete independently. Calibrated against Kalshi markets using Brier scoring.</p>
+                    <h3>Forward Look</h3>
+                    <p>The public forecast surface is actor-led: topic claims, thread developments, and optional Kalshi comparisons when market data is available. The bigger forecast lab still exists, but it does not lead the release story.</p>
                 </div>
             </div>
         </section>
@@ -826,7 +827,7 @@ strong { color: var(--nx-text-heading); }
         <!-- ═══ PIPELINE PREVIEW ═══ -->
         <section class="sect" data-anim>
             <div class="sect-title">The Pipeline</div>
-            <p class="sect-sub">20 stages across 5 zones. From raw RSS to calibrated predictions.</p>
+            <p class="sect-sub">20 stages across 5 zones. From raw RSS to briefings, threads, and Forward Look.</p>
             <div class="pipe-flow">
                 <div class="pipe-zone pz-intake anim-child">
                     <div class="pipe-zone-name">Intake</div>
@@ -853,14 +854,14 @@ strong { color: var(--nx-text-heading); }
                     <div class="pipe-fork-branch">
                         <div class="pipe-fork-line"></div>
                         <div class="pipe-zone pz-predict">
-                            <div class="pipe-zone-name">Prediction</div>
+                            <div class="pipe-zone-name">Forward Look</div>
                             <div class="pipe-zone-count">8 stages</div>
                         </div>
                     </div>
                 </div>
             </div>
             <div class="pipe-cta">
-                <a href="pipeline.html" class="btn btn-ghost">Explore Full Pipeline &rarr;</a>
+                <a href="pipeline.html" class="btn btn-ghost">Explore Full System Map &rarr;</a>
             </div>
         </section>
 
@@ -872,8 +873,8 @@ strong { color: var(--nx-text-heading); }
                     <div class="stat-label">Pipeline Stages</div>
                 </div>
                 <div class="stat anim-child">
-                    <div class="stat-num" data-count="6">0</div>
-                    <div class="stat-label">Forecast Engines</div>
+                    <div class="stat-num" data-count="1">0</div>
+                    <div class="stat-label">Public Forecast Engine</div>
                 </div>
                 <div class="stat anim-child">
                     <div class="stat-num" data-count="7">0</div>
@@ -893,7 +894,7 @@ strong { color: var(--nx-text-heading); }
         <!-- ═══ QUICK START ═══ -->
         <section class="sect" id="quickstart" data-anim>
             <div class="sect-title">Quick Start</div>
-            <p class="sect-sub">From zero to running pipeline in three steps.</p>
+            <p class="sect-sub">From zero to your first briefing in three steps.</p>
             <div class="qs-steps">
 
                 <div class="qs-step anim-child">
@@ -901,28 +902,25 @@ strong { color: var(--nx-text-heading); }
                     <div class="qs-body">
                         <h3>Clone &amp; install</h3>
                         <div class="qs-code"><span class="cmd">git clone https://github.com/Tyan3001/NEXUS.git</span>
-<span class="cmd">cd NEXUS &amp;&amp; pip install -e .</span></div>
+<span class="cmd">cd NEXUS &amp;&amp; pip install -e &quot;.[all]&quot;</span></div>
                     </div>
                 </div>
 
                 <div class="qs-step anim-child">
                     <div class="qs-num">2</div>
                     <div class="qs-body">
-                        <h3>Launch the dashboard</h3>
-                        <div class="qs-code"><span class="cmd">python -m nexus serve</span></div>
-                        <p style="margin-top:10px"><span class="qs-badge">recommended</span> The web setup wizard walks you through provider selection, API keys, topics, and Telegram &mdash; no YAML editing required.</p>
+                        <h3>Start Nexus</h3>
+                        <div class="qs-code"><span class="cmd">python -m nexus run</span></div>
+                        <p style="margin-top:10px"><span class="qs-badge">recommended</span> This starts the local dashboard and the first-run flow in one shot.</p>
                     </div>
                 </div>
 
                 <div class="qs-step anim-child">
                     <div class="qs-num">3</div>
                     <div class="qs-body">
-                        <h3>Run the pipeline</h3>
-                        <div class="qs-code"><span class="cmt"># everything (dashboard + scheduler + telegram)</span>
-<span class="cmd">python -m nexus run</span>
-
-<span class="cmt"># or just the intelligence pipeline</span>
-<span class="cmd">python -m nexus engine</span></div>
+                        <h3>Finish setup in the browser</h3>
+                        <div class="qs-code"><span class="cmd">open http://localhost:8080</span></div>
+                        <p style="margin-top:10px">Pick a model preset, choose topics, save your keys, and let the wizard kick off the first pipeline run. Forward Look shows up once Nexus has enough history to say something non-trivial.</p>
                     </div>
                 </div>
 
@@ -972,7 +970,7 @@ strong { color: var(--nx-text-heading); }
         </section>
 
         <footer class="site-footer">
-            <p><svg width="14" height="14" viewBox="0 0 64 64" style="vertical-align:-1px"><path d="M32 6 L35 16 L32 26 L29 16Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 16)"/><path d="M38 32 L48 29 L58 32 L48 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 48 32)"/><path d="M32 38 L35 48 L32 58 L29 48Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 48)"/><path d="M6 32 L16 29 L26 32 L16 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 16 32)"/><path d="M32 27 L37 32 L32 37 L27 32Z" fill="#06b6d4" opacity=".7"/></svg> Nexus &mdash; <a href="pipeline.html">Pipeline Architecture</a></p>
+            <p><svg width="14" height="14" viewBox="0 0 64 64" style="vertical-align:-1px"><path d="M32 6 L35 16 L32 26 L29 16Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 16)"/><path d="M38 32 L48 29 L58 32 L48 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 48 32)"/><path d="M32 38 L35 48 L32 58 L29 48Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 48)"/><path d="M6 32 L16 29 L26 32 L16 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 16 32)"/><path d="M32 27 L37 32 L32 37 L27 32Z" fill="#06b6d4" opacity=".7"/></svg> Nexus &mdash; <a href="pipeline.html">System Map</a></p>
         </footer>
     </div>
 

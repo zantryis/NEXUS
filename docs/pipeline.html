@@ -3,10 +3,10 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Pipeline Architecture — Nexus</title>
-    <meta name="description" content="Interactive visualization of the Nexus intelligence pipeline: 20 stages, 6 forecast engines, convergence and divergence detection.">
-    <meta property="og:title" content="Nexus Pipeline Architecture">
-    <meta property="og:description" content="20-stage intelligence pipeline with convergence/divergence detection and 6 competing forecast engines.">
+    <title>System Map — Nexus</title>
+    <meta name="description" content="Interactive system map of the Nexus intelligence pipeline: 20 stages, convergences and divergence analysis, actor-based Forward Look, and optional Kalshi comparison.">
+    <meta property="og:title" content="Nexus System Map">
+    <meta property="og:description" content="20-stage intelligence system with convergence/divergence detection, actor-based Forward Look, and a clearly marked forecast lab.">
     <meta property="og:type" content="website">
     <!-- og:image requires absolute URL; set when public deployment URL is known -->
     <!-- <meta property="og:image" content="https://tyan3001.github.io/NEXUS/logo-dark.svg"> -->
@@ -669,7 +669,7 @@ strong { color: var(--nx-text-heading); }
                 <div class="fg-hud-stats">
                     <span><strong>20</strong> stages</span>
                     <span><strong>7</strong> config keys</span>
-                    <span><strong>6</strong> forecast engines</span>
+                    <span><strong>1</strong> public forecast engine</span>
                 </div>
                 <span class="fg-hud-hint">click any stage</span>
             </div>
@@ -806,9 +806,9 @@ strong { color: var(--nx-text-heading); }
                     </div>
                 </div>
 
-                <!-- Prediction -->
+                <!-- Forward Look -->
                 <div class="fg-branch fg-z-predict">
-                    <div class="fg-zone-hdr z-predict" style="width:100%"><span>Prediction</span></div>
+                    <div class="fg-zone-hdr z-predict" style="width:100%"><span>Forward Look</span></div>
                     <div class="fg-node" id="n11" onclick="FG.show('11')">
                         <span class="fg-tier fg-tier-x">&times;</span>
                         <div class="fg-node-num">11</div>
@@ -835,31 +835,31 @@ strong { color: var(--nx-text-heading); }
                     </div>
                     <div class="fg-node" id="n15" onclick="FG.show('15')" style="width:200px">
                         <div class="fg-node-num">15</div>
-                        <div class="fg-node-name" style="margin-bottom:6px">Multi-Engine Forecast</div>
+                        <div class="fg-node-name" style="margin-bottom:6px">Forward Look + Forecast Lab</div>
                         <div class="fg-engines">
                             <div class="fg-engine" data-eid="15a" onclick="event.stopPropagation();FG.show('15a')">
                                 <div class="fg-engine-name">Actor</div>
-                                <div class="fg-engine-sub">3-6 &bull; default</div>
+                                <div class="fg-engine-sub">3-6 &bull; public</div>
                             </div>
                             <div class="fg-engine" data-eid="15b" onclick="event.stopPropagation();FG.show('15b')">
                                 <div class="fg-engine-name">GraphRAG</div>
-                                <div class="fg-engine-sub">2 calls</div>
+                                <div class="fg-engine-sub">2 calls &bull; lab</div>
                             </div>
                             <div class="fg-engine" data-eid="15c" onclick="event.stopPropagation();FG.show('15c')">
                                 <div class="fg-engine-name">Structural</div>
-                                <div class="fg-engine-sub">3 calls</div>
+                                <div class="fg-engine-sub">3 calls &bull; internal</div>
                             </div>
                             <div class="fg-engine" data-eid="15d" onclick="event.stopPropagation();FG.show('15d')">
                                 <div class="fg-engine-name">Perspective</div>
-                                <div class="fg-engine-sub">4-6 calls</div>
+                                <div class="fg-engine-sub">4-6 calls &bull; lab</div>
                             </div>
                             <div class="fg-engine" data-eid="15e" onclick="event.stopPropagation();FG.show('15e')">
                                 <div class="fg-engine-name">Debate</div>
-                                <div class="fg-engine-sub">11 calls</div>
+                                <div class="fg-engine-sub">11 calls &bull; lab</div>
                             </div>
                             <div class="fg-engine" data-eid="15f" onclick="event.stopPropagation();FG.show('15f')">
                                 <div class="fg-engine-name">Naked</div>
-                                <div class="fg-engine-sub">1 &bull; baseline</div>
+                                <div class="fg-engine-sub">1 &bull; lab baseline</div>
                             </div>
                         </div>
                     </div>
@@ -872,14 +872,14 @@ strong { color: var(--nx-text-heading); }
                     <div class="fg-node" id="n17" onclick="FG.show('17')">
                         <span class="fg-tier fg-tier-f">F</span>
                         <div class="fg-node-num">17</div>
-                        <div class="fg-node-name">Kalshi Integration</div>
-                        <div class="fg-node-stat">flipped match &bull; Brier</div>
+                        <div class="fg-node-name">Optional Kalshi Match</div>
+                        <div class="fg-node-stat">compare &bull; anchor</div>
                     </div>
                     <div class="fg-node" id="n18" onclick="FG.show('18')">
                         <span class="fg-tier fg-tier-f">F</span>
                         <div class="fg-node-num">18</div>
-                        <div class="fg-node-name">Eval + Hindcast</div>
-                        <div class="fg-node-stat">LLM judge &bull; backtest</div>
+                        <div class="fg-node-name">Forecast Lab</div>
+                        <div class="fg-node-stat">benchmark &bull; hindcast</div>
                     </div>
                 </div>
             </div>
@@ -982,7 +982,7 @@ var D = {
         '<strong>Convergence</strong> means 2+ independent sources confirm the same fact. Independent means different affiliation or country, not just a different outlet name. This is the trust signal.',
         '<strong>Divergence</strong> is the opposite: same event, different editorial framing. Four flavors: tone contrast, focus divergence, actor framing, omission. This is what makes Nexus different from a news aggregator.',
         'Narrow topics get granular thread prompting. Broad topics get subfield-specific prompts so "AI agents" doesn\u2019t merge with "protein folding."',
-        'TopicSynthesis is the single object everything downstream renders from. Briefing, audio, predictions, dashboard. Change the renderer without re-running the pipeline.'
+        'TopicSynthesis is the single object everything downstream renders from. Briefing, audio, Forward Look, dashboard. Change the renderer without re-running the pipeline.'
     ]
 },
 '08': {
@@ -991,7 +991,7 @@ var D = {
     io:['NarrativeThreads from synthesis','Persisted threads: emerging \u2192 active \u2192 stale \u2192 resolved'],
     decs:[
         'New threads get matched to existing ones using entity overlap (Jaccard similarity). High overlap auto-matches. Low overlap starts a new thread. The ambiguous middle range gets LLM confirmation.',
-        'Threads have a lifecycle: emerging (new), active (events on 2+ distinct days), stale (14+ days with no new events), resolved. This is what feeds trajectory analysis in the prediction pipeline.'
+        'Threads have a lifecycle: emerging (new), active (events on 2+ distinct days), stale (14+ days with no new events), resolved. This is what feeds trajectory analysis in the Forward Look path.'
     ]
 },
 'hub': {
@@ -999,7 +999,7 @@ var D = {
     badges:['param:Central Object'],
     io:['All upstream intelligence','threads, background, source_balance, cross-topic signals, projection'],
     decs:[
-        'One object holds all the intelligence for a topic. Briefings, podcasts, predictions, the dashboard: they all render from this single representation.',
+        'One object holds all the intelligence for a topic. Briefings, podcasts, Forward Look, the dashboard: they all render from this single representation.',
         'This decoupling is intentional. You can swap renderers, A/B test output formats, or add new delivery channels without touching the extraction pipeline.',
         'Inside: NarrativeThreads (with convergence and divergence), compressed background context, source balance metrics, cross-topic signals, and an optional projection.'
     ]
@@ -1027,7 +1027,7 @@ var D = {
 '19': {
     t:'Telegram Bot', n:'19',
     badges:['none:No LLM (delivery)','param:long-polling','param:breaking every 3h'],
-    io:['Artifacts: briefings, audio, predictions','Telegram messages with inline keyboard'],
+    io:['Artifacts: briefings, audio, Forward Look','Telegram messages with inline keyboard'],
     decs:[
         'Telegram because users actually check it. Push delivery beats hoping someone visits a dashboard.',
         'Commands: /start (authenticate), /briefing (today\u2019s content + audio), /status (topic stats).',
@@ -1050,9 +1050,9 @@ var D = {
     badges:['none:No LLM','param:\u22657 days history','param:\u22652 snapshots'],
     io:['Topic synthesis, store history','Eligible/ineligible decision'],
     decs:[
-        'A topic needs at least 7 days of event history before predictions are allowed. You need temporal patterns, not a single snapshot.',
+        'A topic needs at least 7 days of event history before Forward Look is allowed. You need temporal patterns, not a single snapshot.',
         'At least 2 thread snapshots required. One data point isn\u2019t a trajectory.',
-        'This gate exists to prevent the system from hallucinating predictions on topics it barely knows anything about.'
+        'This gate exists to prevent the system from hallucinating forecasts on topics it barely knows anything about.'
     ]
 },
 '12': {
@@ -1062,7 +1062,7 @@ var D = {
     decs:[
         'Each thread gets daily metrics: how fast it\u2019s growing (velocity), whether it\u2019s speeding up or slowing down (acceleration), and whether events are getting more significant (significance trend). Combined into a single momentum score.',
         'Four trajectory labels, all deterministic: <strong>about_to_break</strong> (\u22653 events, significance \u22657, velocity \u22652.0), <strong>accelerating</strong>, <strong>decelerating</strong>, <strong>steady</strong>.',
-        'Threads labeled "about to break" get shorter prediction horizons (3 days instead of 7). The trajectory classification directly feeds evidence assembly and question generation.'
+        'Threads labeled "about to break" get shorter forecast horizons (3 days instead of 7). The trajectory classification directly feeds evidence assembly and question generation.'
     ]
 },
 '13': {
@@ -1087,20 +1087,20 @@ var D = {
     params:[['MAX_THREADS','5'],['MAX_EVENTS','15'],['MAX_CONVERGENCE','10'],['MAX_DIVERGENCE','5'],['MAX_CAUSAL','10'],['MAX_RELS','15']]
 },
 '15': {
-    t:'Multi-Engine Forecasting', n:'15',
-    badges:['fast:Fast Model','key:config: knowledge_summary','param:6 engines','param:protocol-based'],
+    t:'Forward Look + Forecast Lab', n:'15',
+    badges:['fast:Fast Model','key:config: knowledge_summary','param:actor public','param:lab engines'],
     io:['ForecastEngineInput or EvidencePackage','ForecastRun: questions with probability, reasoning, signposts'],
     decs:[
-        'Six engines compete independently. They don\u2019t vote or average. Benchmarking reveals which approach actually works best.',
-        'Any object that satisfies the <strong>ForecastEngine</strong> protocol can plug in. No inheritance, no base class. Just implement the method.',
-        'The active engine is selected via config (default: actor). Click any engine in the grid for its design details.'
+        'The public release path is intentionally narrow: actor is the default and only engine exposed in the normal product flow.',
+        'The rest of the engine grid is the forecast lab. It stays in-repo for calibration, comparison, and research, but it is not the front door.',
+        'Any object that satisfies the <strong>ForecastEngine</strong> protocol can plug in. No inheritance, no base class. Just implement the method.'
     ]
 },
 '15a': {
     t:'Actor Engine', n:'15a',
     badges:['fast:Fast Model','param:3-6 LLM calls','param:DEFAULT'],
     decs:[
-        'Predictions are about what actors do. This engine reasons about each relevant actor independently, then synthesizes.',
+        'Forward Look is about what actors do. This engine reasons about each relevant actor independently, then synthesizes.',
         '<strong>Step 1: Identify actors</strong> (0 LLM). Text matching against the entity store. Canonical name match scores +2, alias +1. Top 5 kept.',
         '<strong>Step 2: Build context</strong> (0 LLM). For each actor: 30 days of events, relationships, timeline changes, cross-topic presence.',
         '<strong>Step 3: Per-actor reasoning</strong> (1 LLM per actor). Produces a direction (increases/decreases/neutral), magnitude, and probability shift capped at \u00b10.3.',
@@ -1112,7 +1112,7 @@ var D = {
     t:'GraphRAG Engine', n:'15b',
     badges:['fast:Fast Model','param:2 LLM calls'],
     decs:[
-        'Some predictions depend on indirect connections the actor engine misses. This one walks the knowledge graph to find them.',
+        'This lab engine goes after indirect connections the actor engine may miss by walking the knowledge graph.',
         '<strong>Step 1:</strong> Extract entities from the question (1 LLM call). Semantic extraction, not text matching, so it catches implied entities too.',
         '<strong>Step 2:</strong> Walk 2 hops out from each entity in the graph (0 LLM). Up to 30 entities, scored by recency \u00d7 significance.',
         '<strong>Step 3:</strong> Reason over the full graph neighborhood (1 LLM call). Sees the entity map, relationships, causal chains. Prompted to consider absence of evidence too.'
@@ -1122,7 +1122,7 @@ var D = {
     t:'Structural Engine', n:'15c',
     badges:['fast:Fast Model','param:3 LLM calls (fixed)'],
     decs:[
-        'Based on academic forecasting research (AIA Forecaster, Halawi et al., ForecastBench). Three fixed calls with distinct roles.',
+        'Internal alternate path based on academic forecasting research (AIA Forecaster, Halawi et al., ForecastBench). Three fixed calls with distinct roles.',
         '<strong>Call 1: Base-rate analyst.</strong> Identifies the reference class, lists pros and cons with strength ratings, gives a verdict.',
         '<strong>Call 2: Contrarian analyst.</strong> Challenges the obvious answer. Looks for wildcards and blind spots in the base-rate reasoning.',
         '<strong>Call 3: Supervisor.</strong> Sees both, resolves disagreements, produces final factors and uncertainties.',
@@ -1163,31 +1163,31 @@ var D = {
     io:['Raw probability from engine','Calibrated probability [0.05, 0.95]'],
     decs:[
         'LLMs are overconfident forecasters. <strong>Extremization</strong> (\u03b3=0.8) compresses probabilities toward 0.5 to correct for this. Based on Satop\u00e4\u00e4 et al. (IJF 2014).',
-        'The model doesn\u2019t replace the market price. <strong>Anchor blending</strong> lets it nudge the market by 40-45% of the gap between its estimate and the anchor. Markets are well-calibrated; the LLM provides edge, not replacement.',
-        'When combining multiple engines, we use <strong>geometric mean of odds</strong>. Provably optimal aggregation under logarithmic scoring (Neyman & Roughgarden).',
+        'When Kalshi data exists, <strong>anchor blending</strong> lets the actor path nudge the market by 40-45% of the gap between its estimate and the anchor. Markets are well-calibrated; the model provides edge, not replacement.',
+        'Lab engines can be tuned separately, but the public release path keeps calibration simple and actor-led.',
         '<strong>Auto-calibration</strong> grid-searches \u03b3 and anchor weight to minimize Brier score. Needs \u226520 resolved forecasts. Kicks in automatically when it finds a meaningful improvement.'
     ],
     formulas:['p_ext = p\u1d5e / (p\u1d5e + (1-p)\u1d5e)  \u03b3=0.8','blended = anchor + w \u00d7 (engine \u2212 anchor)  w=0.4']
 },
 '17': {
-    t:'Kalshi Integration', n:'17',
+    t:'Optional Kalshi Match', n:'17',
     badges:['fast:Fast Model','key:config: knowledge_summary','param:flipped matching'],
-    io:['Kalshi API markets, engine outputs','Market-matched forecasts, Brier scores'],
+    io:['Kalshi API markets, actor outputs','Optional market comparisons, anchored probabilities'],
     decs:[
-        'We don\u2019t map our questions to Kalshi. We scan their markets, find ones that overlap with our entities, and generate our own probability for their exact question. Same question, different probability. Directly comparable.',
-        'The benchmark harness runs settled markets through our engines at multiple cutoff points (7, 14, 30 days before settlement). Five concurrent evaluations at a time.',
-        'A <strong>MarketBaselineEngine</strong> always returns the market\u2019s own implied probability. That\u2019s the anchor we\u2019re trying to beat.',
-        '<strong>Brier score</strong> = (probability \u2212 outcome)\u00b2. Lower is better. We compare ours against the market\u2019s to see if we\u2019re adding value.'
+        'Kalshi is optional. Without credentials or matching markets, Nexus still produces freeform Forward Look outputs just fine.',
+        'When a market overlaps with our entities, we generate our own probability for the exact Kalshi question. Same question, different probability. Directly comparable.',
+        'A <strong>MarketBaselineEngine</strong> always returns the market\u2019s own implied probability. That becomes the anchor rather than a hard requirement.',
+        'The deeper benchmark harness stays in the forecast lab, not the default user journey.'
     ]
 },
 '18': {
-    t:'Evaluation + Hindcast', n:'18',
+    t:'Forecast Lab', n:'18',
     badges:['fast:Fast Model','key:config: filtering','param:keyword fallback'],
-    io:['Pending forecasts, subsequent events','Resolution (hit/miss/mixed), Brier scores'],
+    io:['Pending forecasts, saved fixtures, settled markets','Benchmark, hindcast, and lab reports'],
     decs:[
-        'An LLM judge evaluates each prediction against subsequent events. Verdicts per event: confirms (1.0), partially (0.5), contradicts (0.0), irrelevant (skipped). Average \u22650.6 is a hit, \u22650.3 is mixed, below that is a miss.',
-        'If the LLM judge fails, a deterministic keyword fallback scores overlap between prediction claims and event summaries.',
-        '<strong>Hindcasting</strong> picks significant past events, generates retrospective questions, then runs engines with a strict date cutoff so they can\u2019t see the answer. Tests both positive cases (event happened) and negative cases (nothing happened). Without negatives, any engine that always says "yes" would score well.'
+        'The lab path is where benchmark, hindcast, and experiment work lives. Useful for calibration and research, not required for the default release experience.',
+        'An LLM judge can evaluate forecasts against subsequent events. If that fails, a deterministic keyword fallback scores overlap between claims and event summaries.',
+        '<strong>Hindcasting</strong> picks significant past events, generates retrospective questions, then runs engines with a strict date cutoff so they can\u2019t see the answer. Good lab hygiene, but deliberately kept out of the onboarding story.'
     ]
 }
 };

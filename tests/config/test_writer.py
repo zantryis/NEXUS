@@ -1,9 +1,13 @@
 """Tests for config writer module."""
 
 import stat
+from pathlib import Path
 
-from nexus.config.writer import write_config, write_env
+import yaml
+
 from nexus.config.loader import load_config
+from nexus.config.models import TopicConfig
+from nexus.config.writer import build_initial_config, write_config, write_env
 
 
 def test_write_config_yaml(tmp_path):
@@ -89,3 +93,39 @@ def test_write_config_restricts_permissions(tmp_path):
     path = write_config(tmp_path / "data", {"topics": [{"name": "Test Topic"}]})
     mode = stat.S_IMODE(path.stat().st_mode)
     assert mode == 0o600
+
+
+def test_build_initial_config_matches_release_defaults():
+    """Canonical bootstrap config should match the release-facing first-run story."""
+    config = build_initial_config(
+        preset="balanced",
+        topics=[{"name": "AI/ML Research", "priority": "high"}],
+        user_name="TestUser",
+        timezone="America/Denver",
+    )
+
+    assert config["preset"] == "balanced"
+    assert config["user"]["name"] == "TestUser"
+    assert config["user"]["timezone"] == "America/Denver"
+    assert config["briefing"] == {"schedule": "06:00", "style": "analytical"}
+    assert config["breaking_news"] == {"enabled": True, "threshold": 7}
+    assert config["telegram"] == {"enabled": True}
+    assert config["sources"] == {"discover_new_sources": True}
+    assert config["audio"] == {"enabled": True}
+
+
+def test_config_example_matches_bootstrap_defaults():
+    """config.example.yaml should reflect the defaults used by setup flows."""
+    bootstrap = build_initial_config(preset="balanced")
+    config_example = yaml.safe_load(
+        (Path(__file__).resolve().parents[2] / "data" / "config.example.yaml").read_text()
+    )
+
+    example_topic = TopicConfig.model_validate(config_example["topics"][0])
+    assert example_topic.filter_threshold == 4.0
+    assert config_example["telegram"]["enabled"] == bootstrap["telegram"]["enabled"]
+    assert config_example["sources"]["discover_new_sources"] == bootstrap["sources"]["discover_new_sources"]
+    assert config_example["briefing"]["schedule"] == bootstrap["briefing"]["schedule"]
+    assert config_example["briefing"]["style"] == bootstrap["briefing"]["style"]
+    assert config_example["breaking_news"]["enabled"] == bootstrap["breaking_news"]["enabled"]
+    assert config_example["breaking_news"]["threshold"] == bootstrap["breaking_news"]["threshold"]

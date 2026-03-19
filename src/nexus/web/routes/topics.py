@@ -5,7 +5,11 @@ from datetime import date
 from fastapi import APIRouter, Request
 
 from nexus.web.app import get_store, get_templates
-from nexus.web.routes.predictions import _compute_interest_score, _enrich_forecast
+from nexus.web.routes.predictions import (
+    PUBLIC_TARGET_VARIABLES,
+    _compute_interest_score,
+    _enrich_forecast,
+)
 
 router = APIRouter(prefix="/topics")
 
@@ -29,7 +33,12 @@ async def topic_detail(request: Request, slug: str):
     # Featured predictions for this topic
     featured_predictions = []
     try:
-        raw_predictions = await store.get_featured_predictions(slug, limit=5)
+        raw_predictions = await store.get_featured_predictions(
+            slug,
+            limit=5,
+            engine="actor",
+            allowed_target_variables=PUBLIC_TARGET_VARIABLES,
+        )
         for p in raw_predictions:
             _enrich_forecast(p, today)
             _compute_interest_score(p)

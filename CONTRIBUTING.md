@@ -1,6 +1,17 @@
 # Contributing to Nexus
 
-Thanks for your interest in contributing! Here's how to get started.
+Nexus is a self-hosted intelligence project, not a framework. The best contributions make the core product sharper: better ingestion, clearer threads, more trustworthy briefings, cleaner setup, and less accidental complexity.
+
+## Start Here
+
+The stable release-facing docs are:
+
+- [`README.md`](README.md) for setup and the user-facing product story
+- [`docs/index.html`](docs/index.html) for the landing page
+- [`docs/pipeline.html`](docs/pipeline.html) for the public system map
+- [`docs/release-checklist.md`](docs/release-checklist.md) for release sign-off
+
+The forecast benchmark, hindcast, and other research-heavy material are still in the repo, but they are lab surfaces, not the main contributor funnel.
 
 ## Development Setup
 
@@ -10,95 +21,83 @@ cd NEXUS
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[all,dev]"
-cp .env.example .env        # Add your API keys
+cp .env.example .env
 cp data/config.example.yaml data/config.yaml
 ```
 
-## Workflow
-
-We follow **TDD** (test-driven development):
-
-1. Write tests first in `tests/` (mirrors `src/nexus/` structure)
-2. Implement the feature to pass them
-3. Run the full suite before submitting
+If you want the easiest first run, use the browser setup flow instead:
 
 ```bash
-# Run all unit tests
+python -m nexus run
+```
+
+Then open `http://localhost:8080` and let the setup wizard write `data/config.yaml` and `.env` for you.
+
+## Default Workflow
+
+Use the smallest loop that proves the change:
+
+```bash
+.venv/bin/ruff check src tests
 .venv/bin/pytest -m "not e2e and not integration"
+```
 
-# Run a specific test file
-.venv/bin/pytest tests/web/test_settings.py -v
+Useful focused commands:
 
-# Match the default local/CI suite
-.venv/bin/pytest -m "not e2e and not integration"
-
-# Run E2E smoke tests (requires API keys in .env)
-.venv/bin/pytest -m e2e -v
-
-# CLI smoke test (runs a minimal pipeline end-to-end)
+```bash
+.venv/bin/pytest tests/web/test_app.py -q
+.venv/bin/pytest tests/engine/knowledge/test_store.py -q
 python -m nexus test
 ```
 
+Use `python -m nexus test` only when you actually need the real end-to-end smoke path.
+
 ## Test Markers
 
-Tests that require external services use pytest markers so they're skipped by default:
+Tests that need live services are opt-in:
 
-| Marker | When to use | What it needs |
-|--------|------------|---------------|
-| `@pytest.mark.integration` | Hits a live LLM API | API keys in `.env` |
-| `@pytest.mark.e2e` | Full pipeline smoke test | API keys + network |
+| Marker | Use it for | Needs |
+|--------|------------|-------|
+| `@pytest.mark.integration` | Live API calls | API keys in `.env` |
+| `@pytest.mark.e2e` | Full product smoke path | API keys + network |
 
-Unit tests should mock all LLM and network calls using fixtures. See `tests/conftest.py` for shared fixtures and `src/nexus/testing/` for the fixture capture/replay framework.
+Everything else should stay deterministic and runnable offline.
 
-## Fixture Capture & Replay
+## Stable vs Lab Surfaces
 
-Nexus includes a fixture system for deterministic backtesting without live API calls:
+When in doubt, optimize for the stable path:
+
+- Stable: setup, config loading, polling, filtering, knowledge store, threads, briefings, dashboard, Forward Look, optional Kalshi comparison
+- Lab: benchmark suites, hindcast, multi-engine comparisons, experiment harnesses, research writeups
+
+That distinction matters in code review. Stable-path changes need stronger simplicity and docs discipline. Lab changes can stay narrower and more experimental, but they should not leak into the default onboarding story by accident.
+
+## Fixture Capture
+
+The repo includes fixture capture and replay support for pipeline work:
 
 ```bash
-# Capture fixtures from a live pipeline run
 python -m nexus experiment --suite A,G --export-fixtures fixtures/
-
-# Replay captured fixtures (no API keys needed)
 python -m nexus experiment --suite A,G --import-fixtures fixtures/
-
-# Compare results across environments
 python -m nexus experiment --suite A,G --compare fixtures/cloud fixtures/local
 ```
 
-Fixture files are JSON snapshots of LLM responses. When adding a new pipeline stage that calls an LLM, add fixture capture hooks in `src/nexus/testing/` so the stage can be replayed offline.
+If you add a new LLM-backed stage that should be replayable offline, wire it into `src/nexus/testing/`.
 
-## Code Style
+## Code Expectations
 
-- Keep it minimal — no over-engineering, no premature abstractions
-- All LLM calls go through `src/nexus/llm/client.py`, never directly to SDKs
-- Use `logging` for observability, not `print()`
-- Tests that hit real APIs must be marked `@pytest.mark.integration` or `@pytest.mark.e2e`
+- Keep the codebase smaller, not just newer.
+- Prefer deleting stale paths over preserving pre-`0.1` compatibility baggage.
+- Route all LLM calls through `src/nexus/llm/client.py`.
+- Use `logging`, not `print()`, outside of CLI commands and tests.
+- Add tests for risky behavior changes, especially setup flows, public routes, and store selectors.
+- Keep docs aligned with shipped behavior in the same PR when you change the public surface.
 
 ## Pull Requests
 
-1. Create a feature branch from `main`
-2. Write descriptive commit messages (focus on *why*, not *what*)
-3. Ensure all tests pass
-4. Keep PRs focused — one feature or fix per PR
+- Keep PRs focused.
+- Explain the user-facing impact and the maintenance tradeoff.
+- Call out if a change touches the stable release path or only lab tooling.
+- Before asking for review, run the relevant tests and note anything you could not run.
 
-For release sign-off, use [docs/release-checklist.md](docs/release-checklist.md).
-
-## Project Structure
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for a detailed system overview.
-
-```
-src/nexus/
-  config/     # Pydantic models, YAML loader, presets
-  engine/     # Pipeline: sources, filtering, knowledge, synthesis, audio
-  agent/      # Telegram bot, Q&A, breaking news
-  scheduler/  # APScheduler job definitions
-  web/        # FastAPI dashboard + setup wizard
-  llm/        # Multi-provider async LLM client
-  testing/    # Fixture capture/replay for backtesting
-tests/        # Mirrors src structure (unit + e2e)
-```
-
-## Questions?
-
-Open an issue on GitHub — we're happy to help.
+For release work, use [`docs/release-checklist.md`](docs/release-checklist.md) as the source of truth.

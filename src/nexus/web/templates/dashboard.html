@@ -259,10 +259,10 @@
                 {% endif %}
             </div>
 
-            {# 2. Featured Forecast (bombshell) #}
+            {# 2. Featured Forward Look #}
             {% if topic.featured_predictions %}
             <div class="sidebar-section">
-                <div class="sidebar-title">&#9889; Featured Forecast</div>
+                <div class="sidebar-title">&#9889; Featured Forward Look</div>
                 {% for p in topic.featured_predictions %}
                 <div class="sidebar-forecast">
                     {% if p.group_title and p.group_title != p.display_question and p.display_question|length < 50 %}
@@ -282,7 +282,7 @@
                 </div>
                 {% endfor %}
                 <div style="margin-top: 0.5rem;">
-                    <a href="/predictions" class="section-link">All predictions &rarr;</a>
+                    <a href="/forward-look" class="section-link">All Forward Look &rarr;</a>
                 </div>
             </div>
             {% endif %}
@@ -326,7 +326,7 @@
                 </div>
                 {% endfor %}
                 <div style="margin-top: 0.5rem;">
-                    <a href="/predictions" class="section-link">All predictions &rarr;</a>
+                    <a href="/forward-look" class="section-link">All Forward Look &rarr;</a>
                 </div>
             </div>
             {% endif %}

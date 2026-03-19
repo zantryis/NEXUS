@@ -115,9 +115,9 @@ async def test_benchmark_empty_state(tmp_path):
     await store.close()
 
 
-async def test_benchmark_not_shown_on_predictions(bench_client):
-    """Benchmark data should NOT appear on the predictions page."""
-    resp = await bench_client.get("/predictions")
+async def test_benchmark_not_shown_on_forward_look(bench_client):
+    """Benchmark data should NOT appear on the Forward Look page."""
+    resp = await bench_client.get("/forward-look")
     assert resp.status_code == 200
-    # The benchmark ticker should not be on the predictions page
+    # The benchmark ticker should not be on the public Forward Look page
     assert "X-YES" not in resp.text

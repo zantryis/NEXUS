@@ -1,7 +1,7 @@
 """Tests for KnowledgeStore — SQLite-backed knowledge graph CRUD."""
 
 import pytest
-from datetime import date
+from datetime import date, timedelta
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.engine.knowledge.events import Event
 from nexus.engine.knowledge.compression import Summary
@@ -1395,13 +1395,23 @@ async def test_merge_threads_duplicate_events_deduplicated(store):
 # ── get_interesting_kalshi_markets ─────────────────────────────────────
 
 
-async def _insert_kalshi_question(store, question, prob, market_prob, resolution_date, ticker, status="open"):
+async def _insert_kalshi_question(
+    store,
+    question,
+    prob,
+    market_prob,
+    resolution_date,
+    ticker,
+    *,
+    engine="structural",
+    status="open",
+):
     """Helper: insert a kalshi-aligned forecast question."""
     import json
     await store.db.execute(
         "INSERT INTO forecast_runs (topic_slug, topic_name, engine, generated_for, summary) "
         "VALUES (?, ?, ?, ?, ?)",
-        ("kalshi-aligned", "Kalshi", "structural", "2026-03-01", "test"),
+        ("kalshi-aligned", "Kalshi", engine, "2026-03-01", "test"),
     )
     run_id = (await store.db.execute("SELECT last_insert_rowid()")).fetchone()
     run_id = (await run_id)[0] if hasattr(run_id, "__await__") else run_id[0]
@@ -1465,6 +1475,32 @@ async def test_get_interesting_kalshi_markets_empty(store):
     """Should return empty list when no Kalshi data exists."""
     results = await store.get_interesting_kalshi_markets(limit=5)
     assert results == []
+
+
+async def test_get_interesting_kalshi_markets_can_filter_engine(store):
+    """Public callers should be able to request actor-only Kalshi markets."""
+    future_resolution = (date.today() + timedelta(days=14)).isoformat()
+    await _insert_kalshi_question(
+        store,
+        "Actor market",
+        0.70,
+        0.40,
+        future_resolution,
+        "ACTOR",
+        engine="actor",
+    )
+    await _insert_kalshi_question(
+        store,
+        "Structural market",
+        0.55,
+        0.35,
+        future_resolution,
+        "STRUCTURAL",
+        engine="structural",
+    )
+
+    results = await store.get_interesting_kalshi_markets(limit=5, engine="actor")
+    assert [r["ticker"] for r in results] == ["ACTOR"]
 
 
 # ── purge_template_projections ────────────────────────────────────────
@@ -1575,6 +1611,26 @@ async def test_purge_by_target_variable(store):
         "SELECT COUNT(*) FROM forecast_questions WHERE target_variable='topic_claim'"
     )
     assert (await cursor.fetchone())[0] == 1
+
+
+async def test_get_featured_predictions_can_filter_public_actor_slice(store):
+    """Featured predictions should support the actor-only public Forward Look contract."""
+    await store.save_forecast_run(_make_forecast_run("iran-us", "actor", "topic_claim", "Actor claim?"))
+    await store.save_forecast_run(_make_forecast_run("iran-us", "actor", "thread_development", "Actor thread?"))
+    await store.save_forecast_run(_make_forecast_run("iran-us", "actor", "kalshi_benchmark", "Benchmark row?"))
+    await store.save_forecast_run(_make_forecast_run("iran-us", "structural", "topic_claim", "Structural claim?"))
+
+    results = await store.get_featured_predictions(
+        "iran-us",
+        engine="actor",
+        allowed_target_variables={"topic_claim", "thread_development", "kalshi_aligned"},
+    )
+
+    questions = [row["question"] for row in results]
+    assert "Actor claim?" in questions
+    assert "Actor thread?" in questions
+    assert "Benchmark row?" not in questions
+    assert "Structural claim?" not in questions
 
 
 async def test_purge_dry_run(store):

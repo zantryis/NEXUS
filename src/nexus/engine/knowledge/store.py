@@ -1692,6 +1692,8 @@ class KnowledgeStore:
         topic_slug: str,
         *,
         limit: int = 5,
+        engine: str | None = None,
+        allowed_target_variables: set[str] | None = None,
     ) -> list[dict]:
         """Return pending predictions for a topic, ordered by recency.
 
@@ -1699,7 +1701,7 @@ class KnowledgeStore:
         """
         today = date.today()
         start = today - timedelta(days=90)
-        cursor = await self.db.execute(
+        query = (
             "SELECT fr.topic_slug, fr.topic_name, fr.engine, fr.generated_for, "
             "fq.id, fq.forecast_key, fq.question, fq.forecast_type, fq.target_variable, "
             "fq.target_metadata_json, fq.probability, fq.base_rate, "
@@ -1712,10 +1714,19 @@ class KnowledgeStore:
             "WHERE fr.topic_slug = ? "
             "AND fr.generated_for >= ? "
             "AND (fres.outcome_status IS NULL OR fres.outcome_status = 'pending') "
-            "ORDER BY fr.generated_for DESC, fq.id DESC "
-            "LIMIT ?",
-            (topic_slug, start.isoformat(), limit * 3),  # fetch extra for dedup
         )
+        params: list = [topic_slug, start.isoformat()]
+        if engine:
+            query += "AND fr.engine = ? "
+            params.append(engine)
+        if allowed_target_variables:
+            variables = sorted(allowed_target_variables)
+            placeholders = ",".join("?" * len(variables))
+            query += f"AND fq.target_variable IN ({placeholders}) "
+            params.extend(variables)
+        query += "ORDER BY fr.generated_for DESC, fq.id DESC LIMIT ?"
+        params.append(limit * 3)  # fetch extra for dedup
+        cursor = await self.db.execute(query, params)
         rows = await cursor.fetchall()
         seen_questions: set[str] = set()
         results: list[dict] = []
@@ -1887,13 +1898,18 @@ class KnowledgeStore:
             for row in rows
         ]
 
-    async def get_interesting_kalshi_markets(self, limit: int = 5) -> list[dict]:
+    async def get_interesting_kalshi_markets(
+        self,
+        limit: int = 5,
+        *,
+        engine: str | None = None,
+    ) -> list[dict]:
         """Return open Kalshi-aligned markets ranked by interestingness.
 
         Score = 0.6 * |our_prob - market_prob| + 0.4 * (1 / days_until_resolution).
         """
         today = date.today().isoformat()
-        cursor = await self.db.execute(
+        query = (
             "SELECT fq.question, fq.probability, fq.target_metadata_json, "
             "fq.resolution_date, fq.external_ref "
             "FROM forecast_questions fq "
@@ -1901,9 +1917,13 @@ class KnowledgeStore:
             "WHERE fq.target_variable = 'kalshi_aligned' "
             "AND fq.status = 'open' "
             "AND fq.resolution_date >= ? "
-            "ORDER BY fq.resolution_date ASC",
-            (today,),
         )
+        params: list = [today]
+        if engine:
+            query += "AND fr.engine = ? "
+            params.append(engine)
+        query += "ORDER BY fq.resolution_date ASC"
+        cursor = await self.db.execute(query, params)
         rows = await cursor.fetchall()
 
         results = []

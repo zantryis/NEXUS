@@ -62,6 +62,30 @@ Before tagging, explicitly verify each item below as closed:
 - Default CI/test documentation excludes both `e2e` and `integration` tests
 - `pip-audit` is clean, including the prior `pyasn1` finding
 
+## Forward Look Packaging Checks
+
+Before tagging, verify the release-facing forecast surface matches the `v0.1` scope:
+
+- `/forward-look` is the canonical public route and renders `Forward Look`
+- `/predictions` redirects to `/forward-look`
+- The public page only shows actor-engine forecasts even if other engine rows exist in storage
+- Dashboard topic cards only show actor-engine Forward Look entries
+- Topic detail pages only show actor-engine Forward Look entries
+- Kalshi sidebar cards only show actor-engine market matches
+- Actor freeform and thread forecasts render without Kalshi copy when no market metadata exists
+- Actor Kalshi-aligned forecasts show market comparison only when Kalshi metadata exists
+- `/benchmark` remains directly reachable but is absent from normal navigation
+- `python -m nexus` help and README examples only advertise the kept release-facing forecast flow
+
+## Docs And Setup Consistency Checks
+
+Before tagging, verify the release docs and onboarding defaults tell one coherent story:
+
+- `README.md`, `docs/index.html`, and `docs/pipeline.html` all describe actor-based Forward Look with optional Kalshi
+- Public docs do not advertise `6 competing forecast engines` or route users to `/predictions`
+- `docs/pipeline.html` is the canonical public system map, and `docs/system-map/` is treated as legacy/internal
+- `data/config.example.yaml`, CLI setup, and web setup all agree on the default briefing schedule/style, Telegram enabled, source discovery enabled, and `filter_threshold: 4.0`
+
 ## Sign-Off
 
 Record the release candidate commit SHA, the date of the audit, and who ran:

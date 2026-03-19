@@ -1,12 +1,18 @@
 """Tests for the Nexus web dashboard."""
 
 import pytest
-from datetime import date
+from datetime import date, timedelta
 from httpx import AsyncClient, ASGITransport
 
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.engine.knowledge.events import Event
-from nexus.engine.projection.models import ProjectionItem, ThreadSnapshot, TopicProjection
+from nexus.engine.projection.models import (
+    ForecastQuestion,
+    ForecastRun,
+    ProjectionItem,
+    ThreadSnapshot,
+    TopicProjection,
+)
 from nexus.web.app import create_app
 
 
@@ -289,18 +295,25 @@ async def test_audio_route_404_missing(seeded_app, tmp_path):
         assert resp.status_code == 404
 
 
-async def test_predictions_page_loads(client):
-    """Predictions page returns 200 even with no forecast data."""
-    resp = await client.get("/predictions")
+async def test_forward_look_page_loads(client):
+    """Forward Look page returns 200 even with no forecast data."""
+    resp = await client.get("/forward-look")
     assert resp.status_code == 200
-    assert "Predictions" in resp.text
+    assert "Forward Look" in resp.text
 
 
-async def test_predictions_page_shows_empty_state(client):
-    """Predictions page shows empty state when no forecasts exist."""
+async def test_predictions_redirects_to_forward_look(client):
+    """Legacy predictions route redirects to the canonical Forward Look page."""
     resp = await client.get("/predictions")
+    assert resp.status_code == 307
+    assert resp.headers["location"].endswith("/forward-look")
+
+
+async def test_forward_look_page_shows_empty_state(client):
+    """Forward Look page shows empty state when no forecasts exist."""
+    resp = await client.get("/forward-look")
     assert resp.status_code == 200
-    assert "No predictions yet" in resp.text
+    assert "No Forward Look yet" in resp.text
 
 
 async def test_dashboard_shows_audio_player(seeded_app, tmp_path):
@@ -321,3 +334,80 @@ async def test_dashboard_shows_audio_player(seeded_app, tmp_path):
         assert resp.status_code == 200
         assert "audio-player-card" in resp.text
         assert "Daily Podcast" in resp.text
+
+
+async def _add_forward_look_seed(store, *, engine: str, question: str, ticker: str | None = None):
+    """Seed a minimal forecast run for dashboard route tests."""
+    target_variable = "kalshi_aligned" if ticker else "topic_claim"
+    target_metadata = (
+        {"kalshi_ticker": ticker, "kalshi_implied": 0.41}
+        if ticker
+        else {"run_label": "independent"}
+    )
+    forecast_run = ForecastRun(
+        topic_slug="iran-us",
+        topic_name="Iran-US",
+        engine=engine,
+        generated_for=date.today(),
+        summary=f"{engine} test run",
+        questions=[ForecastQuestion(
+            question=question,
+            forecast_type="binary",
+            target_variable=target_variable,
+            target_metadata=target_metadata,
+            probability=0.64 if engine == "actor" else 0.22,
+            base_rate=0.5,
+            resolution_criteria="test",
+            resolution_date=date.today() + timedelta(days=14),
+            horizon_days=14,
+            signpost="watch for follow-through",
+            external_ref=ticker,
+        )],
+    )
+    await store.save_forecast_run(forecast_run)
+
+
+async def test_dashboard_featured_forward_look_stays_actor_only(seeded_app):
+    """Homepage topic cards should not leak non-actor forecasts."""
+    await _add_forward_look_seed(
+        seeded_app.state.store,
+        engine="actor",
+        question="Actor-only call on sanctions pressure?",
+    )
+    await _add_forward_look_seed(
+        seeded_app.state.store,
+        engine="structural",
+        question="Structural call that should stay hidden?",
+    )
+
+    transport = ASGITransport(app=seeded_app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.get("/")
+
+    assert resp.status_code == 200
+    assert "Actor-only call on sanctions pressure" in resp.text
+    assert "Structural call that should stay hidden" not in resp.text
+
+
+async def test_dashboard_kalshi_sidebar_stays_actor_only(seeded_app):
+    """Homepage Kalshi sidebar should only show actor-linked markets."""
+    await _add_forward_look_seed(
+        seeded_app.state.store,
+        engine="actor",
+        question="Actor Kalshi market should show?",
+        ticker="ACTOR-KALSHI",
+    )
+    await _add_forward_look_seed(
+        seeded_app.state.store,
+        engine="structural",
+        question="Structural Kalshi market should hide?",
+        ticker="STRUCTURAL-KALSHI",
+    )
+
+    transport = ASGITransport(app=seeded_app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.get("/")
+
+    assert resp.status_code == 200
+    assert "Actor Kalshi market should show" in resp.text
+    assert "Structural Kalshi market should hide" not in resp.text

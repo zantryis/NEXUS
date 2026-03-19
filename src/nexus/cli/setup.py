@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from nexus.config.writer import write_config, write_env
+from nexus.config.writer import build_initial_config, write_config, write_env
 
 PRESET_INFO = [
     ("free", "Free (Ollama local)", "No API key needed — runs models locally", None),
@@ -125,15 +125,12 @@ def run_setup(data_dir: Path) -> None:
     timezone = input("Timezone (e.g. America/New_York) [UTC]: ").strip() or "UTC"
 
     # 5. Generate config.yaml
-    config_dict = {
-        "preset": preset_name,
-        "user": {"name": user_name, "timezone": timezone, "output_language": "en"},
-        "topics": selected,
-        "briefing": {"schedule": "06:00"},
-        "audio": {"enabled": preset_name != "free"},
-        "breaking_news": {"enabled": True, "threshold": 7},
-        "telegram": {"enabled": True},
-    }
+    config_dict = build_initial_config(
+        preset=preset_name,
+        topics=selected,
+        user_name=user_name,
+        timezone=timezone,
+    )
 
     config_path = write_config(data_dir, config_dict)
     print(f"\nWrote {config_path}")

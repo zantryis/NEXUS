@@ -32,7 +32,7 @@ topics:
     subtopics: ["LLM", "computer vision", "AI safety"]
     source_languages: ["en"]      # ISO 639-1 codes
     perspective_diversity: high    # low | medium | high (min source affiliation balance)
-    filter_threshold: 5.0         # 1-10, lower = more articles pass (benchmark: 5.0 optimal)
+    filter_threshold: 4.0         # 1-10, lower = more articles pass (default: 4.0)
     scope: medium                 # narrow | medium | broad (affects event extraction cap)
     # max_events: 20              # Override auto-calculated event extraction cap
 
@@ -97,7 +97,7 @@ budget:
   degradation_strategy: "skip_expensive"  # "skip_expensive" | "stop_all"
 
 sources:
-  discover_new_sources: false     # Auto-discover new feeds for topics
+  discover_new_sources: true      # Auto-discover new feeds for topics
   # discovery_interval_days: 7    # Days between auto-discovery runs
   # global_feeds: []              # Extra RSS feeds added to all topics
   # blocked_sources: []           # Domain names to exclude from ingestion

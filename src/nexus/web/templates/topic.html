@@ -58,7 +58,7 @@
         {% if featured_predictions %}
         <div class="analysis-panel" style="margin-bottom: 1.5rem;">
             <div class="analysis-card">
-                <div class="analysis-card-header">Predictions
+                <div class="analysis-card-header">Forward Look Signals
                     {% if featured_predictions|selectattr('_tag_contrarian', 'defined')|selectattr('_tag_contrarian')|list %}
                     <span class="pred-tag pred-tag-contrarian" style="margin-left: 0.5rem; font-size: 0.7rem;">hot takes</span>
                     {% endif %}
@@ -107,7 +107,7 @@
                         </div>
                     </div>
                     {% endfor %}
-                    <a href="/predictions" class="pred-see-all">All predictions &rarr;</a>
+                    <a href="/forward-look" class="pred-see-all">All Forward Look &rarr;</a>
                 </div>
             </div>
         </div>

@@ -222,7 +222,11 @@ def _load_runtime_config(config_path: Path):
 
 async def _build_topics_data(store, max_threads: int = 3, max_events: int = 1):
     """Build structured topic data for the web briefing."""
-    from nexus.web.routes.predictions import _enrich_forecast, _compute_interest_score
+    from nexus.web.routes.predictions import (
+        PUBLIC_TARGET_VARIABLES,
+        _compute_interest_score,
+        _enrich_forecast,
+    )
 
     topic_stats = await store.get_topic_stats()
     topics_data = []
@@ -283,7 +287,12 @@ async def _build_topics_data(store, max_threads: int = 3, max_events: int = 1):
         # Featured predictions for this topic
         featured_predictions = []
         try:
-            raw_preds = await store.get_featured_predictions(slug, limit=3)
+            raw_preds = await store.get_featured_predictions(
+                slug,
+                limit=3,
+                engine="actor",
+                allowed_target_variables=PUBLIC_TARGET_VARIABLES,
+            )
             for p in raw_preds:
                 _enrich_forecast(p, today)
                 _compute_interest_score(p)
@@ -363,7 +372,7 @@ async def homepage(request: Request):
             health_snapshot = _config_error_health("Config validation failed. Re-run setup or fix data/config.yaml.")
 
     # Kalshi sidebar markets
-    kalshi_sidebar = await store.get_interesting_kalshi_markets(limit=5)
+    kalshi_sidebar = await store.get_interesting_kalshi_markets(limit=5, engine="actor")
 
     # Pipeline run info
     last_run = await store.get_last_pipeline_run()

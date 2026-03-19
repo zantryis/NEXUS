@@ -46,6 +46,9 @@ def test_run_setup_creates_config(tmp_path):
     assert config["preset"] == "cheap"
     assert config["user"]["name"] == "Tester"
     assert len(config["topics"]) == 2
+    assert config["telegram"]["enabled"] is True
+    assert config["sources"]["discover_new_sources"] is True
+    assert config["briefing"]["style"] == "analytical"
 
 
 def test_run_setup_balanced_preset_needs_gemini_key(tmp_path):
@@ -85,6 +88,7 @@ def test_run_setup_free_preset_no_key(tmp_path):
 
     config = yaml.safe_load((data_dir / "config.yaml").read_text())
     assert config["preset"] == "free"
+    assert config["audio"]["enabled"] is False
     env_path = tmp_path / ".env"
     if env_path.exists():
         assert "API_KEY" not in env_path.read_text()

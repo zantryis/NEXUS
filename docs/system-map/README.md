@@ -1,38 +1,23 @@
-# System Map
+# Legacy System Map
 
-Single-page static microsite for understanding the current Nexus architecture from code, with planned components from `design.md` shown as roadmap overlays.
+`docs/system-map/` is a legacy internal microsite. It stays in the repo for reference work, but it is not part of the main release-facing docs path anymore.
 
-## Files
+For `v0.1`, the canonical public system map is:
 
-- `index.html`: only entrypoint
-- `styles.css`: visual system and layout
-- `app.js`: JSON-driven rendering and interactions
-- `data/graph.json`: semantic graph, data model, storage map, and source references
+- [`docs/pipeline.html`](../pipeline.html)
 
-## Open locally
+The main public docs path is:
 
-Serve the repo root or the `docs/system-map/` directory with any static server. Example from the repo root:
+- [`README.md`](../../README.md)
+- [`docs/index.html`](../index.html)
+- [`docs/pipeline.html`](../pipeline.html)
 
-```bash
-python -m http.server 8000
-```
+## What This Directory Is For
 
-Then open:
+Use this directory only if you are doing internal architecture cleanup or reviving the older microsite. Do not link it from the release-facing README or landing page without an explicit refresh pass.
 
-```text
-http://localhost:8000/docs/system-map/
-```
+## Status
 
-## Maintenance
-
-- Treat `data/graph.json` as the canonical content source.
-- Update nodes, edges, pipeline stages, data models, storage entries, and source refs there first.
-- Keep roadmap elements explicitly marked with `"status": "planned"`.
-- Keep anything only partially wired through the runtime marked `"partial"`.
-
-## Page behavior
-
-- `Implemented only` hides planned items but keeps partial current-code elements visible.
-- `Include roadmap` toggles planned components and planned edges.
-- `Show storage` toggles filesystem-backed artifact views.
-- `Show LLM boundaries` toggles model-backed components from the rendered views.
+- Legacy
+- Internal/reference only
+- Outside the default contributor and user onboarding funnel

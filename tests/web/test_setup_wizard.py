@@ -216,6 +216,7 @@ async def test_setup_complete_uses_sensible_defaults(app_no_config, tmp_path):
     assert raw["user"]["timezone"] == "UTC"
     assert raw["briefing"]["schedule"] == "06:00"
     assert raw["briefing"]["style"] == "analytical"
+    assert raw["telegram"]["enabled"] is True
 
 
 @pytest.mark.asyncio
@@ -410,6 +411,23 @@ async def test_setup_complete_enables_discovery(app_no_config, tmp_path):
     config_path = data_dir / "config.yaml"
     raw = yaml.safe_load(config_path.read_text())
     assert raw["sources"]["discover_new_sources"] is True
+
+
+@pytest.mark.asyncio
+async def test_setup_complete_enables_telegram_by_default(app_no_config, tmp_path):
+    """Setup wizard should keep Telegram enabled in the generated config."""
+    import yaml
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post("/setup/step/1", data={"provider": "ollama", "preset": "free"})
+        await client.post("/setup/step/2", data={"topics": "ai-ml-research"})
+
+        with patch("nexus.web.routes.setup._auto_launch_pipeline"):
+            await client.post("/setup/complete", follow_redirects=False)
+
+    config_path = tmp_path / "data" / "config.yaml"
+    raw = yaml.safe_load(config_path.read_text())
+    assert raw["telegram"]["enabled"] is True
 
 
 @pytest.mark.asyncio

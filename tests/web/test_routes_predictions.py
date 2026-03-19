@@ -1,4 +1,4 @@
-"""Tests for predictions route — unit tests for helpers + integration with seeded data.
+"""Tests for Forward Look route — unit tests for helpers + integration with seeded data.
 
 Covers: _derive_verdict, _clean_question, _enrich_forecast, _group_by_market,
 _group_by_event, predictions page with seeded forecast data.
@@ -392,7 +392,7 @@ class TestGroupByEvent:
 
 @pytest.fixture
 async def predictions_app(tmp_path):
-    """App with seeded forecast runs (pending + resolved)."""
+    """App with seeded forecast runs for the Forward Look surface."""
     (tmp_path / "config.yaml").write_text("preset: balanced\ntopics:\n  - name: test\n")
     app = create_app(tmp_path / "test.db", data_dir=tmp_path)
     store = KnowledgeStore(tmp_path / "test.db")
@@ -424,15 +424,57 @@ async def predictions_app(tmp_path):
                 horizon_days=14,
                 signpost="Watch for X indicators",
             ),
+            ForecastQuestion(
+                question="Sanctions will tighten within 7 days?",
+                target_variable="topic_claim",
+                target_metadata={},
+                probability=0.72,
+                resolution_criteria="New sanctions are announced within 7 days",
+                resolution_date=date(2026, 3, 22),
+                horizon_days=7,
+                signpost="Watch for sanctions announcements",
+            ),
+            ForecastQuestion(
+                question="Thread escalation will accelerate this week?",
+                target_variable="thread_development",
+                target_metadata={},
+                probability=0.68,
+                resolution_criteria="Thread escalates materially within 7 days",
+                resolution_date=date(2026, 3, 22),
+                horizon_days=7,
+                signpost="Watch for escalation indicators",
+            ),
         ],
     )
     await store.save_forecast_run(pending_run)
+
+    # Seed a non-public engine run that should stay hidden on /forward-look
+    hidden_run = ForecastRun(
+        topic_slug="test-topic",
+        topic_name="Test Topic",
+        engine="structural",
+        generated_for=date(2026, 3, 16),
+        summary="Hidden structural forecast",
+        questions=[
+            ForecastQuestion(
+                question="Structural-only call should stay hidden?",
+                target_variable="topic_claim",
+                target_metadata={},
+                probability=0.61,
+                resolution_criteria="Structural-only hidden check",
+                resolution_date=date(2026, 3, 23),
+                horizon_days=7,
+                signpost="Hidden structural signpost",
+            ),
+        ],
+    )
+    await store.save_forecast_run(hidden_run)
 
     # Seed a resolved forecast run
     resolved_run = ForecastRun(
         topic_slug="test-topic",
         topic_name="Test Topic",
-        engine="structural",
+        engine="actor",
         generated_for=date(2026, 3, 10),
         summary="Old forecast",
         questions=[
@@ -477,32 +519,60 @@ async def pred_client(predictions_app):
         yield c
 
 
-async def test_predictions_with_data_returns_200(pred_client):
-    resp = await pred_client.get("/predictions")
+async def test_forward_look_with_data_returns_200(pred_client):
+    resp = await pred_client.get("/forward-look")
     assert resp.status_code == 200
-    assert "Predictions" in resp.text
+    assert "Forward Look" in resp.text
 
 
-async def test_predictions_shows_pending_market(pred_client):
+async def test_predictions_redirects_to_forward_look(pred_client):
     resp = await pred_client.get("/predictions")
+    assert resp.status_code == 307
+    assert resp.headers["location"].endswith("/forward-look")
+
+
+async def test_forward_look_shows_pending_market(pred_client):
+    resp = await pred_client.get("/forward-look")
     assert resp.status_code == 200
     assert "X-YES" in resp.text or "Will X happen" in resp.text
 
 
-async def test_predictions_shows_resolved_market(pred_client):
-    resp = await pred_client.get("/predictions")
+async def test_forward_look_shows_resolved_market(pred_client):
+    resp = await pred_client.get("/forward-look")
     assert resp.status_code == 200
     assert "Y-YES" in resp.text or "Did Y happen" in resp.text
 
 
-async def test_predictions_shows_engine_info(pred_client):
-    resp = await pred_client.get("/predictions")
+async def test_forward_look_hides_non_actor_engines(pred_client):
+    resp = await pred_client.get("/forward-look")
     assert resp.status_code == 200
-    assert "Actor" in resp.text or "Structural" in resp.text
+    assert "Structural-only call should stay hidden" not in resp.text
+    assert "Structural reasoning" not in resp.text
 
 
-async def test_predictions_empty_state(tmp_path):
-    """No forecast data → shows empty state."""
+async def test_forward_look_shows_independent_sources_without_market_copy(pred_client):
+    resp = await pred_client.get("/forward-look")
+    assert resp.status_code == 200
+    assert "Sanctions will tighten within 7 days" in resp.text
+    assert "Thread escalation will accelerate this week" in resp.text
+    assert "Independent forward look" in resp.text
+
+
+async def test_forward_look_shows_kalshi_context_when_available(pred_client):
+    resp = await pred_client.get("/forward-look")
+    assert resp.status_code == 200
+    assert "Kalshi 55%" in resp.text
+    assert "X-YES" in resp.text
+
+
+async def test_forward_look_nav_hides_benchmark(pred_client):
+    resp = await pred_client.get("/forward-look")
+    assert resp.status_code == 200
+    assert "/benchmark" not in resp.text
+
+
+async def test_forward_look_empty_state(tmp_path):
+    """No forecast data -> shows empty state."""
     (tmp_path / "config.yaml").write_text("preset: balanced\ntopics:\n  - name: test\n")
     app = create_app(tmp_path / "test.db", data_dir=tmp_path)
     store = KnowledgeStore(tmp_path / "test.db")
@@ -511,9 +581,9 @@ async def test_predictions_empty_state(tmp_path):
 
     transport = ASGITransport(app=app, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
-        resp = await c.get("/predictions")
+        resp = await c.get("/forward-look")
     assert resp.status_code == 200
-    assert "No predictions" in resp.text
+    assert "No Forward Look yet" in resp.text
     await store.close()
 
 

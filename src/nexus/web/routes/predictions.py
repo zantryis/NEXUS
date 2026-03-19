@@ -1,4 +1,4 @@
-"""Predictions dashboard — grouped by market, engine comparison inline."""
+"""Forward Look dashboard — actor-led forecasts with optional Kalshi context."""
 
 import logging
 import re
@@ -8,6 +8,7 @@ from datetime import date, timedelta
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Request
+from fastapi.responses import RedirectResponse
 
 _MD_BOLD_RE = re.compile(r"\*{1,2}(.+?)\*{1,2}")
 
@@ -67,6 +68,8 @@ EXPERIMENTAL_ENGINES = {k for k, v in ENGINE_INFO.items() if v.get("tier") == "e
 
 # Source types excluded from the main predictions page (shown on /benchmark)
 BENCHMARK_SOURCES = {"benchmark", "hindcast"}
+PUBLIC_ENGINES = {"actor"}
+PUBLIC_TARGET_VARIABLES = {"kalshi_aligned", "topic_claim", "thread_development"}
 
 FEATURED_MAX = 8
 
@@ -87,6 +90,14 @@ def _clean_question(raw: str) -> tuple[str, str]:
         parts = raw.split(": ", 1)
         return parts[0].rstrip("?"), parts[1].rstrip("?")
     return "", raw.rstrip("?")
+
+
+def is_public_forward_look_forecast(forecast: dict) -> bool:
+    """Return True if a stored forecast belongs on the public Forward Look surface."""
+    return (
+        forecast.get("engine") in PUBLIC_ENGINES
+        and forecast.get("target_variable") in PUBLIC_TARGET_VARIABLES
+    )
 
 
 def _enrich_forecast(q: dict, today: date) -> dict:
@@ -337,21 +348,44 @@ def _group_by_event(markets: list[dict]) -> list[dict]:
     return list(events.values())
 
 
-@router.get("/predictions")
-async def predictions_page(request: Request):
-    """Predictions results page."""
+def _annotate_public_market(market: dict) -> dict:
+    """Expose the primary public forecast for the simplified template."""
+    primary = market["engines"].get("actor")
+    if primary is None and market.get("engine_list"):
+        primary = market["engine_list"][0][1]
+
+    market["primary"] = primary
+    market["probability"] = primary.get("probability") if primary else None
+    market["verdict"] = primary.get("verdict") if primary else None
+    market["confidence"] = primary.get("confidence") if primary else None
+    market["target_metadata"] = primary.get("target_metadata") if primary else {}
+    market["_tag_bold"] = bool(primary and primary.get("_tag_bold"))
+    return market
+
+
+@router.get("/predictions", include_in_schema=False)
+async def predictions_redirect(request: Request):
+    """Compatibility redirect to the canonical Forward Look route."""
+    return RedirectResponse(
+        url=str(request.url_for("forward_look_page")),
+        status_code=307,
+    )
+
+
+@router.get("/forward-look", name="forward_look_page")
+async def forward_look_page(request: Request):
+    """Forward Look results page."""
     store = get_store(request)
     templates = get_templates(request)
     today = date.today()
 
     end = today
     start = end - timedelta(days=PREDICTIONS_LOOKBACK_DAYS)
-    questions = await store.get_forecast_questions_between(start=start, end=end)
+    questions = await store.get_forecast_questions_between(start=start, end=end, engine="actor")
 
     all_forecasts = [_enrich_forecast(q, today) for q in questions]
 
-    # Exclude benchmark/hindcast from main predictions page
-    live_forecasts = [q for q in all_forecasts if q["source_type"] not in BENCHMARK_SOURCES]
+    live_forecasts = [q for q in all_forecasts if is_public_forward_look_forecast(q)]
 
     # Split by resolution status
     resolved_raw = []
@@ -371,6 +405,7 @@ async def predictions_page(request: Request):
 
     # Compute market-level interest score (max of engine interest scores)
     for market in pending_markets:
+        _annotate_public_market(market)
         engine_scores = []
         for _, eq in market.get("engine_list", []):
             s = eq.get("interest_score", 0)
@@ -423,6 +458,8 @@ async def predictions_page(request: Request):
 
     # Group resolved by market
     resolved_markets = _group_by_market(resolved_raw)
+    for market in resolved_markets:
+        _annotate_public_market(market)
 
     # Group resolved by source type (exclude benchmark/hindcast)
     resolved_by_source: OrderedDict[str, list] = OrderedDict()
@@ -431,27 +468,11 @@ async def predictions_page(request: Request):
         if source_markets:
             resolved_by_source[source] = source_markets
 
-    # Count unique markets and engines involved
-    all_engines_seen = set()
-    for q in live_forecasts:
-        all_engines_seen.add(q.get("engine", ""))
-    engines_active = [e for e in ENGINE_ORDER if e in all_engines_seen]
-
-    # Engine analytics live on /benchmark — predictions page focuses on live forecasts
-
-    # Summary stats
-    unique_markets = len(set(q.get("ticker") or q["display_question"] for q in live_forecasts))
     summary = {
-        "unique_markets": unique_markets,
-        "engines_active": len(engines_active),
-        "total_forecasts": len(live_forecasts),
-        "pending": len(pending_raw),
-        "resolved": len(resolved_raw),
-        "best_engine": None,
-        "best_run_mode": None,
-        "best_by_run": {},
-        "market_mean_brier": None,
-        "beat_market": None,
+        "active": len(pending_markets),
+        "independent": sum(1 for m in pending_markets if m.get("run_label") == "independent"),
+        "kalshi_linked": sum(1 for m in pending_markets if m["source_type"] == "kalshi"),
+        "resolved": len(resolved_markets),
     }
 
     # Eligibility info for empty state
@@ -491,12 +512,6 @@ async def predictions_page(request: Request):
         "all_active_events": all_active_events,
         "pending_events": pending_events,
         "resolved_by_source": resolved_by_source,
-        "analytics_anchored": [],
-        "analytics_independent": [],
         "summary": summary,
-        "engines_active": engines_active,
-        "engine_info": ENGINE_INFO,
-        "engine_order": ENGINE_ORDER,
-        "production_engines": PRODUCTION_ENGINES,
         "eligibility_info": eligibility_info,
     })

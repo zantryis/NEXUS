@@ -5,13 +5,18 @@ projection, cross-topic signals, filter stats).
 """
 
 import pytest
-from datetime import date
+from datetime import date, timedelta
 
 from httpx import AsyncClient, ASGITransport
 
 from nexus.engine.knowledge.events import Event
 from nexus.engine.knowledge.store import KnowledgeStore
-from nexus.engine.projection.models import ProjectionItem, TopicProjection
+from nexus.engine.projection.models import (
+    ForecastQuestion,
+    ForecastRun,
+    ProjectionItem,
+    TopicProjection,
+)
 from nexus.web.app import create_app
 
 
@@ -133,3 +138,55 @@ async def test_topic_shows_filter_stats(rich_topic_app):
     assert resp.status_code == 200
     # Filter stats section shows article counts or accepted/rejected
     assert "Accepted" in resp.text or "accepted" in resp.text or "Article" in resp.text or "article" in resp.text or resp.status_code == 200
+
+
+async def test_topic_forward_look_signals_stay_actor_only(rich_topic_app):
+    """Topic page should not mix structural forecasts into the public Forward Look panel."""
+    store = rich_topic_app.state.store
+    today = date.today()
+    await store.save_forecast_run(ForecastRun(
+        topic_slug="test-topic",
+        topic_name="Test Topic",
+        engine="actor",
+        generated_for=today,
+        summary="actor topic test",
+        questions=[ForecastQuestion(
+            question="Actor topic call should show?",
+            forecast_type="binary",
+            target_variable="topic_claim",
+            target_metadata={"run_label": "independent"},
+            probability=0.68,
+            base_rate=0.5,
+            resolution_criteria="test",
+            resolution_date=today + timedelta(days=14),
+            horizon_days=14,
+            signpost="watch for follow-through",
+        )],
+    ))
+    await store.save_forecast_run(ForecastRun(
+        topic_slug="test-topic",
+        topic_name="Test Topic",
+        engine="structural",
+        generated_for=today,
+        summary="structural topic test",
+        questions=[ForecastQuestion(
+            question="Structural topic call should hide?",
+            forecast_type="binary",
+            target_variable="topic_claim",
+            target_metadata={"run_label": "independent"},
+            probability=0.31,
+            base_rate=0.5,
+            resolution_criteria="test",
+            resolution_date=today + timedelta(days=14),
+            horizon_days=14,
+            signpost="watch for follow-through",
+        )],
+    ))
+
+    transport = ASGITransport(app=rich_topic_app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.get("/topics/test-topic")
+
+    assert resp.status_code == 200
+    assert "Actor topic call should show" in resp.text
+    assert "Structural topic call should hide" not in resp.text

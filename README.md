@@ -6,12 +6,12 @@
 
 <p align="center">
   Agentic news intelligence compiler. Self-hosted, model-agnostic, always-on.<br>
-  <a href="https://tyan3001.github.io/NEXUS/">Explore the pipeline →</a>
+  <a href="https://tyan3001.github.io/NEXUS/">Explore the system map →</a>
 </p>
 
 ---
 
-An agentic news intelligence compiler that polls 50+ RSS feeds across 8 languages, extracts structured events via LLM, resolves entities into a knowledge graph, identifies narrative threads with cross-source convergence/divergence analysis, generates daily briefings with podcast audio, delivers via Telegram, and runs 6 competing forecast engines benchmarked against real prediction markets.
+An agentic news intelligence compiler that polls 50+ RSS feeds across 8 languages, extracts structured events via LLM, resolves entities into a knowledge graph, identifies narrative threads with cross-source convergence/divergence analysis, generates daily briefings with podcast audio, delivers via Telegram, and produces actor-based Forward Look forecasts with optional Kalshi market anchoring.
 
 ## Features
 
@@ -28,7 +28,7 @@ An agentic news intelligence compiler that polls 50+ RSS feeds across 8 language
 - **Source auto-discovery** — LLM-powered RSS feed discovery for new topics
 - **Multi-provider LLM** — Gemini, OpenAI, Anthropic, DeepSeek, and Ollama (local)
 - **Budget controls** — Daily spend limits with automatic degradation strategies
-- **Prediction pipeline** — 6 competing forecast engines (actor, structural, graphrag, debate, perspective, naked baseline) with calibrated probabilities, Kalshi market benchmarking, and hindcast backtesting
+- **Forward Look** — actor-based forward-looking forecasts for topic claims, thread developments, and optional Kalshi-aligned market comparisons
 
 ## Quick Start
 
@@ -128,11 +128,9 @@ python -m nexus setup                   # Interactive CLI setup wizard
 python -m nexus sources check           # Test RSS feed health
 python -m nexus sources list            # List all global sources
 python -m nexus sources discover <slug> # Auto-discover RSS feeds for a topic
-python -m nexus forecast generate             # Generate predictions for eligible topics
-python -m nexus forecast resolve              # Resolve pending predictions against new events
-python -m nexus forecast benchmark            # Run Kalshi market benchmark
-python -m nexus forecast hindcast             # Backtest engines on historical data
-python -m nexus benchmark                     # Fast benchmark on saved fixtures
+python -m nexus forecast generate             # Generate actor-based Forward Look forecasts
+python -m nexus forecast resolve              # Resolve Kalshi-linked forecasts against settled markets
+python -m nexus forecast kalshi-loop --engine actor  # Optional Kalshi-aligned actor pass
 python -m nexus audit-sources <slug>          # Score feed relevance for a topic
 python -m nexus enrich-entities               # Backfill Wikipedia data for entities
 python -m nexus purge-empty-threads           # Remove orphaned threads with no events
@@ -207,7 +205,7 @@ POLL -> DEDUP -> INGEST -> FILTER -> EXTRACT -> DEDUP
                           (2-pass LLM)
     -> ENTITY RESOLVE -> SYNTHESIZE -> PERSIST THREADS
     -> REFRESH PAGES -> RENDER BRIEFING -> AUDIO PIPELINE
-    -> PREDICTION (6 engines, calibration, Kalshi benchmark)
+    -> FORWARD LOOK (actor engine, optional Kalshi anchoring)
     |                    |                    |
     v                    v                    v
 SQLite Knowledge      Telegram Bot         Dashboard
@@ -215,11 +213,15 @@ SQLite Knowledge      Telegram Bot         Dashboard
                        Q&A + alerts)        Jinja2)
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full module map and schema details. For a founder/team-facing product strategy memo on positioning and roadmap, see [docs/product-north-star.md](docs/product-north-star.md).
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full module map and schema details. The public docs front door for this release is this README plus the static [landing page](docs/index.html) and [system map](docs/pipeline.html).
 
-## Benchmark
+## Experimental / Lab
 
-Controlled experiment across 3 topics, 8 test suites, evaluated by two independent LLM judges (Gemini Pro + DeepSeek Reasoner, cross-judge Pearson r=0.86). Scores use anchored 2-10 rubrics with explicit level definitions. Supports cross-environment comparison via fixture export and re-judging with authoritative cloud models. Full methodology and per-suite breakdowns in [docs/benchmark-results.md](docs/benchmark-results.md).
+Nexus still ships the benchmark, hindcast, and forecast-lab tooling in-repo because it is a curious project and the research work matters. It is not part of the default `v0.1` setup or onboarding path.
+
+- Public story: dashboard, daily pipeline, threads, briefings, Forward Look, optional Kalshi comparison
+- Lab story: benchmark suites, hindcast, engine comparisons, calibration experiments
+- Benchmark methodology and results live in [docs/benchmark-results.md](docs/benchmark-results.md)
 
 ### Pipeline Quality (N=3 topics, mean +/- std)
 
@@ -245,7 +247,7 @@ Controlled experiment across 3 topics, 8 test suites, evaluated by two independe
 pip install -e ".[all,dev]"
 pytest -m "not e2e and not integration"  # Run the default local/CI test suite
 pytest -m e2e                   # Run E2E smoke tests (requires API keys)
-python -m nexus experiment      # Run benchmark suites (A-H)
+python -m nexus experiment      # Run internal benchmark suites (A-H)
 python -m nexus experiment --suite A,G --export-fixtures data/fixtures/local  # Export for cloud
 ```
 
@@ -254,7 +256,7 @@ python -m nexus experiment --suite A,G --export-fixtures data/fixtures/local  # 
 ```
 src/nexus/
   engine/         Pipeline: sources, ingestion, filtering, knowledge, synthesis, audio, projection
-    projection/   Prediction pipeline: 6 forecast engines, calibration, Kalshi benchmark, hindcast
+    projection/   Forward Look and forecast tooling, Kalshi integration, benchmark/hindcast experiments
   agent/          Telegram bot, Q&A, breaking news, delivery, web search
   scheduler/      APScheduler job definitions
   web/            FastAPI dashboard, setup wizard, settings, chat widget

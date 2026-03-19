@@ -3,6 +3,8 @@
 **Dataset**: 500 settled markets from Kalshi
 **Engines**: market, naked, structural, actor, graphrag, perspective, debate
 
+This document is part of the forecast lab. It is useful for calibration and internal comparison work, but it is not part of the default `v0.1` onboarding path.
+
 ## Overall Results
 
 | Engine | Mean Brier | Questions |
@@ -233,7 +235,7 @@ python scripts/analyze_kalshi_benchmark.py     # generate markdown report
 python scripts/build_kalshi_fixture.py --ingest  # store in forecast DB
 ```
 
-Ingested results appear on the `/predictions` dashboard tagged as **benchmark** (source type `kalshi_benchmark`). These are backtested predictions — the engines were given questions from already-settled Kalshi markets and scored against known outcomes. They are NOT live predictions.
+Ingested results appear on the `/benchmark` page tagged as **benchmark** (source type `kalshi_benchmark`). These are backtested forecasts — the engines were given questions from already-settled Kalshi markets and scored against known outcomes. They are not live Forward Look output.
 
 **Note**: The fixture files (`data/fixtures/`) are not committed to git — they contain Kalshi market data specific to this instance. Other users would need to run the full pipeline first to build their own fixture, which requires a Kalshi API key.
 
