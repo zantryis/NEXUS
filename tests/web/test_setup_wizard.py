@@ -1,5 +1,6 @@
 """Tests for the web setup wizard (3-step flow)."""
 
+import ipaddress
 import pytest
 from unittest.mock import patch, AsyncMock
 from httpx import AsyncClient, ASGITransport
@@ -193,6 +194,8 @@ async def test_setup_complete_writes_config(app_no_config, tmp_path):
         assert resp.status_code == 303
         assert resp.headers["location"] == "/?setup=complete"
         assert (data_dir / "config.yaml").exists()
+        assert (tmp_path / ".env").exists()
+        assert "GEMINI_API_KEY=test-gemini-key" in (tmp_path / ".env").read_text()
 
 
 @pytest.mark.asyncio
@@ -305,6 +308,20 @@ async def test_remote_setup_accepts_admin_token(app_no_config):
         resp = await client.get("/setup?admin_token=secret", follow_redirects=False)
         assert resp.status_code == 303
         assert "nexus_admin=" in resp.headers["set-cookie"]
+
+
+@pytest.mark.asyncio
+@patch.dict("os.environ", {"NEXUS_TRUST_DOCKER_GATEWAY": "1"})
+@patch(
+    "nexus.web.middleware._docker_gateway_ip",
+    return_value=ipaddress.ip_address("172.17.0.1"),
+)
+async def test_docker_gateway_setup_is_treated_as_local(mock_gateway, app_no_config):
+    """Docker localhost access is allowed only for the trusted bridge gateway."""
+    transport = ASGITransport(app=app_no_config, client=("172.17.0.1", 12345))
+    async with AsyncClient(transport=transport, base_url="http://localhost:8080") as client:
+        resp = await client.get("/setup")
+        assert resp.status_code == 200
 
 
 # ── Telegram validation tests (still on /setup/telegram/* endpoints) ──

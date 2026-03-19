@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 
 from nexus.config.loader import load_config
+from nexus.utils.runtime_env import load_runtime_env, runtime_env_path
 from nexus.utils.health import build_health_snapshot
 from nexus.web.app import get_store, get_templates
 
@@ -25,6 +26,17 @@ TOPIC_EMOJI = {
     "health": "&#129657;", "space": "&#128640;", "defense": "&#128737;&#65039;",
     "rugby": "&#127944;",
 }
+
+
+def _track_background_task(request: Request, task: asyncio.Task) -> asyncio.Task:
+    """Keep a strong reference to background tasks until they finish."""
+    tasks = getattr(request.app.state, "background_tasks", None)
+    if tasks is None:
+        request.app.state.background_tasks = set()
+        tasks = request.app.state.background_tasks
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
+    return task
 
 
 async def _enrich_cross_topic_signals(store, signals) -> list[dict]:
@@ -519,14 +531,13 @@ async def trigger_pipeline(request: Request):
     # Launch pipeline in background
     async def _run():
         try:
-            from dotenv import load_dotenv
             from telegram import Bot
             from nexus.agent.delivery import deliver_briefing
             from nexus.config.loader import load_config
             from nexus.llm.client import LLMClient
             from nexus.engine.pipeline import run_pipeline
 
-            load_dotenv(data_dir.parent / ".env")
+            load_runtime_env(runtime_env_path(data_dir))
             config = load_config(config_path)
 
             api_key = os.getenv("GEMINI_API_KEY")
@@ -568,7 +579,7 @@ async def trigger_pipeline(request: Request):
         except Exception as e:
             logger.error(f"Manual pipeline run failed: {e}", exc_info=True)
 
-    asyncio.create_task(_run())
+    _track_background_task(request, asyncio.create_task(_run()))
 
     return HTMLResponse(
         '<div id="pipeline-status" class="pipeline-controls-status status-running"'

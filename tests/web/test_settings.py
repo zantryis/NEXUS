@@ -115,6 +115,29 @@ async def test_settings_post_keys(settings_app):
 
 
 @pytest.mark.asyncio
+@patch.dict("os.environ", {"GEMINI_API_KEY": "old-key"}, clear=False)
+async def test_settings_restart_rebuilds_env_from_file(settings_app):
+    app, data_dir = settings_app
+    env_path = data_dir.parent / ".env"
+    env_path.write_text("GEMINI_API_KEY=new-key\n")
+
+    captured = {}
+
+    def fake_execve(executable, argv, env):
+        captured["executable"] = executable
+        captured["argv"] = argv
+        captured["env"] = env
+
+    transport = ASGITransport(app=app)
+    with patch("nexus.web.routes.settings.os.execve", side_effect=fake_execve):
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/settings/restart", follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert captured["env"]["GEMINI_API_KEY"] == "new-key"
+
+
+@pytest.mark.asyncio
 async def test_settings_add_topic(settings_app):
     app, data_dir = settings_app
     transport = ASGITransport(app=app)

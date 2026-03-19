@@ -8,14 +8,43 @@ from nexus.engine.pipeline import run_pipeline, _event_cap_for_topic
 from nexus.llm.client import UsageTracker
 
 
+class _FakeLLMResponse:
+    def __init__(self, text: str):
+        self.text = text
+
+
+class FakePipelineLLM:
+    """Minimal async LLM stub for pipeline tests."""
+
+    def __init__(self):
+        self.usage = UsageTracker()
+        self._store = None
+
+    async def set_store(self, store) -> None:
+        self._store = store
+
+    async def flush_usage(self) -> None:
+        return None
+
+    async def generate(self, *args, **kwargs):
+        return _FakeLLMResponse("- Highlight")
+
+    async def complete(self, *args, **kwargs):
+        if kwargs.get("json_response"):
+            return "[]"
+        return "Stub content"
+
+
 @pytest.fixture
 def config():
-    return NexusConfig(
+    cfg = NexusConfig(
         user=UserConfig(name="Tristan", timezone="America/Denver"),
         topics=[
             TopicConfig(name="AI Research", priority="high", subtopics=["agents"]),
         ],
     )
+    cfg.breaking_news.enabled = False
+    return cfg
 
 
 @pytest.fixture
@@ -25,8 +54,7 @@ def data_dir(tmp_path):
 
 @pytest.mark.asyncio
 async def test_pipeline_produces_briefing(config, data_dir):
-    mock_llm = AsyncMock()
-    mock_llm.usage = UsageTracker()
+    mock_llm = FakePipelineLLM()
 
     with patch("nexus.engine.pipeline.load_source_registry") as mock_registry, \
          patch("nexus.engine.pipeline.poll_all_feeds") as mock_poll, \
@@ -98,8 +126,7 @@ def test_event_cap_max_events_override():
 @pytest.mark.asyncio
 async def test_run_pipeline_passes_api_keys_to_audio(config, data_dir):
     """run_pipeline should forward openai and elevenlabs keys to run_audio_pipeline."""
-    mock_llm = AsyncMock()
-    mock_llm.usage = UsageTracker()
+    mock_llm = FakePipelineLLM()
 
     with patch("nexus.engine.pipeline.load_source_registry") as mock_registry, \
          patch("nexus.engine.pipeline.poll_all_feeds") as mock_poll, \
@@ -160,8 +187,8 @@ async def test_run_pipeline_auto_discovers_when_no_sources(data_dir):
         topics=[TopicConfig(name="Space Exploration", subtopics=["rockets"])],
         sources=SourcesConfig(discover_new_sources=True),
     )
-    mock_llm = AsyncMock()
-    mock_llm.usage = UsageTracker()
+    config.breaking_news.enabled = False
+    mock_llm = FakePipelineLLM()
 
     with patch("nexus.engine.pipeline.load_source_registry") as mock_registry, \
          patch("nexus.engine.sources.discovery.discover_sources", new_callable=AsyncMock) as mock_discover, \
@@ -226,8 +253,8 @@ async def test_run_pipeline_skips_topic_when_no_sources_and_discovery_disabled(d
         topics=[TopicConfig(name="Space Exploration")],
         sources=SourcesConfig(discover_new_sources=False),
     )
-    mock_llm = AsyncMock()
-    mock_llm.usage = UsageTracker()
+    config.breaking_news.enabled = False
+    mock_llm = FakePipelineLLM()
 
     with patch("nexus.engine.pipeline.load_source_registry") as mock_registry, \
          patch("nexus.engine.pipeline.run_topic_pipeline", new_callable=AsyncMock) as mock_topic, \

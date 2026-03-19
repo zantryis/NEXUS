@@ -4,8 +4,10 @@ services:
     ports:
       - "8080:8080"
     volumes:
+      - ./.env:/app/.env
       - ./data:/app/data
+    environment:
+      - NEXUS_TRUST_DOCKER_GATEWAY=1
     env_file:
-      - path: .env
-        required: false
+      - .env
     restart: unless-stopped

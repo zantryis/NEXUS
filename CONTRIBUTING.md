@@ -24,13 +24,13 @@ We follow **TDD** (test-driven development):
 
 ```bash
 # Run all unit tests
-.venv/bin/pytest
+.venv/bin/pytest -m "not e2e and not integration"
 
 # Run a specific test file
 .venv/bin/pytest tests/web/test_settings.py -v
 
-# Skip integration tests (require live API keys)
-.venv/bin/pytest -m "not integration"
+# Match the default local/CI suite
+.venv/bin/pytest -m "not e2e and not integration"
 
 # Run E2E smoke tests (requires API keys in .env)
 .venv/bin/pytest -m e2e -v
@@ -80,6 +80,8 @@ Fixture files are JSON snapshots of LLM responses. When adding a new pipeline st
 2. Write descriptive commit messages (focus on *why*, not *what*)
 3. Ensure all tests pass
 4. Keep PRs focused — one feature or fix per PR
+
+For release sign-off, use [docs/release-checklist.md](docs/release-checklist.md).
 
 ## Project Structure
 

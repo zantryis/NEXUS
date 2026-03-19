@@ -1,5 +1,6 @@
 """ASGI middleware for setup redirect, admin protection, security headers, and demo mode."""
 
+import functools
 import hmac
 import ipaddress
 import os
@@ -35,23 +36,54 @@ class SetupRedirectMiddleware:
         await self.app(scope, receive, send)
 
 
-def _is_private_ip(addr: str) -> bool:
-    """Return True for loopback or private-range IPs (Docker bridge, LAN)."""
+def _is_loopback_ip(addr: str) -> bool:
+    """Return True when the address is a loopback interface."""
     try:
         ip = ipaddress.ip_address(addr)
-        return ip.is_loopback or ip.is_private
+        return ip.is_loopback
     except ValueError:
         return False
 
 
-def _is_local_request(request: Request) -> bool:
-    """Treat loopback and private-range client IPs as local access.
+def _trust_docker_gateway() -> bool:
+    """Allow Docker bridge gateway requests only when explicitly enabled."""
+    return os.getenv("NEXUS_TRUST_DOCKER_GATEWAY", "").lower() in ("1", "true", "yes")
 
-    Inside Docker, the client IP is the bridge network (e.g. 172.17.x.x),
-    which falls within RFC1918 private ranges.
-    """
+
+@functools.lru_cache(maxsize=1)
+def _docker_gateway_ip() -> ipaddress.IPv4Address | None:
+    """Read the default IPv4 gateway from /proc/net/route for Docker localhost access."""
+    route_path = Path("/proc/net/route")
+    if not route_path.exists():
+        return None
+
+    try:
+        for line in route_path.read_text().splitlines()[1:]:
+            fields = line.split()
+            if len(fields) < 3 or fields[1] != "00000000" or fields[0] == "lo":
+                continue
+            gateway_hex = fields[2]
+            gateway_int = int(gateway_hex, 16)
+            return ipaddress.ip_address(gateway_int.to_bytes(4, "little"))
+    except (OSError, ValueError):
+        return None
+
+    return None
+
+
+def _is_local_request(request: Request) -> bool:
+    """Allow same-machine access only, with an opt-in Docker gateway exception."""
     if request.client and request.client.host:
-        return _is_private_ip(request.client.host)
+        client_host = request.client.host
+        if _is_loopback_ip(client_host):
+            return True
+        if _trust_docker_gateway():
+            gateway_ip = _docker_gateway_ip()
+            if gateway_ip is not None:
+                try:
+                    return ipaddress.ip_address(client_host) == gateway_ip
+                except ValueError:
+                    return False
     return False
 
 
@@ -96,7 +128,7 @@ class AdminProtectionMiddleware:
         remote_hint = (
             "Set NEXUS_ADMIN_TOKEN and reopen this URL with ?admin_token=YOUR_TOKEN."
             if token_configured else
-            "Admin routes are limited to localhost unless NEXUS_ADMIN_TOKEN is configured."
+            "Admin routes are limited to same-machine access unless NEXUS_ADMIN_TOKEN is configured."
         )
         if request.method == "GET":
             return HTMLResponse(remote_hint, status_code=403)

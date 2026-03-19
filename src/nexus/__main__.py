@@ -8,7 +8,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from dotenv import load_dotenv
+from nexus.utils.runtime_env import load_runtime_env as load_dotenv
 
 
 def _is_loopback_host(host: str) -> bool:
@@ -22,7 +22,7 @@ def _log_bind_warning(host: str, port: int) -> None:
         return
     logging.getLogger(__name__).warning(
         "Binding Nexus to http://%s:%s exposes the dashboard on your network. "
-        "Setup/settings stay localhost-only unless NEXUS_ADMIN_TOKEN is set.",
+        "Setup/settings stay limited to same-machine access unless NEXUS_ADMIN_TOKEN is set.",
         host,
         port,
     )

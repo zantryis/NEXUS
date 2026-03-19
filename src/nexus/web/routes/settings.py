@@ -12,6 +12,7 @@ from starlette.background import BackgroundTask
 
 from nexus.config.presets import preset_names
 from nexus.config.writer import write_config, write_env
+from nexus.utils.runtime_env import build_runtime_env, load_runtime_env, runtime_env_path
 from nexus.web.app import get_templates
 
 logger = logging.getLogger(__name__)
@@ -167,7 +168,8 @@ async def settings_save_all(request: Request):
         if val:
             keys[p["key"]] = val
     if keys:
-        write_env(data_dir.parent, keys)
+        env_path = write_env(runtime_env_path(data_dir).parent, keys)
+        load_runtime_env(env_path)
 
     # ─ User ─
     raw.setdefault("user", {})
@@ -246,8 +248,11 @@ async def settings_save_all(request: Request):
 @router.post("/settings/restart")
 async def settings_restart(request: Request):
     """Restart the Nexus process."""
+    env_path = runtime_env_path(_data_dir(request))
+
     def _restart():
-        os.execv(sys.executable, [sys.executable, "-m", "nexus"] + sys.argv[1:])
+        argv = [sys.executable, "-m", "nexus"] + sys.argv[1:]
+        os.execve(sys.executable, argv, build_runtime_env(env_path))
 
     return RedirectResponse(
         url="/settings?saved=restarting",
@@ -352,7 +357,8 @@ async def settings_update_keys(request: Request):
             keys[p["key"]] = val
 
     if keys:
-        write_env(data_dir.parent, keys)
+        env_path = write_env(runtime_env_path(data_dir).parent, keys)
+        load_runtime_env(env_path)
 
     return RedirectResponse(url="/settings?saved=keys", status_code=303)
 

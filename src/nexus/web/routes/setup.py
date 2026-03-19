@@ -17,6 +17,7 @@ from fastapi.responses import RedirectResponse, HTMLResponse
 
 from nexus.cli.setup import PROVIDER_INFO, PROVIDER_TIERS, TOPIC_CHOICES
 from nexus.config.writer import write_config, write_env
+from nexus.utils.runtime_env import load_runtime_env, runtime_env_path
 from nexus.web.app import get_templates
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 TOTAL_STEPS = 3
+
+
+def _track_background_task(request: Request, task: asyncio.Task) -> asyncio.Task:
+    """Keep a strong reference to background tasks until they finish."""
+    tasks = getattr(request.app.state, "background_tasks", None)
+    if tasks is None:
+        request.app.state.background_tasks = set()
+        tasks = request.app.state.background_tasks
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
+    return task
 
 
 def _get_session(request: Request) -> tuple[str, dict]:
@@ -270,7 +282,8 @@ async def setup_complete(request: Request):
     # Write API keys to .env
     keys = session.get("keys", {})
     if keys:
-        write_env(data_dir.parent, keys)
+        env_path = write_env(runtime_env_path(data_dir).parent, keys)
+        load_runtime_env(env_path)
 
     # Clean up session
     sessions = getattr(request.app.state, "setup_sessions", {})
@@ -287,7 +300,6 @@ async def setup_complete(request: Request):
 def _auto_launch_pipeline(request: Request, data_dir: Path):
     """Kick off the pipeline immediately after setup completes."""
     import os
-    from dotenv import load_dotenv
 
     # Testing gate: skip real pipeline in E2E tests
     if os.environ.get("NEXUS_SKIP_AUTO_PIPELINE"):
@@ -302,7 +314,8 @@ def _auto_launch_pipeline(request: Request, data_dir: Path):
     if not config_path.exists():
         return
 
-    load_dotenv(data_dir.parent / ".env")
+    env_path = runtime_env_path(data_dir)
+    load_runtime_env(env_path)
 
     # Set status with start time for elapsed display
     request.app.state.pipeline_status = {
@@ -419,7 +432,7 @@ def _auto_launch_pipeline(request: Request, data_dir: Path):
                 "started_at": status.get("started_at"),
             }
 
-    asyncio.create_task(_run_pipeline())
+    _track_background_task(request, asyncio.create_task(_run_pipeline()))
 
 
 # ── Pipeline launch (manual trigger from dashboard empty state) ──
@@ -429,7 +442,6 @@ def _auto_launch_pipeline(request: Request, data_dir: Path):
 async def setup_launch(request: Request):
     """Start the pipeline in a background task (manual trigger)."""
     import os
-    from dotenv import load_dotenv
 
     data_dir = _data_dir(request)
 
@@ -450,7 +462,7 @@ async def setup_launch(request: Request):
             'Error: No config found. Please complete setup first.</div>'
         )
 
-    load_dotenv(data_dir.parent / ".env")
+    load_runtime_env(runtime_env_path(data_dir))
 
     # Validate required API key before launching
     from nexus.config.loader import load_config as _load_config

@@ -37,12 +37,13 @@ An agentic news intelligence compiler that polls 50+ RSS feeds across 8 language
 ```bash
 git clone https://github.com/Tyan3001/NEXUS.git
 cd NEXUS
+cp .env.example .env
 docker compose up
 ```
 
-Open `http://localhost:8080` — the web setup wizard will guide you through configuration. No manual file editing needed.
+Open `http://localhost:8080` — the web setup wizard will guide you through configuration. No manual file editing is required before setup; the wizard persists your keys into the project `.env`.
 
-After the wizard saves `data/config.yaml`, restart the container once so the scheduler, Telegram bot, and other always-on services start with your new config.
+After the wizard saves `data/config.yaml` and `.env`, restart the container once so the scheduler, Telegram bot, and other always-on services start with the updated environment.
 
 ### Without Docker
 
@@ -166,7 +167,8 @@ At least one LLM API key is required (unless using the free/Ollama preset).
 
 `python -m nexus run` binds to `127.0.0.1` by default. If you intentionally expose Nexus with `--host 0.0.0.0`, the dashboard becomes network-reachable.
 
-- `/setup` and `/settings` are localhost-only unless you set `NEXUS_ADMIN_TOKEN`
+- `/setup` and `/settings` are limited to same-machine access unless you set `NEXUS_ADMIN_TOKEN`
+- Docker Compose enables a narrow local bridge-gateway exception so `http://localhost:8080` still works from your host browser
 - Remote admin access works by opening `http://your-host:8080/settings?admin_token=YOUR_TOKEN` once; Nexus then stores a short-lived admin cookie
 - After first-run setup, the setup wizard is disabled unless you set `NEXUS_ALLOW_SETUP_RESET=1`
 - If you publish Nexus behind a reverse proxy or tunnel, add external auth there too
@@ -241,7 +243,7 @@ Controlled experiment across 3 topics, 8 test suites, evaluated by two independe
 
 ```bash
 pip install -e ".[all,dev]"
-pytest                          # Run unit tests
+pytest -m "not e2e and not integration"  # Run the default local/CI test suite
 pytest -m e2e                   # Run E2E smoke tests (requires API keys)
 python -m nexus experiment      # Run benchmark suites (A-H)
 python -m nexus experiment --suite A,G --export-fixtures data/fixtures/local  # Export for cloud

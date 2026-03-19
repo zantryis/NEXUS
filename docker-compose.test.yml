@@ -9,14 +9,15 @@ services:
     ports:
       - "8081:8080"
     volumes:
+      - ./.env:/app/.env
       - ./data-test-a:/app/data
     env_file:
-      - path: .env
-        required: false
+      - .env
     environment:
       - NEXUS_SMOKE_MODE=20
       - NEXUS_AUTO_RUN=1
       - NEXUS_DEMO_MODE=
+      - NEXUS_TRUST_DOCKER_GATEWAY=1
       - TELEGRAM_BOT_TOKEN=
     restart: "no"
 
@@ -26,14 +27,15 @@ services:
     ports:
       - "8082:8080"
     volumes:
+      - ./.env:/app/.env
       - ./data-test-b:/app/data
     env_file:
-      - path: .env
-        required: false
+      - .env
     environment:
       - NEXUS_SMOKE_MODE=20
       - NEXUS_AUTO_RUN=1
       - NEXUS_DEMO_MODE=
+      - NEXUS_TRUST_DOCKER_GATEWAY=1
       - TELEGRAM_BOT_TOKEN=
     restart: "no"
 
@@ -43,14 +45,15 @@ services:
     ports:
       - "8083:8080"
     volumes:
+      - ./.env:/app/.env
       - ./data-test-c:/app/data
     env_file:
-      - path: .env
-        required: false
+      - .env
     environment:
       - NEXUS_SMOKE_MODE=20
       - NEXUS_AUTO_RUN=1
       - NEXUS_DEMO_MODE=
+      - NEXUS_TRUST_DOCKER_GATEWAY=1
       - TELEGRAM_BOT_TOKEN=
     restart: "no"
 
@@ -60,13 +63,14 @@ services:
     ports:
       - "8084:8080"
     volumes:
+      - ./.env:/app/.env
       - ./data-test-d:/app/data
     env_file:
-      - path: .env
-        required: false
+      - .env
     environment:
       - NEXUS_SMOKE_MODE=20
       - NEXUS_AUTO_RUN=1
       - NEXUS_DEMO_MODE=
+      - NEXUS_TRUST_DOCKER_GATEWAY=1
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN_TEST:-}
     restart: "no"

@@ -1,5 +1,6 @@
 """Tests for ASGI middleware: admin protection and locality checks."""
 
+import ipaddress
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -9,36 +10,36 @@ from httpx import AsyncClient, ASGITransport
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.config.loader import load_config
 from nexus.web.app import create_app
-from nexus.web.middleware import _is_local_request, _is_private_ip
+from nexus.web.middleware import _is_local_request, _is_loopback_ip
 
 
 # --- Unit tests for helper functions ---
 
 
-class TestIsPrivateIp:
+class TestIsLoopbackIp:
     def test_loopback(self):
-        assert _is_private_ip("127.0.0.1") is True
+        assert _is_loopback_ip("127.0.0.1") is True
 
     def test_ipv6_loopback(self):
-        assert _is_private_ip("::1") is True
+        assert _is_loopback_ip("::1") is True
 
-    def test_docker_bridge(self):
-        assert _is_private_ip("172.17.0.2") is True
+    def test_docker_bridge_not_loopback(self):
+        assert _is_loopback_ip("172.17.0.2") is False
 
-    def test_lan_192(self):
-        assert _is_private_ip("192.168.1.100") is True
+    def test_lan_192_not_loopback(self):
+        assert _is_loopback_ip("192.168.1.100") is False
 
-    def test_lan_10(self):
-        assert _is_private_ip("10.0.0.1") is True
+    def test_lan_10_not_loopback(self):
+        assert _is_loopback_ip("10.0.0.1") is False
 
     def test_public_ip(self):
-        assert _is_private_ip("8.8.8.8") is False
+        assert _is_loopback_ip("8.8.8.8") is False
 
     def test_public_ip_2(self):
-        assert _is_private_ip("93.184.216.34") is False
+        assert _is_loopback_ip("93.184.216.34") is False
 
     def test_invalid_string(self):
-        assert _is_private_ip("not-an-ip") is False
+        assert _is_loopback_ip("not-an-ip") is False
 
 
 class TestIsLocalRequest:
@@ -63,9 +64,27 @@ class TestIsLocalRequest:
         request = self._make_request(client_host="::1")
         assert _is_local_request(request) is True
 
-    def test_docker_bridge_is_local(self):
+    def test_private_network_not_local_by_default(self):
         request = self._make_request(client_host="172.17.0.2")
+        assert _is_local_request(request) is False
+
+    @patch.dict("os.environ", {"NEXUS_TRUST_DOCKER_GATEWAY": "1"})
+    @patch(
+        "nexus.web.middleware._docker_gateway_ip",
+        return_value=ipaddress.ip_address("172.17.0.1"),
+    )
+    def test_exact_trusted_docker_gateway_is_local(self, mock_gateway):
+        request = self._make_request(client_host="172.17.0.1")
         assert _is_local_request(request) is True
+
+    @patch.dict("os.environ", {"NEXUS_TRUST_DOCKER_GATEWAY": "1"})
+    @patch(
+        "nexus.web.middleware._docker_gateway_ip",
+        return_value=ipaddress.ip_address("172.17.0.1"),
+    )
+    def test_non_gateway_private_ip_still_not_local(self, mock_gateway):
+        request = self._make_request(client_host="172.17.0.2")
+        assert _is_local_request(request) is False
 
     def test_public_ip_not_local(self):
         request = self._make_request(client_host="8.8.8.8", host_header="example.com")
@@ -115,6 +134,20 @@ async def admin_app(tmp_path):
 async def test_local_request_passes_through(admin_app):
     """GET /settings from localhost (127.0.0.1) is allowed."""
     transport = ASGITransport(app=admin_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/settings")
+        assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+@patch.dict("os.environ", {"NEXUS_TRUST_DOCKER_GATEWAY": "1"})
+@patch(
+    "nexus.web.middleware._docker_gateway_ip",
+    return_value=ipaddress.ip_address("172.17.0.1"),
+)
+async def test_trusted_docker_gateway_passes_through(mock_gateway, admin_app):
+    """GET /settings from the trusted Docker gateway is allowed for localhost Docker use."""
+    transport = ASGITransport(app=admin_app, client=("172.17.0.1", 12345))
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/settings")
         assert resp.status_code == 200

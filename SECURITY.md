@@ -33,7 +33,8 @@ The following are out of scope:
 ## Security Design
 
 - The dashboard binds to `127.0.0.1` by default; `--host 0.0.0.0` requires explicit opt-in
-- `/setup` and `/settings` routes are localhost-only unless `NEXUS_ADMIN_TOKEN` is set
+- `/setup` and `/settings` routes are limited to same-machine access unless `NEXUS_ADMIN_TOKEN` is set
+- Docker Compose enables a narrow bridge-gateway exception so same-machine `localhost` setup still works from the host browser
 - Config and `.env` files are written with `0o600` permissions
 - All user-generated content is sanitized via Jinja2 auto-escaping and `bleach`
 - CSP, X-Frame-Options, and other security headers are set by middleware

@@ -1,7 +1,8 @@
 """Tests for the Run Now pipeline trigger endpoints."""
 
+import asyncio
 import pytest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 from httpx import AsyncClient, ASGITransport
 
 from nexus.engine.knowledge.store import KnowledgeStore
@@ -11,7 +12,14 @@ from nexus.web.app import create_app
 @pytest.fixture
 async def app(tmp_path):
     """Create app with minimal config and injected store."""
-    (tmp_path / "config.yaml").write_text("preset: balanced\ntopics:\n  - name: test\n")
+    (tmp_path / "config.yaml").write_text(
+        "preset: balanced\n"
+        "user:\n"
+        "  name: Test\n"
+        "  timezone: UTC\n"
+        "topics:\n"
+        "  - name: test\n"
+    )
     app = create_app(tmp_path / "test.db", data_dir=tmp_path)
 
     store = KnowledgeStore(tmp_path / "test.db")
@@ -26,7 +34,14 @@ async def app(tmp_path):
 async def app_no_config(tmp_path):
     """App where config.yaml exists initially (for middleware) but gets removed."""
     config_path = tmp_path / "config.yaml"
-    config_path.write_text("preset: balanced\ntopics:\n  - name: test\n")
+    config_path.write_text(
+        "preset: balanced\n"
+        "user:\n"
+        "  name: Test\n"
+        "  timezone: UTC\n"
+        "topics:\n"
+        "  - name: test\n"
+    )
     app = create_app(tmp_path / "test.db", data_dir=tmp_path)
 
     store = KnowledgeStore(tmp_path / "test.db")
@@ -42,13 +57,44 @@ async def app_no_config(tmp_path):
 
 async def test_trigger_pipeline_success(app):
     """POST /api/pipeline/run returns running status when idle."""
+    def drop_task(coro):
+        coro.close()
+        task = Mock()
+        task.add_done_callback.return_value = None
+        return task
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        with patch("nexus.web.routes.dashboard.asyncio.create_task"):
+        with patch("nexus.web.routes.dashboard.asyncio.create_task", side_effect=drop_task):
             resp = await client.post("/api/pipeline/run")
     assert resp.status_code == 200
     assert "Pipeline started" in resp.text
     assert "hx-get" in resp.text  # polling enabled
+
+
+async def test_trigger_pipeline_reloads_updated_env(app, tmp_path):
+    """Manual pipeline runs should reload .env and override stale process values."""
+    env_path = tmp_path / ".env"
+    env_path.write_text("GEMINI_API_KEY=new-key\n")
+
+    captured = {}
+
+    class FakeLLM:
+        def __init__(self, *args, **kwargs):
+            captured["api_key"] = kwargs.get("api_key")
+
+    transport = ASGITransport(app=app)
+    with patch.dict("os.environ", {"GEMINI_API_KEY": "old-key"}, clear=False):
+        with patch("nexus.llm.client.LLMClient", FakeLLM):
+            with patch("nexus.engine.pipeline.run_pipeline", new=AsyncMock(return_value=tmp_path / "briefing.md")):
+                async with AsyncClient(transport=transport, base_url="http://test") as client:
+                    resp = await client.post("/api/pipeline/run")
+                tasks = tuple(getattr(app.state, "background_tasks", ()))
+                if tasks:
+                    await asyncio.gather(*tasks)
+
+    assert resp.status_code == 200
+    assert captured["api_key"] == "new-key"
 
 
 async def test_trigger_rejects_when_running(app):

@@ -17,6 +17,7 @@ dependencies = [
     "openai>=1.0",
     "aiosqlite>=0.20",
     "httpx>=0.27",
+    "pyasn1>=0.6.3",
 ]
 
 [project.optional-dependencies]
@@ -74,6 +75,7 @@ asyncio_mode = "auto"
 addopts = "-m 'not e2e and not integration' --timeout=15 --timeout-method=thread"
 filterwarnings = [
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",
+    "ignore::DeprecationWarning:pydub\\.utils",
 ]
 markers = [
     "e2e: End-to-end tests hitting real APIs (run with: -m e2e)",
