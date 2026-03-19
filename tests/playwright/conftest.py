@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+pytest.importorskip("playwright", reason="playwright not installed — skip E2E tests")
+
 # Mark all tests in this directory as e2e
 pytestmark = pytest.mark.e2e
 
