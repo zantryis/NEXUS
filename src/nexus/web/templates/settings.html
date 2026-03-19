@@ -280,7 +280,7 @@
                 {% if config and config.telegram.enabled and config.telegram.chat_id %}
                 <span class="form-hint" style="color:var(--success)">Connected (chat_id: {{ config.telegram.chat_id }})</span>
                 {% elif config and config.telegram.enabled %}
-                <span class="form-hint" style="color:var(--warning)">Not connected — click "Test Connection" then send /start to your bot</span>
+                <span class="form-hint" style="color:var(--warning)">No chat_id — send <code>/start</code> to your bot on Telegram to enable delivery</span>
                 {% else %}
                 <span class="form-hint">Set TELEGRAM_BOT_TOKEN in API Keys, then enable and test.</span>
                 {% endif %}

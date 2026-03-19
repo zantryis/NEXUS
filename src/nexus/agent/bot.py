@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from nexus.config.models import NexusConfig
 from nexus.engine.knowledge.store import KnowledgeStore
+from nexus.llm.budget import BudgetExceededError
 from nexus.llm.client import LLMClient
 from nexus.agent.qa import answer_question
 from nexus.agent.delivery import (
@@ -472,6 +473,19 @@ class NexusBot:
                     )
                 except Exception:
                     await update.message.reply_text(chunk)
+
+        except BudgetExceededError:
+            done.set()
+            await animation_task
+            logger.warning(f"Q&A budget exceeded for chat {chat_id}")
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=loading_msg.message_id,
+                    text="Daily budget reached. Try again tomorrow or increase your budget in Settings.",
+                )
+            except Exception:
+                pass
 
         except Exception as e:
             done.set()

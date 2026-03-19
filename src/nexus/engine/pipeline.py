@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import time
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -30,6 +31,14 @@ from nexus.llm.client import LLMClient, _resolve_provider
 from nexus.testing.fixtures import FixtureCapture, partition_by_date
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class TopicPipelineResult:
+    """Return value from run_topic_pipeline with metrics for the outer loop."""
+    synthesis: TopicSynthesis
+    articles: list = field(default_factory=list)  # filtered ContentItem list
+    extracted_event_count: int = 0
 
 
 async def _generate_topic_highlight(
@@ -148,7 +157,7 @@ async def run_topic_pipeline(
     max_ingest: int | None = None,
     bg_tasks: list | None = None,
     progress_status: dict | None = None,
-) -> TopicSynthesis:
+) -> TopicPipelineResult:
     """Run the pipeline for a single topic: poll → ingest → filter → events → synthesize."""
     slug = topic.name.lower().replace(" ", "-").replace("/", "-")
     processing_date = run_date or date.today()
@@ -413,7 +422,11 @@ async def run_topic_pipeline(
     parts = " | ".join(f"{k}={v:.1f}s" for k, v in timings.items())
     logger.info(f"[{topic.name}] Pipeline timing: {parts} | total={total:.1f}s")
 
-    return synthesis
+    return TopicPipelineResult(
+        synthesis=synthesis,
+        articles=relevant,
+        extracted_event_count=len(extracted_events),
+    )
 
 
 async def run_pipeline(
@@ -425,6 +438,7 @@ async def run_pipeline(
     max_ingest: int | None = None,
     trigger: str = "manual",
     progress_status: dict | None = None,
+    store: KnowledgeStore | None = None,
 ) -> Path:
     """Run the full daily engine pipeline. Returns path to generated briefing."""
     pipeline_start = time.monotonic()
@@ -433,6 +447,7 @@ async def run_pipeline(
     all_articles: list[ContentItem] = []
     all_events: list[Event] = []
     extracted_event_count = 0
+    skipped_topics: list[dict] = []
 
     def _progress(stage: str, topic_index: int = 0):
         """Update progress_status dict if provided."""
@@ -444,15 +459,18 @@ async def run_pipeline(
     if capture and fixture_dir is None:
         fixture_dir = Path("tests/fixtures")
 
-    # Initialize knowledge store
-    store = KnowledgeStore(data_dir / "knowledge.db")
-    await store.initialize()
+    # Initialize knowledge store (reuse injected store or create our own)
+    own_store = store is None
+    if own_store:
+        store = KnowledgeStore(data_dir / "knowledge.db")
+        await store.initialize()
 
     # Record pipeline run
     topic_slugs = [_topic_slug(t.name) for t in config.topics]
     run_id = await store.start_pipeline_run(topic_slugs, trigger=trigger)
 
     # Attach store for persistent cost tracking + budget sync
+    previous_llm_store = getattr(llm, "_store", None)
     await llm.set_store(store)
 
     bg_tasks: list[asyncio.Task] = []
@@ -484,6 +502,7 @@ async def run_pipeline(
 
             if not sources:
                 logger.warning(f"[{topic.name}] No sources available — skipping")
+                skipped_topics.append({"name": topic.name, "reason": "no_sources"})
                 continue
 
             cap = None
@@ -491,13 +510,15 @@ async def run_pipeline(
                 slug = topic.name.lower().replace(" ", "-").replace("/", "-")
                 cap = FixtureCapture(fixture_dir, slug)
             try:
-                syn = await run_topic_pipeline(llm, topic, data_dir, sources,
-                                               run_date=date.today(),
-                                               store=store, capture=cap,
-                                               max_ingest=max_ingest,
-                                               bg_tasks=bg_tasks,
-                                               progress_status=progress_status)
-                syntheses.append(syn)
+                result = await run_topic_pipeline(llm, topic, data_dir, sources,
+                                                  run_date=date.today(),
+                                                  store=store, capture=cap,
+                                                  max_ingest=max_ingest,
+                                                  bg_tasks=bg_tasks,
+                                                  progress_status=progress_status)
+                syntheses.append(result.synthesis)
+                all_articles.extend(result.articles)
+                extracted_event_count += result.extracted_event_count
             except Exception:
                 logger.exception(f"[{topic.name}] Topic pipeline failed — skipping")
                 continue
@@ -614,6 +635,9 @@ async def run_pipeline(
             run_id, article_count=total_articles,
             event_count=total_events, cost_usd=total_cost,
         )
+        if skipped_topics:
+            names = ", ".join(t["name"] for t in skipped_topics)
+            logger.warning(f"Pipeline run {run_id} skipped {len(skipped_topics)} topic(s): {names}")
 
         # Post-pipeline background tasks (non-blocking, fire-and-forget)
         async def _post_pipeline_tasks():
@@ -653,7 +677,12 @@ async def run_pipeline(
             for t in pending:
                 t.cancel()
         await llm.flush_usage()
-        await store.close()
+        if own_store:
+            await store.close()
+        elif previous_llm_store is not None:
+            # Restore runner's store on the LLM client so it isn't left
+            # pointing at a store it doesn't own.
+            await llm.set_store(previous_llm_store)
 
 
 def _topic_slug(name: str) -> str:

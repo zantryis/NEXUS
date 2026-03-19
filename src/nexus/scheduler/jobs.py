@@ -49,6 +49,7 @@ async def daily_pipeline_job(
             elevenlabs_api_key=elevenlabs_api_key,
             max_ingest=max_ingest,
             trigger="scheduled",
+            store=store,
         )
         logger.info(f"Daily pipeline complete: {briefing_path}")
 

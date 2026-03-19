@@ -30,22 +30,20 @@
                     <span class="theme-icon-dark">&#9789;</span>
                     <span class="theme-icon-light">&#9728;</span>
                 </button>
-                {% if has_data() %}
                 <div class="nav-dropdown">
                     <button class="nav-link nav-more-btn" aria-expanded="false">More</button>
                     <div class="nav-dropdown-menu">
+                        {% if has_data() %}
                         <a href="/changes/">Changes</a>
                         <a href="/filters/">Filters</a>
                         <a href="/entities/">Entities</a>
+                        <a href="/benchmark">Benchmark</a>
+                        {% endif %}
                         <a href="/sources/">Sources</a>
                         <a href="/cost">Cost</a>
-                        <a href="/benchmark">Benchmark</a>
                         <a href="/settings">Settings</a>
                     </div>
                 </div>
-                {% else %}
-                <a href="/settings" class="nav-link">Settings</a>
-                {% endif %}
             </div>
         </nav>
     </header>
@@ -59,9 +57,9 @@
             <span class="footer-links">
                 {% if has_data() %}
                 <a href="/entities/">Entities</a>
+                {% endif %}
                 <a href="/sources/">Sources</a>
                 <a href="/cost">Cost</a>
-                {% endif %}
                 <a href="/settings">Settings</a>
                 {% if has_data() %}
                 <a href="/feed.xml">Podcast RSS</a>

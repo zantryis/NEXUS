@@ -1,22 +1,49 @@
 """FastAPI application factory with KnowledgeStore lifespan."""
 
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from nexus.engine.knowledge.store import KnowledgeStore
+
+
+class HasDataMiddleware(BaseHTTPMiddleware):
+    """Periodically refresh app.state.has_data so nav updates after pipeline runs."""
+
+    _checked_at: float = 0.0
+
+    async def dispatch(self, request, call_next):
+        now = time.monotonic()
+        if not request.url.path.startswith("/static") and now - self._checked_at > 30.0:
+            store = getattr(request.app.state, "store", None)
+            if store:
+                try:
+                    cursor = await store.db.execute("SELECT 1 FROM events LIMIT 1")
+                    row = await cursor.fetchone()
+                    request.app.state.has_data = row is not None
+                except Exception:
+                    pass
+            self._checked_at = now
+        return await call_next(request)
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """Open KnowledgeStore on startup, close on shutdown."""
-    store = KnowledgeStore(app.state.db_path)
-    await store.initialize()
-    app.state.store = store
+    # If runner already injected a store, reuse it; otherwise create our own.
+    own_store = not hasattr(app.state, "store") or app.state.store is None
+    if own_store:
+        store = KnowledgeStore(app.state.db_path)
+        await store.initialize()
+        app.state.store = store
+    else:
+        store = app.state.store
 
     # Check if knowledge store has any data (for nav visibility)
     try:
@@ -27,7 +54,9 @@ async def _lifespan(app: FastAPI):
         app.state.has_data = False
 
     yield
-    await store.close()
+
+    if own_store:
+        await store.close()
 
 
 def create_app(db_path: Path | None = None, data_dir: Path | None = None) -> FastAPI:
@@ -48,6 +77,7 @@ def create_app(db_path: Path | None = None, data_dir: Path | None = None) -> Fas
     app.add_middleware(AdminProtectionMiddleware, data_dir=resolved_data_dir)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(DemoModeMiddleware)
+    app.add_middleware(HasDataMiddleware)
 
     # Static files and templates
     web_dir = Path(__file__).parent

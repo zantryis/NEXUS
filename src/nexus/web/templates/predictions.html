@@ -329,10 +329,20 @@
 {# ── Empty state ── #}
 {% if not featured_markets and not all_active_events and not resolved_by_source %}
 <div class="empty-state">
-    <p>No predictions yet. Run the Kalshi loop to generate predictions.</p>
+    <p>No predictions yet.</p>
+    {% if eligibility_info %}
     <p style="font-size: 0.85rem; color: var(--nx-text-dim); margin-top: 0.5rem;">
+        Predictions require {{ eligibility_info.min_history_days }}+ days of data
+        and {{ eligibility_info.min_thread_snapshots }}+ thread snapshots.
+        You have {{ eligibility_info.history_days }} day{{ 's' if eligibility_info.history_days != 1 else '' }}
+        and {{ eligibility_info.max_snapshots }} snapshot{{ 's' if eligibility_info.max_snapshots != 1 else '' }} so far.
+    </p>
+    {% else %}
+    <p style="font-size: 0.85rem; color: var(--nx-text-dim); margin-top: 0.5rem;">
+        Run the pipeline for several days to build enough history, then:
         <code>python -m nexus forecast kalshi-loop --engine structural</code>
     </p>
+    {% endif %}
 </div>
 {% endif %}
 

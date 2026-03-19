@@ -8,7 +8,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from nexus.config.models import NexusConfig, UserConfig, TopicConfig, AudioConfig
-from nexus.engine.pipeline import run_pipeline
+from nexus.engine.pipeline import run_pipeline, TopicPipelineResult
 from nexus.engine.audio.pipeline import run_audio_pipeline
 from nexus.engine.audio.script import DialogueScript, DialogueTurn
 from nexus.engine.synthesis.knowledge import TopicSynthesis, NarrativeThread
@@ -31,10 +31,12 @@ def _make_config(topics: list[TopicConfig] | None = None, audio: bool = False) -
     )
 
 
-def _mock_topic_pipeline_success(topic_name: str) -> TopicSynthesis:
-    return TopicSynthesis(
-        topic_name=topic_name,
-        threads=[NarrativeThread(headline=f"{topic_name} thread", significance=7)],
+def _mock_topic_pipeline_success(topic_name: str) -> TopicPipelineResult:
+    return TopicPipelineResult(
+        synthesis=TopicSynthesis(
+            topic_name=topic_name,
+            threads=[NarrativeThread(headline=f"{topic_name} thread", significance=7)],
+        ),
     )
 
 

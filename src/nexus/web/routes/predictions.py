@@ -451,6 +451,38 @@ async def predictions_page(request: Request):
         "beat_market": None,
     }
 
+    # Eligibility info for empty state
+    eligibility_info = None
+    if not featured_markets and not all_active_events and not resolved_by_source:
+        try:
+            max_history = 0
+            max_snapshots = 0
+            topics = await store.db.execute(
+                "SELECT DISTINCT topic_slug FROM events"
+            )
+            for row in await topics.fetchall():
+                slug = row[0]
+                rng = await store.get_topic_event_range(slug)
+                if rng.get("first_date") and rng.get("last_date"):
+                    days = (rng["last_date"] - rng["first_date"]).days + 1
+                    max_history = max(max_history, days)
+                snap_row = await store.db.execute(
+                    "SELECT MAX(cnt) FROM ("
+                    "  SELECT COUNT(*) as cnt FROM thread_snapshots GROUP BY thread_id"
+                    ")"
+                )
+                snap_val = await snap_row.fetchone()
+                if snap_val and snap_val[0]:
+                    max_snapshots = max(max_snapshots, snap_val[0])
+            eligibility_info = {
+                "history_days": max_history,
+                "max_snapshots": max_snapshots,
+                "min_history_days": 7,
+                "min_thread_snapshots": 2,
+            }
+        except Exception:
+            pass
+
     return templates.TemplateResponse(request, "predictions.html", {
         "featured_markets": featured_markets,
         "all_active_events": all_active_events,
@@ -463,4 +495,5 @@ async def predictions_page(request: Request):
         "engine_info": ENGINE_INFO,
         "engine_order": ENGINE_ORDER,
         "production_engines": PRODUCTION_ENGINES,
+        "eligibility_info": eligibility_info,
     })
