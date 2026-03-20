@@ -103,7 +103,7 @@ class TestEnrichForecast:
             "target_metadata": {},
         }
         result = _enrich_forecast(q, date(2026, 3, 17))
-        assert result["source_type"] == "kg"
+        assert result["source_type"] == "intelligence"
         assert result["run_label"] == "independent"
 
     def test_resolution_date_enrichment(self):
@@ -165,7 +165,7 @@ class TestEnrichForecast:
             "target_metadata": {},
         }
         result = _enrich_forecast(q, date(2026, 3, 17))
-        assert result["source_type"] == "freeform"
+        assert result["source_type"] == "intelligence"
         assert result["run_label"] == "independent"
 
     def test_thread_development_source_type(self):
@@ -238,10 +238,10 @@ class TestComputeInterestScore:
         score = _compute_interest_score(f)
         assert score >= 1.0
 
-    def test_freeform_bonus(self):
-        f = self._make(source_type="freeform")
+    def test_intelligence_no_automatic_bonus(self):
+        f = self._make(source_type="intelligence")
         score = _compute_interest_score(f)
-        assert score >= 1.0
+        assert score == 0.0  # no bonus just for being intelligence type
 
     def test_reasoning_bonus(self):
         f = self._make(target_metadata={"actor_analyses": [{"actor": "Iran"}]})

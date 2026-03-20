@@ -5,6 +5,7 @@ import logging
 import os
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
@@ -15,6 +16,17 @@ from nexus.utils.health import build_health_snapshot
 from nexus.web.app import get_store, get_templates
 
 logger = logging.getLogger(__name__)
+
+
+def _user_today(request: Request) -> date:
+    """Get today's date in the user's configured timezone."""
+    config = getattr(request.app.state, "config", None)
+    if config and hasattr(config, "user") and config.user.timezone:
+        try:
+            return datetime.now(ZoneInfo(config.user.timezone)).date()
+        except Exception:
+            pass
+    return date.today()
 
 router = APIRouter()
 
@@ -220,7 +232,7 @@ def _load_runtime_config(config_path: Path):
         return None
 
 
-async def _build_topics_data(store, max_threads: int = 3, max_events: int = 1):
+async def _build_topics_data(store, today: date, max_threads: int = 3, max_events: int = 1):
     """Build structured topic data for the web briefing."""
     from nexus.web.routes.predictions import (
         PUBLIC_TARGET_VARIABLES,
@@ -230,7 +242,6 @@ async def _build_topics_data(store, max_threads: int = 3, max_events: int = 1):
 
     topic_stats = await store.get_topic_stats()
     topics_data = []
-    today = date.today()
 
     for ts in topic_stats:
         slug = ts["topic_slug"]
@@ -302,6 +313,11 @@ async def _build_topics_data(store, max_threads: int = 3, max_events: int = 1):
         except Exception:
             pass
 
+        # Per-topic Kalshi markets for sidebar
+        kalshi_markets = await store.get_interesting_kalshi_markets(
+            limit=3, engine="actor", topic_slug=slug,
+        )
+
         topics_data.append({
             "slug": slug,
             "emoji": _topic_emoji(slug),
@@ -310,6 +326,7 @@ async def _build_topics_data(store, max_threads: int = 3, max_events: int = 1):
             "threads": topic_threads,
             "highlight_bullets": highlight_bullets,
             "featured_predictions": featured_predictions,
+            "kalshi_markets": kalshi_markets,
         })
 
     return topics_data
@@ -319,11 +336,11 @@ async def _build_topics_data(store, max_threads: int = 3, max_events: int = 1):
 async def homepage(request: Request):
     store = get_store(request)
     templates = get_templates(request)
-    today = date.today()
+    today = _user_today(request)
     data_dir = getattr(request.app.state, "data_dir", Path("data"))
 
     # Build structured briefing from DB
-    topics_data = await _build_topics_data(store)
+    topics_data = await _build_topics_data(store, today)
 
     # Check if classic briefing exists
     result = _find_briefing(data_dir, today)
@@ -477,14 +494,15 @@ async def briefing_detail(request: Request, briefing_date: str):
     active_threads = active_threads[:8]
 
     topic_stats = await store.get_topic_stats()
-    today_cost = await store.get_daily_cost(date.today().isoformat())
+    user_today = _user_today(request)
+    today_cost = await store.get_daily_cost(user_today.isoformat())
     total_events = sum(ts["event_count"] for ts in topic_stats)
     source_stats = await store.get_source_stats()
 
     audio_info = _find_audio(data_dir, actual_date)
 
     return templates.TemplateResponse(request, "briefing_classic.html", {
-        "today": date.today(),
+        "today": user_today,
         "briefing_date": actual_date,
         "briefing_html": briefing_html,
         "has_prev": prev_path.exists(),
@@ -575,8 +593,11 @@ async def trigger_pipeline(request: Request):
             if config.telegram.enabled and config.telegram.chat_id:
                 token = os.getenv("TELEGRAM_BOT_TOKEN")
                 if token:
-                    today = date.today().isoformat()
-                    audio_path = data_dir / "artifacts" / "audio" / f"{today}.mp3"
+                    try:
+                        today_str = datetime.now(ZoneInfo(config.user.timezone)).date().isoformat()
+                    except Exception:
+                        today_str = date.today().isoformat()
+                    audio_path = data_dir / "artifacts" / "audio" / f"{today_str}.mp3"
                     await deliver_briefing(
                         Bot(token=token),
                         config.telegram.chat_id,
@@ -587,6 +608,18 @@ async def trigger_pipeline(request: Request):
                     logger.warning("Manual pipeline completed but TELEGRAM_BOT_TOKEN is not set; skipping delivery")
         except Exception as e:
             logger.error(f"Manual pipeline run failed: {e}", exc_info=True)
+            # Clean up any stuck pipeline runs left by the crash
+            try:
+                crash_store = get_store(request)
+                await crash_store.db.execute(
+                    "UPDATE pipeline_runs SET status = 'failed', "
+                    "error = ?, completed_at = datetime('now') "
+                    "WHERE status = 'running'",
+                    (f"Crashed: {str(e)[:200]}",),
+                )
+                await crash_store.db.commit()
+            except Exception:
+                pass
 
     _track_background_task(request, asyncio.create_task(_run()))
 

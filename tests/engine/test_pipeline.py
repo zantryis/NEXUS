@@ -1,8 +1,8 @@
 """Tests for the engine pipeline orchestrator."""
 
 import pytest
-from datetime import date, datetime, timedelta
-from unittest.mock import AsyncMock, patch, call
+from datetime import date
+from unittest.mock import AsyncMock, patch
 from nexus.config.models import NexusConfig, UserConfig, TopicConfig, SourcesConfig
 from nexus.engine.pipeline import run_pipeline, run_backfill, _event_cap_for_topic
 from nexus.llm.client import UsageTracker
@@ -284,7 +284,7 @@ async def test_run_topic_pipeline_uses_custom_max_age_hours(config, data_dir):
          patch("nexus.engine.pipeline.dedup_items") as mock_dedup, \
          patch("nexus.engine.pipeline.async_ingest_items") as mock_ingest, \
          patch("nexus.engine.pipeline.filter_items") as mock_filter, \
-         patch("nexus.engine.pipeline.extract_event") as mock_extract, \
+         patch("nexus.engine.pipeline.extract_event"), \
          patch("nexus.engine.pipeline.synthesize_topic") as mock_synth, \
          patch("nexus.engine.pipeline.maybe_compress"):
 

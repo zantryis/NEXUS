@@ -15,7 +15,7 @@ user:
   output_language: "en"           # Briefing output language
 
 briefing:
-  schedule: "06:00"               # Daily pipeline time (HH:MM in your timezone)
+  schedule: "04:00"               # Daily pipeline time (HH:MM in your timezone)
   format: "two-host-dialogue"
   style: "analytical"             # "analytical" | "conversational" | "editorial" (opinionated, intl law stance)
   depth: "detailed"               # "brief" | "detailed"

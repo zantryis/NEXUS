@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 DEFAULT_BOOTSTRAP_TOPIC = {"name": "AI/ML Research", "priority": "high"}
-DEFAULT_BOOTSTRAP_BRIEFING = {"schedule": "06:00", "style": "analytical"}
+DEFAULT_BOOTSTRAP_BRIEFING = {"schedule": "04:00", "style": "analytical"}
 DEFAULT_BOOTSTRAP_BREAKING_NEWS = {"enabled": True, "threshold": 7}
 DEFAULT_BOOTSTRAP_TELEGRAM = {"enabled": True}
 DEFAULT_BOOTSTRAP_SOURCES = {"discover_new_sources": True}
@@ -36,6 +36,7 @@ def build_initial_config(
         "breaking_news": dict(DEFAULT_BOOTSTRAP_BREAKING_NEWS),
         "telegram": dict(DEFAULT_BOOTSTRAP_TELEGRAM),
         "sources": dict(DEFAULT_BOOTSTRAP_SOURCES),
+        "future_projection": {"enabled": True, "kg_native_enabled": True},
     }
 
 

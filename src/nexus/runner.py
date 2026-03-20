@@ -100,6 +100,31 @@ async def run_all(
                     max_ingest=smoke_cap,
                     trigger="auto_run",
                 )
+                # Backfill historical events (7 days) for richer context
+                try:
+                    from nexus.engine.pipeline import run_backfill
+                    backfill_count = await run_backfill(
+                        config, llm, data_dir, max_age_hours=168, store=store,
+                    )
+                    logger.info(f"Auto-run backfill: {backfill_count} events")
+                except Exception as e:
+                    logger.warning(f"Auto-run backfill failed: {e}")
+                # Predictions (if enabled)
+                if config.future_projection.enabled:
+                    try:
+                        from nexus.scheduler.jobs import daily_prediction_job
+                        await daily_prediction_job(config, llm, store, data_dir)
+                        logger.info("Auto-run predictions complete")
+                    except Exception as e:
+                        logger.warning(f"Auto-run predictions failed: {e}")
+                # Breaking news check
+                if config.breaking_news.enabled:
+                    try:
+                        from nexus.scheduler.jobs import breaking_news_job
+                        await breaking_news_job(config, llm, store, bot=bot)
+                        logger.info("Auto-run breaking news check complete")
+                    except Exception as e:
+                        logger.warning(f"Auto-run breaking news failed: {e}")
 
             scheduler.add_job(
                 _auto_run_pipeline,

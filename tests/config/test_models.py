@@ -45,7 +45,7 @@ def test_user_config_defaults():
 
 def test_briefing_config_defaults():
     briefing = BriefingConfig()
-    assert briefing.schedule == "06:00"
+    assert briefing.schedule == "04:00"
     assert briefing.format == "two-host-dialogue"
     assert briefing.style == "analytical"
     assert briefing.depth == "detailed"
@@ -67,7 +67,7 @@ def test_full_nexus_config():
     )
     assert config.user.name == "Tristan"
     assert len(config.topics) == 1
-    assert config.briefing.schedule == "06:00"
+    assert config.briefing.schedule == "04:00"
     assert config.models.filtering == "gemini-3-flash-preview"
 
 

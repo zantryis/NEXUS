@@ -17,7 +17,7 @@ def test_write_config_yaml(tmp_path):
         "preset": "balanced",
         "user": {"name": "TestUser", "timezone": "UTC", "output_language": "en"},
         "topics": [{"name": "AI/ML Research", "priority": "high"}],
-        "briefing": {"schedule": "06:00"},
+        "briefing": {"schedule": "04:00"},
         "audio": {"enabled": True},
         "breaking_news": {"enabled": True, "threshold": 7},
         "telegram": {"enabled": False},
@@ -107,7 +107,7 @@ def test_build_initial_config_matches_release_defaults():
     assert config["preset"] == "balanced"
     assert config["user"]["name"] == "TestUser"
     assert config["user"]["timezone"] == "America/Denver"
-    assert config["briefing"] == {"schedule": "06:00", "style": "analytical"}
+    assert config["briefing"] == {"schedule": "04:00", "style": "analytical"}
     assert config["breaking_news"] == {"enabled": True, "threshold": 7}
     assert config["telegram"] == {"enabled": True}
     assert config["sources"] == {"discover_new_sources": True}

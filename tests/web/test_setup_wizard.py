@@ -214,7 +214,7 @@ async def test_setup_complete_uses_sensible_defaults(app_no_config, tmp_path):
     config_path = data_dir / "config.yaml"
     raw = yaml.safe_load(config_path.read_text())
     assert raw["user"]["timezone"] == "UTC"
-    assert raw["briefing"]["schedule"] == "06:00"
+    assert raw["briefing"]["schedule"] == "04:00"
     assert raw["briefing"]["style"] == "analytical"
     assert raw["telegram"]["enabled"] is True
 

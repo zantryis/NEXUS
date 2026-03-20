@@ -1903,6 +1903,7 @@ class KnowledgeStore:
         limit: int = 5,
         *,
         engine: str | None = None,
+        topic_slug: str | None = None,
     ) -> list[dict]:
         """Return open Kalshi-aligned markets ranked by interestingness.
 
@@ -1922,6 +1923,9 @@ class KnowledgeStore:
         if engine:
             query += "AND fr.engine = ? "
             params.append(engine)
+        if topic_slug:
+            query += "AND fr.topic_slug = ? "
+            params.append(topic_slug)
         query += "ORDER BY fq.resolution_date ASC"
         cursor = await self.db.execute(query, params)
         rows = await cursor.fetchall()
@@ -3350,10 +3354,10 @@ class KnowledgeStore:
         # Clean up stale runs (running > 2 hours = presumed crashed)
         await self.db.execute(
             "UPDATE pipeline_runs SET status = 'failed', "
-            "error = 'Stale: exceeded 2h timeout', "
+            "error = 'Stale: exceeded 3h timeout', "
             "completed_at = datetime('now') "
             "WHERE status = 'running' "
-            "AND started_at < datetime('now', '-2 hours')"
+            "AND started_at < datetime('now', '-3 hours')"
         )
         cursor = await self.db.execute(
             "INSERT INTO pipeline_runs (topics, trigger) VALUES (?, ?)",
@@ -3413,10 +3417,10 @@ class KnowledgeStore:
         # First clean up stale runs
         await self.db.execute(
             "UPDATE pipeline_runs SET status = 'failed', "
-            "error = 'Stale: exceeded 2h timeout', "
+            "error = 'Stale: exceeded 3h timeout', "
             "completed_at = datetime('now') "
             "WHERE status = 'running' "
-            "AND started_at < datetime('now', '-2 hours')"
+            "AND started_at < datetime('now', '-3 hours')"
         )
         await self.db.commit()
         cursor = await self.db.execute(

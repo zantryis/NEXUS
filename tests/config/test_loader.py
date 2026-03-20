@@ -12,7 +12,7 @@ user:
   output_language: "en"
 
 briefing:
-  schedule: "06:00"
+  schedule: "04:00"
   format: "two-host-dialogue"
 
 topics:
@@ -57,5 +57,5 @@ def test_load_config_minimal(tmp_path):
 
     config = load_config(config_file)
     assert config.user.name == "Test"
-    assert config.briefing.schedule == "06:00"
+    assert config.briefing.schedule == "04:00"
     assert config.topics == []

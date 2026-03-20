@@ -4012,7 +4012,7 @@ a.entity-tag:hover {
 
 /* ── New source badges ── */
 
-.source-freeform {
+.source-freeform, .source-intelligence {
     background: var(--nx-purple-soft, #ede9fe);
     color: var(--nx-purple, #6d28d9);
 }

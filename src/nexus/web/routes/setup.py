@@ -426,8 +426,43 @@ def _auto_launch_pipeline(request: Request, data_dir: Path):
                 logger.info(f"Post-setup backfill added {backfill_count} historical events")
             except Exception as bf_err:
                 logger.warning(f"Post-setup backfill failed (non-blocking): {bf_err}")
-            finally:
-                status["stage"] = "complete"
+
+            # Phase 3: Initial predictions (if enabled)
+            if config.future_projection.enabled:
+                try:
+                    from nexus.engine.projection.service import generate_kg_native_predictions
+                    from nexus.engine.knowledge.store import KnowledgeStore as _KS
+                    from datetime import date as _d
+                    pred_store = _KS(data_dir / "knowledge.db")
+                    await pred_store.initialize()
+                    try:
+                        await generate_kg_native_predictions(
+                            pred_store, llm, config=config,
+                            run_date=_d.today(),
+                            max_per_topic=config.future_projection.max_kg_questions_per_topic,
+                        )
+                        logger.info("Post-setup predictions complete")
+                    finally:
+                        await pred_store.close()
+                except Exception as pred_err:
+                    logger.warning(f"Post-setup predictions failed: {pred_err}")
+
+            # Phase 4: Initial breaking news check
+            if config.breaking_news.enabled:
+                try:
+                    from nexus.agent.breaking import check_breaking_news
+                    from nexus.engine.knowledge.store import KnowledgeStore as _KS2
+                    bn_store = _KS2(data_dir / "knowledge.db")
+                    await bn_store.initialize()
+                    try:
+                        await check_breaking_news(llm, config, bn_store)
+                        logger.info("Post-setup breaking news check complete")
+                    finally:
+                        await bn_store.close()
+                except Exception as bn_err:
+                    logger.warning(f"Post-setup breaking news failed: {bn_err}")
+
+            status["stage"] = "complete"
         except Exception as e:
             logger.error(f"Background pipeline failed: {e}", exc_info=True)
             request.app.state.pipeline_status = {
@@ -436,6 +471,21 @@ def _auto_launch_pipeline(request: Request, data_dir: Path):
                 "error": str(e),
                 "started_at": status.get("started_at"),
             }
+            # Clean up any stuck pipeline runs left by the crash
+            try:
+                from nexus.engine.knowledge.store import KnowledgeStore as _KSClean
+                cleanup_store = _KSClean(data_dir / "knowledge.db")
+                await cleanup_store.initialize()
+                await cleanup_store.db.execute(
+                    "UPDATE pipeline_runs SET status = 'failed', "
+                    "error = ?, completed_at = datetime('now') "
+                    "WHERE status = 'running'",
+                    (f"Setup crashed: {str(e)[:200]}",),
+                )
+                await cleanup_store.db.commit()
+                await cleanup_store.close()
+            except Exception:
+                pass
 
     _track_background_task(request, asyncio.create_task(_run_pipeline()))
 

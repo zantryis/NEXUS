@@ -104,11 +104,11 @@ async def test_is_pipeline_running_false_when_failed(store):
 
 
 async def test_stale_running_cleanup(store):
-    """Runs older than 2h are auto-marked as failed."""
-    # Insert a stale run directly
+    """Runs older than 3h are auto-marked as failed."""
+    # Insert a stale run directly (4 hours old — exceeds 3h threshold)
     await store.db.execute(
         "INSERT INTO pipeline_runs (started_at, status, topics, trigger) "
-        "VALUES (datetime('now', '-3 hours'), 'running', '[]', 'manual')"
+        "VALUES (datetime('now', '-4 hours'), 'running', '[]', 'manual')"
     )
     await store.db.commit()
 
@@ -118,3 +118,15 @@ async def test_stale_running_cleanup(store):
     last = await store.get_last_pipeline_run()
     assert last["status"] == "failed"
     assert "Stale" in last["error"]
+
+
+async def test_running_within_threshold_not_stale(store):
+    """Runs under 3h old should NOT be marked as stale."""
+    await store.db.execute(
+        "INSERT INTO pipeline_runs (started_at, status, topics, trigger) "
+        "VALUES (datetime('now', '-2 hours'), 'running', '[]', 'manual')"
+    )
+    await store.db.commit()
+
+    # 2h-old run should still be considered running
+    assert await store.is_pipeline_running() is True

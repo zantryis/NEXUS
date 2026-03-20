@@ -12,7 +12,7 @@ class UserConfig(BaseModel):
 
 
 class BriefingConfig(BaseModel):
-    schedule: str = "06:00"
+    schedule: str = "04:00"
     duration_target_minutes: int = 30
     format: str = "two-host-dialogue"
     style: str = "analytical"

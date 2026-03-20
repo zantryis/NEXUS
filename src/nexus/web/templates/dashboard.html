@@ -237,25 +237,21 @@
         </div>
 
         <div class="sidebar">
-            {# 1. Breaking Alerts — always show #}
+            {# 1. Breaking Alerts — filtered to current topic #}
+            {% set topic_alerts = breaking_alerts.get(topic.slug, []) %}
             <div class="sidebar-section">
-                <div class="sidebar-title">&#128680; Breaking Alerts{% if breaking_fp_rate is defined and breaking_fp_rate > 0 %} <span class="fp-rate-badge" title="User-reported false positive rate">FP {{ (breaking_fp_rate * 100) | round(0) | int }}%</span>{% endif %}</div>
-                {% if breaking_alerts %}
-                {% for slug, alerts in breaking_alerts.items() %}
-                <div class="sidebar-breaking-topic">
-                    <span class="sidebar-breaking-topic-name">{{ topic_emoji(slug) | safe }} {{ slug | replace('-', ' ') | title }}</span>
-                    {% for alert in alerts[:3] %}
-                    <div class="sidebar-breaking-alert">
-                        <a href="{{ alert.source_url }}" target="_blank" rel="noopener">
-                            {{ alert.headline[:80] }}{% if alert.headline|length > 80 %}...{% endif %}
-                        </a>
-                        <span class="sidebar-breaking-score">[{{ alert.significance_score }}]</span>
-                    </div>
-                    {% endfor %}
+                <div class="sidebar-title">&#128680; Breaking Alerts{% if topic_alerts %} <span class="fp-rate-badge">{{ topic_alerts | length }}</span>{% endif %}{% if breaking_fp_rate is defined and breaking_fp_rate > 0 %} <span class="fp-rate-badge" title="User-reported false positive rate">FP {{ (breaking_fp_rate * 100) | round(0) | int }}%</span>{% endif %}</div>
+                {% if topic_alerts %}
+                {% for alert in topic_alerts[:5] %}
+                <div class="sidebar-breaking-alert">
+                    <a href="{{ alert.source_url }}" target="_blank" rel="noopener">
+                        {{ alert.headline[:80] }}{% if alert.headline|length > 80 %}...{% endif %}
+                    </a>
+                    <span class="sidebar-breaking-score">[{{ alert.significance_score }}]</span>
                 </div>
                 {% endfor %}
                 {% else %}
-                <div class="sidebar-empty">No alerts in last 24h</div>
+                <div class="sidebar-empty">No alerts for this topic in last 24h</div>
                 {% endif %}
             </div>
 
@@ -308,11 +304,11 @@
             </div>
             {% endif %}
 
-            {# 4. Kalshi Markets #}
-            {% if kalshi_sidebar %}
+            {# 4. Kalshi Markets — filtered to current topic #}
+            {% if topic.kalshi_markets %}
             <div class="sidebar-section">
                 <div class="sidebar-title">Kalshi Markets</div>
-                {% for m in kalshi_sidebar %}
+                {% for m in topic.kalshi_markets %}
                 <div class="sidebar-kalshi">
                     <div class="sidebar-kalshi-question">{{ m.question[:100] }}{% if m.question|length > 100 %}...{% endif %}</div>
                     <div class="sidebar-kalshi-probs">

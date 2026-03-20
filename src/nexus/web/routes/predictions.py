@@ -129,10 +129,8 @@ def _enrich_forecast(q: dict, today: date) -> dict:
     tv = q.get("target_variable", "")
     if tv == "kalshi_aligned":
         q["source_type"] = "kalshi"
-    elif tv == "kg_native":
-        q["source_type"] = "kg"
-    elif tv == "topic_claim":
-        q["source_type"] = "freeform"
+    elif tv in ("kg_native", "topic_claim"):
+        q["source_type"] = "intelligence"
     elif tv == "thread_development":
         q["source_type"] = "thread"
     elif tv == "hindcast":
@@ -146,7 +144,7 @@ def _enrich_forecast(q: dict, today: date) -> dict:
     if q["run_label"] is None:
         if q["source_type"] == "kalshi":
             q["run_label"] = "anchored"
-        elif q["source_type"] in ("kg", "freeform", "thread", "hindcast", "other"):
+        elif q["source_type"] in ("intelligence", "thread", "hindcast", "other"):
             q["run_label"] = "independent"
 
     # Gap vs market
@@ -217,20 +215,20 @@ def _compute_interest_score(f: dict) -> float:
     if meta.get("actor_analyses"):
         score += 0.5
 
-    # Source type bonus — freeform claims are inherently interesting
-    if f.get("source_type") == "freeform":
+    # Market edge bonus — Kalshi-linked predictions allow accuracy validation
+    prob = f.get("probability")
+    market = f.get("market_prob")
+    if f.get("source_type") == "kalshi" and market is not None:
         score += 1.0
 
     # Directional contrarian tag — we say YES but market says NO, or vice versa
-    prob = f.get("probability")
-    market = f.get("market_prob")
     if prob is not None and market is not None:
         if (prob >= 0.65 and market <= 0.4) or (prob <= 0.35 and market >= 0.6):
             f["_tag_contrarian"] = True
             score += 1.5
 
     # Bold claim tag — high-confidence forward-looking predictions without market price
-    if prob is not None and market is None and f.get("source_type") in ("freeform", "thread", "kg"):
+    if prob is not None and market is None and f.get("source_type") in ("intelligence", "thread"):
         if prob >= 0.7:
             f["_tag_bold"] = True
             score += 2.0
@@ -420,12 +418,37 @@ async def forward_look_page(request: Request):
         if market.get("spread_pp") and market["spread_pp"] >= 20:
             market["interest_score"] = round(market["interest_score"] + 1.0, 1)
 
-    # Featured: top N by interest score (must have score > 0)
-    featured_markets = sorted(
-        [m for m in pending_markets if m["interest_score"] > 0],
-        key=lambda m: m["interest_score"],
-        reverse=True,
-    )[:FEATURED_MAX]
+    # Featured: guaranteed slots — 4 Kalshi + 4 intelligence/thread, interleaved
+    scoreable = [m for m in pending_markets if m["interest_score"] > 0]
+    kalshi_pool = sorted(
+        [m for m in scoreable if m.get("source_type") == "kalshi"],
+        key=lambda m: m["interest_score"], reverse=True,
+    )
+    intel_pool = sorted(
+        [m for m in scoreable if m.get("source_type") != "kalshi"],
+        key=lambda m: m["interest_score"], reverse=True,
+    )
+    half = FEATURED_MAX // 2  # 4
+    # Each pool gets up to half; overflow goes to the other pool
+    kalshi_take = kalshi_pool[:half]
+    intel_take = intel_pool[:half]
+    # Fill remaining slots from whichever pool has leftovers
+    remaining_slots = FEATURED_MAX - len(kalshi_take) - len(intel_take)
+    if remaining_slots > 0:
+        kalshi_extra = kalshi_pool[half:half + remaining_slots]
+        intel_extra = intel_pool[half:half + remaining_slots]
+        if len(kalshi_take) < half:
+            intel_take.extend(intel_extra[:remaining_slots])
+        else:
+            kalshi_take.extend(kalshi_extra[:remaining_slots])
+    # Interleave: kalshi, intel, kalshi, intel, ...
+    featured_markets = []
+    for i in range(max(len(kalshi_take), len(intel_take))):
+        if i < len(kalshi_take):
+            featured_markets.append(kalshi_take[i])
+        if i < len(intel_take):
+            featured_markets.append(intel_take[i])
+    featured_markets = featured_markets[:FEATURED_MAX]
     featured_keys = {m["key"] for m in featured_markets}
 
     # All active: remaining markets grouped by event
@@ -463,7 +486,7 @@ async def forward_look_page(request: Request):
 
     # Group resolved by source type (exclude benchmark/hindcast)
     resolved_by_source: OrderedDict[str, list] = OrderedDict()
-    for source in ["kalshi", "freeform", "thread", "kg", "other"]:
+    for source in ["kalshi", "intelligence", "thread", "other"]:
         source_markets = [m for m in resolved_markets if m["source_type"] == source]
         if source_markets:
             resolved_by_source[source] = source_markets
