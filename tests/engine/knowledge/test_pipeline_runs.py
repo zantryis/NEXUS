@@ -33,6 +33,26 @@ async def test_start_and_complete_pipeline_run(store):
     assert last["error"] is None
 
 
+async def test_complete_pipeline_run_records_skipped_topics(store):
+    """Skipped topic metadata should survive completion and readback."""
+    run_id = await store.start_pipeline_run(["alpha", "beta"], trigger="scheduled")
+
+    await store.complete_pipeline_run(
+        run_id,
+        article_count=12,
+        event_count=4,
+        cost_usd=0.02,
+        skipped_topics=[{"name": "beta", "reason": "no sources configured"}],
+    )
+
+    last = await store.get_last_pipeline_run()
+    assert last is not None
+    assert last["status"] == "completed"
+    assert last["skipped_topics"] == [
+        {"name": "beta", "reason": "no sources configured"},
+    ]
+
+
 async def test_fail_pipeline_run(store):
     """Failed run records error message."""
     run_id = await store.start_pipeline_run(["test"], trigger="scheduled")

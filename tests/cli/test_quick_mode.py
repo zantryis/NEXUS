@@ -47,12 +47,14 @@ def test_quick_flag_caps_max_ingest():
          patch("nexus.config.loader.load_config") as mock_load, \
          patch("nexus.llm.client.LLMClient") as mock_llm_cls, \
          patch("nexus.engine.pipeline.run_pipeline", new_callable=AsyncMock) as mock_pipeline, \
+         patch("nexus.engine.pipeline.run_backfill", new_callable=AsyncMock) as mock_backfill, \
          patch.dict("os.environ", {"GEMINI_API_KEY": "test-key"}):
 
         config = _make_config()
         mock_load.return_value = config
         mock_llm_cls.return_value = MagicMock()
         mock_pipeline.return_value = "/tmp/briefing.md"
+        mock_backfill.return_value = 0
 
         from nexus.__main__ import run_engine
         run_engine()
@@ -65,6 +67,9 @@ def test_quick_flag_caps_max_ingest():
         # Verify config was mutated
         assert config.audio.enabled is False
         assert config.future_projection.enabled is False
+
+        # Verify backfill was called after quick pipeline
+        mock_backfill.assert_called_once()
 
 
 def test_normal_mode_no_ingest_cap():

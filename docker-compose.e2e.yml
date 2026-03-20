@@ -1,0 +1,76 @@
+# E2E multi-provider setup test — 6 containers with different providers, topics, and TTS backends.
+# Usage: docker compose -f docker-compose.e2e.yml up --build -d
+# Tests: .venv/bin/pytest tests/playwright/test_docker_e2e.py -m "e2e and integration" -v --timeout=900
+
+x-common: &common
+  build: .
+  env_file: .env
+  environment: &common-env
+    NEXUS_SMOKE_MODE: "20"
+    NEXUS_TRUST_DOCKER_GATEWAY: "1"
+    NEXUS_DEMO_MODE: ""
+    TELEGRAM_BOT_TOKEN: ""
+  restart: "no"
+
+services:
+  # ── Web wizard containers (no config.yaml → setup wizard triggers) ──
+
+  e2e-web-gemini:
+    <<: *common
+    container_name: nexus-e2e-web-gemini
+    ports: ["8091:8080"]
+    volumes:
+      - ./data-e2e-web-gemini:/app/data
+
+  e2e-web-deepseek:
+    <<: *common
+    container_name: nexus-e2e-web-deepseek
+    ports: ["8092:8080"]
+    volumes:
+      - ./data-e2e-web-deepseek:/app/data
+
+  e2e-web-audio:
+    <<: *common
+    container_name: nexus-e2e-web-audio
+    ports: ["8093:8080"]
+    volumes:
+      - ./data-e2e-web-audio:/app/data
+
+  e2e-web-wild:
+    <<: *common
+    container_name: nexus-e2e-web-wild
+    ports: ["8094:8080"]
+    volumes:
+      - ./data-e2e-web-wild:/app/data
+
+  # ── CLI setup containers (entrypoint pipes stdin to `nexus setup`, then runs server) ──
+
+  e2e-cli-gemini:
+    <<: *common
+    container_name: nexus-e2e-cli-gemini
+    ports: ["8095:8080"]
+    volumes:
+      - ./data-e2e-cli-gemini:/app/data
+      - ./scripts/e2e-cli-entrypoint.sh:/app/entrypoint.sh:ro
+    environment:
+      <<: *common-env
+      NEXUS_AUTO_RUN: "1"
+      # quality preset (#4), Gemini key, custom "Mars Colonization", blank to end customs,
+      # preset #4 (Global Energy Transition), name, timezone
+      CLI_SETUP_INPUT: "4\n${GEMINI_API_KEY}\nMars Colonization\n\n4\nTristan\nAmerica/Denver\n"
+    entrypoint: ["bash", "/app/entrypoint.sh"]
+
+  e2e-cli-deepseek:
+    <<: *common
+    container_name: nexus-e2e-cli-deepseek
+    ports: ["8096:8080"]
+    volumes:
+      - ./data-e2e-cli-deepseek:/app/data
+      - ./scripts/e2e-cli-entrypoint.sh:/app/entrypoint.sh:ro
+    environment:
+      <<: *common-env
+      NEXUS_AUTO_RUN: "1"
+      # cheap preset (#2), DeepSeek key, custom "Quantum Computing Breakthroughs", blank,
+      # preset #3 (Formula 1), name, timezone
+      CLI_SETUP_INPUT: "2\n${DEEPSEEK_API_KEY}\nQuantum Computing Breakthroughs\n\n3\nTristan\nAmerica/Denver\n"
+    entrypoint: ["bash", "/app/entrypoint.sh"]

@@ -430,7 +430,7 @@ CREATE TABLE IF NOT EXISTS pipeline_runs (
     cost_usd REAL NOT NULL DEFAULT 0.0,
     error TEXT,
     trigger TEXT NOT NULL DEFAULT 'manual'
-        CHECK(trigger IN ('manual','scheduled','auto_run','smoke'))
+        CHECK(trigger IN ('manual','scheduled','auto_run','smoke','setup'))
 );
 CREATE INDEX IF NOT EXISTS idx_pipeline_runs_status ON pipeline_runs(status);
 CREATE INDEX IF NOT EXISTS idx_pipeline_runs_started ON pipeline_runs(started_at);

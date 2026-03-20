@@ -2,8 +2,11 @@
 
 import asyncio
 import json
+import logging
 import os
+import shutil
 import socket
+import subprocess
 import threading
 import time
 from datetime import date, timedelta
@@ -11,6 +14,8 @@ from pathlib import Path
 
 import pytest
 import yaml
+
+logger = logging.getLogger(__name__)
 
 pytest.importorskip("playwright", reason="playwright not installed — skip E2E tests")
 
@@ -269,3 +274,93 @@ def browser_context_args():
         "viewport": {"width": 1280, "height": 800},
         "ignore_https_errors": True,
     }
+
+
+# ── Docker-based E2E fixtures ────────────────────────────────────────
+
+_E2E_CONTAINERS = (
+    "web-gemini", "web-deepseek", "web-audio", "web-wild",
+    "cli-gemini", "cli-deepseek",
+)
+
+_E2E_URLS = {
+    "web_gemini": "http://localhost:8091",
+    "web_deepseek": "http://localhost:8092",
+    "web_audio": "http://localhost:8093",
+    "web_wild": "http://localhost:8094",
+    "cli_gemini": "http://localhost:8095",
+    "cli_deepseek": "http://localhost:8096",
+}
+
+
+@pytest.fixture(scope="session")
+def e2e_containers():
+    """Build and start E2E Docker containers, yield URL map, teardown.
+
+    Web containers start with no config.yaml (setup wizard triggers).
+    CLI containers pipe stdin into `nexus setup` then start the server.
+    """
+    import httpx
+    from dotenv import load_dotenv
+
+    project_root = Path(__file__).resolve().parents[2]
+
+    # Load .env so API keys are available for Playwright-driven wizard steps
+    load_dotenv(project_root / ".env", override=False)
+    compose = ["docker", "compose", "-f", "docker-compose.e2e.yml"]
+
+    # Clean data dirs to ensure fresh state (Docker creates files as root)
+    def _clean_data_dirs():
+        for suffix in _E2E_CONTAINERS:
+            d = project_root / f"data-e2e-{suffix}"
+            if d.exists():
+                try:
+                    shutil.rmtree(d)
+                except PermissionError:
+                    subprocess.run(
+                        ["docker", "run", "--rm", "-v", f"{d}:/cleanup", "alpine",
+                         "sh", "-c", "rm -rf /cleanup/*"],
+                        check=False,
+                    )
+                    shutil.rmtree(d, ignore_errors=True)
+            d.mkdir(exist_ok=True)
+
+    _clean_data_dirs()
+
+    # Build image (shared) + start all 6 containers
+    logger.info("Building and starting E2E containers...")
+    subprocess.run(
+        [*compose, "up", "--build", "-d"],
+        cwd=project_root, check=True, timeout=300,
+    )
+
+    # Wait for each container to respond
+    for name, base in _E2E_URLS.items():
+        # CLI containers should respond on /api/health once setup + server start
+        # Web containers redirect to /setup when no config exists
+        endpoint = "/api/health" if "cli" in name else "/setup"
+        for attempt in range(90):  # up to 180s for CLI containers (setup takes time)
+            try:
+                r = httpx.get(
+                    f"{base}{endpoint}", timeout=3.0, follow_redirects=True,
+                )
+                if r.status_code in (200, 307, 503):
+                    logger.info(f"Container {name} ready (attempt {attempt})")
+                    break
+            except (httpx.ConnectError, httpx.ReadTimeout, httpx.ReadError, httpx.RemoteProtocolError):
+                pass
+            time.sleep(2)
+        else:
+            # Dump logs for the failed container before failing
+            subprocess.run(
+                [*compose, "logs", f"e2e-{name.replace('_', '-')}"],
+                cwd=project_root,
+            )
+            pytest.fail(f"Container {name} did not start within 180s")
+
+    yield _E2E_URLS
+
+    # Teardown
+    logger.info("Tearing down E2E containers...")
+    subprocess.run([*compose, "down", "-v"], cwd=project_root, check=True)
+    _clean_data_dirs()
