@@ -59,18 +59,16 @@ async def _generate_topic_highlight(
         f"- [{e.significance}/10] {e.summary}" for e in events_sorted[:10]
     )
 
-    prompt = (
-        f"You are a concise intelligence analyst. Given today's events for the topic "
-        f"'{topic_name}', write 2-3 bullet points summarizing the key developments. "
-        f"Each bullet should be one sentence, capturing the most important takeaway. "
-        f"Be direct and specific — no filler.\n\n"
-        f"Today's events:\n{event_text}\n\n"
-        f"Write the bullets as a simple list, one per line, starting with '- '."
+    system = (
+        "You are a concise intelligence analyst. Write 2-3 bullet points "
+        "summarizing the key developments. Each bullet should be one sentence, "
+        "capturing the most important takeaway. Be direct and specific — no filler. "
+        "Write the bullets as a simple list, one per line, starting with '- '."
     )
+    user_prompt = f"Today's events for '{topic_name}':\n{event_text}"
 
     try:
-        resp = await llm.generate(prompt, task="fast")
-        bullets = resp.text.strip()
+        bullets = (await llm.complete("knowledge_summary", system, user_prompt)).strip()
         await store.save_page(
             slug=page_slug,
             title=f"Today's Highlight — {topic_name}",

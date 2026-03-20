@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Nexus &mdash; Daily Brief{% endblock %}
+{% block title %}Daily Brief | Nexus{% endblock %}
 {% block nav_briefing %}active{% endblock %}
 {% block content %}
 
@@ -63,7 +63,7 @@
             {% if pipeline_running %}
             <div id="pipeline-status" class="pipeline-controls-status status-running"
                  hx-get="/api/pipeline/status" hx-trigger="every 3s" hx-swap="outerHTML">
-                <div class="pipeline-spinner"></div> Running...
+                <div class="pipeline-spinner"></div> {{ pipeline_stage_label }}
             </div>
             {% else %}
             <button class="btn-sm btn-accent" id="run-pipeline-btn"

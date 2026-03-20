@@ -622,7 +622,7 @@ async def setup_status(request: Request):
             "synthesis": "Synthesizing intelligence",
         }
         sub_label = sub_labels.get(sub_stage, sub_stage.title())
-        label = f"{sub_label} &mdash; {topic_name}{topic_progress}..."
+        label = f"{sub_label} — {topic_name}{topic_progress}..."
     elif stage == "rendering":
         label = "Rendering briefing..."
     elif stage == "audio":

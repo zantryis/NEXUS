@@ -449,6 +449,7 @@ async def homepage(request: Request):
         "audio": audio_info,
         "setup_complete": is_setup_complete,
         "pipeline_status": getattr(request.app.state, "pipeline_status", None),
+        "pipeline_stage_label": _pipeline_stage_label(getattr(request.app.state, "pipeline_status", None)),
         "last_run": last_run,
         "pipeline_running": pipeline_running,
         "cooldown_active": cooldown_active,
@@ -664,17 +665,55 @@ async def api_health(request: Request):
     return JSONResponse(snapshot, status_code=status_code)
 
 
+def _pipeline_stage_label(status: dict | None) -> str:
+    """Convert app.state.pipeline_status into a human-readable label."""
+    if not status:
+        return "Running..."
+    stage = status.get("stage", "")
+    topic_index = status.get("topic_index", 0)
+    topic_count = status.get("topic_count", 0)
+    progress = f" ({topic_index}/{topic_count})" if topic_count else ""
+
+    if stage.startswith("topic:"):
+        parts = stage.split(":", 2)
+        topic_name = parts[1] if len(parts) > 1 else "?"
+        sub_stage = parts[2] if len(parts) > 2 else "processing"
+        sub_labels = {
+            "polling": "Polling feeds",
+            "filtering": "Filtering",
+            "events": "Extracting events",
+            "entities": "Resolving entities",
+            "synthesis": "Synthesizing",
+        }
+        return f"{sub_labels.get(sub_stage, sub_stage.title())} — {topic_name}{progress}"
+    if stage.startswith("discovering:"):
+        return f"Discovering sources — {stage.split(':', 1)[1]}{progress}"
+    labels = {
+        "starting": "Initializing...",
+        "rendering": "Rendering briefing...",
+        "audio": "Generating audio...",
+        "projections": "Computing predictions...",
+        "backfill": "Backfilling history...",
+    }
+    return labels.get(stage, "Running...")
+
+
 @router.get("/api/pipeline/status")
 async def pipeline_status(request: Request):
     """HTMX poll endpoint — returns current pipeline status fragment."""
     store = get_store(request)
 
     running = await store.is_pipeline_running()
+    app_status = getattr(request.app.state, "pipeline_status", None)
+    if not running and app_status and not app_status.get("done", True):
+        running = True  # app.state says running before DB record exists
+
     if running:
+        label = _pipeline_stage_label(app_status)
         return HTMLResponse(
-            '<div id="pipeline-status" class="pipeline-controls-status status-running"'
-            ' hx-get="/api/pipeline/status" hx-trigger="every 3s" hx-swap="outerHTML">'
-            '<div class="pipeline-spinner"></div> Pipeline running...</div>'
+            f'<div id="pipeline-status" class="pipeline-controls-status status-running"'
+            f' hx-get="/api/pipeline/status" hx-trigger="every 3s" hx-swap="outerHTML">'
+            f'<div class="pipeline-spinner"></div> {label}</div>'
         )
 
     # Not running — show last run summary
@@ -698,7 +737,7 @@ async def pipeline_status(request: Request):
     cost = last_run.get("cost_usd", 0.0)
     return HTMLResponse(
         f'<div id="pipeline-status" class="pipeline-controls-status status-done">'
-        f'Complete &mdash; {events} events, ${cost:.2f}'
+        f'Complete — {events} events, ${cost:.2f}'
         f' <a href="/" onclick="location.reload()">Refresh</a></div>'
     )
 
