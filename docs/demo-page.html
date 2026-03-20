@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Live Demo — Nexus</title>
+    <meta name="description" content="Interactive static demo of the Nexus intelligence dashboard. Explore the knowledge graph, briefings, narrative threads, and Forward Look forecasts.">
+    <meta property="og:title" content="Nexus Live Demo">
+    <meta property="og:description" content="Interactive static demo of the Nexus intelligence dashboard.">
+    <meta property="og:type" content="website">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M32 6 L35 16 L32 26 L29 16Z' fill='%2306b6d4' opacity='.5' transform='rotate(15 32 16)'/><path d='M38 32 L48 29 L58 32 L48 35Z' fill='%2322d3ee' opacity='.38' transform='rotate(15 48 32)'/><path d='M32 38 L35 48 L32 58 L29 48Z' fill='%2306b6d4' opacity='.5' transform='rotate(15 32 48)'/><path d='M6 32 L16 29 L26 32 L16 35Z' fill='%2322d3ee' opacity='.38' transform='rotate(15 16 32)'/><path d='M32 27 L37 32 L32 37 L27 32Z' fill='%2306b6d4' opacity='.7'/></svg>">
+    <script>(function(){var t=localStorage.getItem('nexus-theme');if(t)document.documentElement.setAttribute('data-theme',t);else if(window.matchMedia&&matchMedia('(prefers-color-scheme:light)').matches)document.documentElement.setAttribute('data-theme','light')})()</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Share+Tech+Mono&display=swap">
+<style>
+/* ── Theme ────────────────────────────────────────────────────────── */
+:root, [data-theme="dark"] {
+    --nx-bg: #0a0a0f;
+    --nx-bg-raised: #12121a;
+    --nx-bg-hover: #1a1a26;
+    --nx-bg-card: #141420;
+    --nx-border: rgba(255,255,255,0.06);
+    --nx-border-hover: rgba(255,255,255,0.14);
+    --nx-text: #e4e4ec;
+    --nx-text-secondary: #8a8a9a;
+    --nx-text-dim: #5a5a6e;
+    --nx-text-heading: #f0f0f5;
+    --nx-accent: #06b6d4;
+    --nx-accent-light: #22d3ee;
+    --nx-accent-soft: rgba(6,182,212,0.10);
+    --nx-glass: rgba(255,255,255,0.06);
+    --nx-glass-subtle: rgba(255,255,255,0.04);
+    --nx-glass-border: rgba(255,255,255,0.03);
+    --nx-font: 'Inter', -apple-system, system-ui, sans-serif;
+    --nx-transition: 0.15s ease;
+    --hdr-h: 48px;
+}
+[data-theme="light"] {
+    --nx-bg: #f5f3ef;
+    --nx-bg-raised: #ede9e3;
+    --nx-bg-hover: #e8e4de;
+    --nx-bg-card: #ffffff;
+    --nx-border: rgba(0,0,0,0.08);
+    --nx-border-hover: rgba(0,0,0,0.15);
+    --nx-text: #1a1a2e;
+    --nx-text-secondary: #5a5a6e;
+    --nx-text-dim: #8a8a9a;
+    --nx-text-heading: #1a1a2e;
+    --nx-accent: #0891b2;
+    --nx-accent-light: #06b6d4;
+    --nx-accent-soft: rgba(8,145,178,0.08);
+    --nx-glass: rgba(0,0,0,0.04);
+    --nx-glass-subtle: rgba(0,0,0,0.03);
+    --nx-glass-border: rgba(0,0,0,0.06);
+}
+
+/* ── Reset ────────────────────────────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: var(--nx-font);
+    background: var(--nx-bg);
+    color: var(--nx-text);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    height: 100vh;
+}
+strong { color: var(--nx-text-heading); }
+
+/* ── Site header ──────────────────────────────────────────────────── */
+.site-hdr {
+    height: var(--hdr-h);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    background: rgba(10,10,15,0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--nx-border);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+[data-theme="light"] .site-hdr { background: rgba(245,243,239,0.7); }
+.site-hdr .brand {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--nx-text-heading);
+    letter-spacing: 0.04em;
+    text-decoration: none;
+}
+.site-hdr .brand:hover { color: var(--nx-accent); }
+.site-hdr-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+.site-hdr-right a {
+    font-size: 0.72rem;
+    color: var(--nx-text-secondary);
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+}
+.site-hdr-right a:hover { color: var(--nx-text); }
+.theme-btn {
+    background: none;
+    border: 1px solid var(--nx-border);
+    border-radius: 6px;
+    color: var(--nx-text-secondary);
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--nx-transition);
+}
+.theme-btn:hover { border-color: var(--nx-border-hover); color: var(--nx-text); }
+[data-theme="dark"] .theme-light { display: none; }
+[data-theme="light"] .theme-dark { display: none; }
+
+/* ── Demo tabs ────────────────────────────────────────────────────── */
+.demo-bar {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    background: var(--nx-bg-raised);
+    border-bottom: 1px solid var(--nx-border);
+}
+.demo-tab {
+    font-family: var(--nx-font);
+    font-size: 0.75rem;
+    color: var(--nx-text-dim);
+    cursor: pointer;
+    padding: 6px 16px;
+    border-radius: 6px;
+    transition: color var(--nx-transition), background var(--nx-transition);
+    user-select: none;
+}
+.demo-tab:hover { color: var(--nx-text); background: var(--nx-bg-hover); }
+.demo-tab.active { color: var(--nx-accent); }
+
+/* ── Frame ────────────────────────────────────────────────────────── */
+.demo-frame {
+    width: 100%;
+    height: calc(100vh - var(--hdr-h) - 40px);
+    border: none;
+    display: block;
+}
+</style>
+</head>
+<body>
+    <header class="site-hdr">
+        <a href="index.html" class="brand"><svg width="16" height="16" viewBox="0 0 64 64" style="vertical-align:-2px"><path d="M32 6 L35 16 L32 26 L29 16Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 16)"/><path d="M38 32 L48 29 L58 32 L48 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 48 32)"/><path d="M32 38 L35 48 L32 58 L29 48Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 48)"/><path d="M6 32 L16 29 L26 32 L16 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 16 32)"/><path d="M32 27 L37 32 L32 37 L27 32Z" fill="#06b6d4" opacity=".7"/></svg> Nexus</a>
+        <div class="site-hdr-right">
+            <a href="index.html">Overview</a>
+            <a href="pipeline.html">System Map</a>
+            <button class="theme-btn" onclick="toggleTheme()" aria-label="Toggle theme">
+                <span class="theme-dark">&#9789;</span>
+                <span class="theme-light">&#9728;</span>
+            </button>
+        </div>
+    </header>
+
+    <div class="demo-bar">
+        <span class="demo-tab active" onclick="switchDemo(this,'demo-explore.html')">Explore</span>
+        <span class="demo-tab" onclick="switchDemo(this,'demo.html')">Briefing</span>
+        <span class="demo-tab" onclick="switchDemo(this,'demo-threads.html')">Threads</span>
+        <span class="demo-tab" onclick="switchDemo(this,'demo-forward-look.html')">Forward Look</span>
+    </div>
+
+    <iframe id="demo-frame" class="demo-frame" src="demo-explore.html" loading="lazy" title="Nexus dashboard preview"></iframe>
+
+<script>
+window.toggleTheme = function() {
+    var html = document.documentElement;
+    var next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('nexus-theme', next);
+};
+
+function switchDemo(el, src) {
+    document.getElementById('demo-frame').src = src;
+    document.querySelectorAll('.demo-tab').forEach(function(t) { t.classList.remove('active'); });
+    el.classList.add('active');
+}
+</script>
+</body>
+</html>

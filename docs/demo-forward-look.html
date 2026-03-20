@@ -1,0 +1,6847 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-density="full">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script>(function(){var t=localStorage.getItem('nexus-theme');if(t)document.documentElement.setAttribute('data-theme',t);else if(window.matchMedia&&matchMedia('(prefers-color-scheme:light)').matches)document.documentElement.setAttribute('data-theme','light');var d=localStorage.getItem('nexus-density');if(d)document.documentElement.setAttribute('data-density',d)})()</script>
+    <title>Forward Look | Nexus</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M32 6 L35 16 L32 26 L29 16Z' fill='%2306b6d4' opacity='.5' transform='rotate(15 32 16)'/><path d='M38 32 L48 29 L58 32 L48 35Z' fill='%2322d3ee' opacity='.38' transform='rotate(15 48 32)'/><path d='M32 38 L35 48 L32 58 L29 48Z' fill='%2306b6d4' opacity='.5' transform='rotate(15 32 48)'/><path d='M6 32 L16 29 L26 32 L16 35Z' fill='%2322d3ee' opacity='.38' transform='rotate(15 16 32)'/><path d='M32 27 L37 32 L32 37 L27 32Z' fill='%2306b6d4' opacity='.7'/></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Share+Tech+Mono&display=swap">
+    <style>/* ═══════════════════════════════════════════════════════
+   Nexus Intelligence — Design System
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Reset & Variables ── */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+button { background: transparent; border: none; font: inherit; color: inherit; }
+
+:root {
+    --nx-bg: #0a0a0f;
+    --nx-bg-raised: #12121a;
+    --nx-bg-hover: #1a1a26;
+    --nx-bg-card: #141420;
+    --nx-border: rgba(255, 255, 255, 0.06);
+    --nx-border-hover: rgba(255, 255, 255, 0.14);
+    --nx-text: #e4e4ec;
+    --nx-text-secondary: #8a8a9a;
+    --nx-text-dim: #5a5a6e;
+    --nx-heading: #f0f0f5;
+    --nx-accent: #06b6d4;
+    --nx-accent-light: #22d3ee;
+    --nx-accent-soft: rgba(6, 182, 212, 0.10);
+    --nx-accent-hover: rgba(6, 182, 212, 0.18);
+    --nx-green: #10b981;
+    --nx-green-soft: rgba(16, 185, 129, 0.12);
+    --nx-orange: #f59e0b;
+    --nx-orange-soft: rgba(245, 158, 11, 0.10);
+    --nx-red: #ef4444;
+    --nx-red-soft: rgba(239, 68, 68, 0.10);
+    --nx-blue: #3b82f6;
+    --nx-blue-soft: rgba(59, 130, 246, 0.12);
+    --nx-glass: rgba(255, 255, 255, 0.06);
+    --nx-glass-subtle: rgba(255, 255, 255, 0.04);
+    --nx-glass-faint: rgba(255, 255, 255, 0.02);
+    --nx-glass-border: rgba(255, 255, 255, 0.03);
+    --nx-radius: 8px;
+    --nx-radius-lg: 12px;
+    --nx-font: 'Inter', -apple-system, system-ui, sans-serif;
+    --nx-transition: 0.15s ease;
+}
+
+[data-theme="light"] {
+    --nx-bg: #f5f3ef;
+    --nx-bg-raised: #ede9e3;
+    --nx-bg-hover: #e8e4de;
+    --nx-bg-card: #ffffff;
+    --nx-border: rgba(0, 0, 0, 0.08);
+    --nx-border-hover: rgba(0, 0, 0, 0.15);
+    --nx-text: #1a1a2e;
+    --nx-text-secondary: #5a5a6e;
+    --nx-text-dim: #8a8a9a;
+    --nx-heading: #1a1a2e;
+    --nx-accent: #0891b2;
+    --nx-accent-light: #06b6d4;
+    --nx-accent-soft: rgba(8, 145, 178, 0.08);
+    --nx-accent-hover: rgba(8, 145, 178, 0.14);
+    --nx-green-soft: rgba(16, 185, 129, 0.10);
+    --nx-orange-soft: rgba(245, 158, 11, 0.08);
+    --nx-red-soft: rgba(239, 68, 68, 0.08);
+    --nx-blue-soft: rgba(59, 130, 246, 0.10);
+    --nx-glass: rgba(0, 0, 0, 0.04);
+    --nx-glass-subtle: rgba(0, 0, 0, 0.03);
+    --nx-glass-faint: rgba(0, 0, 0, 0.015);
+    --nx-glass-border: rgba(0, 0, 0, 0.06);
+}
+
+body {
+    font-family: var(--nx-font);
+    background: var(--nx-bg);
+    color: var(--nx-text);
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--nx-accent); text-decoration: none; }
+a:hover { color: var(--nx-accent-light); }
+
+h1, h2, h3, h4 { color: var(--nx-heading); font-weight: 600; line-height: 1.3; }
+h2 { font-size: 1.5rem; margin-bottom: 1rem; }
+h3 { font-size: 1.15rem; margin-bottom: 0.75rem; }
+
+/* ── Site Header ── */
+
+.site-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(10, 10, 15, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--nx-border);
+}
+
+[data-theme="light"] .site-header {
+    background: rgba(245, 243, 239, 0.88);
+}
+
+.site-nav {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+}
+
+.brand {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--nx-heading) !important;
+    letter-spacing: -0.01em;
+    flex-shrink: 0;
+}
+
+.nav-primary {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.nav-link {
+    padding: 0.4rem 0.85rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--nx-text-secondary) !important;
+    transition: all var(--nx-transition);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.nav-link:hover {
+    color: var(--nx-text) !important;
+    background: var(--nx-bg-hover);
+}
+
+.nav-link.active {
+    color: var(--nx-text) !important;
+    background: var(--nx-accent-soft);
+}
+
+.nav-secondary { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
+
+.theme-toggle {
+    background: none;
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    cursor: pointer;
+    padding: 0.25rem 0.45rem;
+    font-size: 0.95rem;
+    color: var(--nx-text-secondary);
+    transition: var(--nx-transition);
+    line-height: 1;
+}
+.theme-toggle:hover {
+    border-color: var(--nx-border-hover);
+    color: var(--nx-text);
+}
+[data-theme="dark"] .theme-icon-light { display: none; }
+[data-theme="light"] .theme-icon-dark { display: none; }
+
+/* Density toggle */
+.density-toggle {
+    background: none;
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    cursor: pointer;
+    padding: 0.25rem 0.45rem;
+    font-size: 0.95rem;
+    color: var(--nx-text-secondary);
+    transition: var(--nx-transition);
+    line-height: 1;
+}
+.density-toggle:hover {
+    border-color: var(--nx-border-hover);
+    color: var(--nx-text);
+}
+[data-density="full"] .density-icon-comfort { display: none; }
+[data-density="comfort"] .density-icon-full { display: none; }
+
+/* Comfort mode — hide detail-heavy elements */
+[data-density="comfort"] .briefing-event { display: none; }
+[data-density="comfort"] .convergence-callout { display: none; }
+[data-density="comfort"] .divergence-callout { display: none; }
+[data-density="comfort"] .briefing-thread-entities { display: none; }
+[data-density="comfort"] .trajectory-badge { display: none; }
+[data-density="comfort"] .sidebar-section:not(:first-child) { display: none; }
+
+.nav-dropdown { position: relative; }
+
+.nav-dropdown-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    background: var(--nx-bg-raised);
+    border: 1px solid var(--nx-border-hover);
+    border-radius: var(--nx-radius);
+    padding: 0.4rem;
+    min-width: 160px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+.nav-dropdown-menu a {
+    display: block;
+    padding: 0.45rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: var(--nx-text-secondary);
+}
+
+.nav-dropdown-menu a:hover {
+    background: var(--nx-bg-hover);
+    color: var(--nx-text);
+}
+
+.nav-more-btn[aria-expanded="true"] + .nav-dropdown-menu {
+    display: block;
+}
+
+/* ── Mobile Hamburger ── */
+.nav-hamburger {
+    display: none;
+    background: none;
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    cursor: pointer;
+    padding: 0.4rem;
+    margin-left: auto;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+}
+.nav-hamburger span {
+    display: block;
+    width: 18px;
+    height: 2px;
+    background: var(--nx-text-secondary);
+    border-radius: 1px;
+    transition: var(--nx-transition);
+}
+.nav-hamburger:hover span { background: var(--nx-text); }
+
+@media (max-width: 768px) {
+    .nav-hamburger { display: flex; }
+    .site-nav {
+        flex-wrap: wrap;
+    }
+    .nav-primary, .nav-secondary {
+        display: none;
+        width: 100%;
+        padding: 0.5rem 0;
+    }
+    .nav-primary { flex-direction: column; gap: 0.25rem; }
+    .nav-secondary {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-left: 0;
+        padding-bottom: 0.75rem;
+    }
+    .site-nav.nav-open .nav-primary,
+    .site-nav.nav-open .nav-secondary { display: flex; }
+    .nav-dropdown-menu {
+        position: static;
+        box-shadow: none;
+        border: none;
+        background: none;
+        padding: 0;
+        min-width: 0;
+    }
+    .nav-dropdown-menu a { padding-left: 0; }
+    .nav-more-btn { display: none; }
+    .nav-dropdown .nav-dropdown-menu { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+}
+
+/* ── Main Content ── */
+
+.main-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+    width: 100%;
+    flex: 1;
+}
+
+.main-content.full-bleed {
+    max-width: none;
+    padding: 0;
+}
+
+/* ── Page Header ── */
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.page-header h2 {
+    margin-bottom: 0.25rem;
+}
+
+.page-subtitle {
+    color: var(--nx-text-secondary);
+    font-size: 0.9rem;
+}
+
+/* ── Cards ── */
+
+.card {
+    background: var(--nx-bg-card);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius-lg);
+    padding: 1.25rem;
+    transition: border-color var(--nx-transition);
+}
+
+.card:hover { border-color: var(--nx-border-hover); }
+
+.card-section {
+    margin-bottom: 2rem;
+}
+
+.card-section-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--nx-text-dim);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--nx-border);
+}
+
+/* ── Badges ── */
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.badge-emerging { background: var(--nx-orange-soft); color: var(--nx-orange); }
+.badge-active { background: var(--nx-green-soft); color: var(--nx-green); }
+.badge-stale { background: rgba(127, 140, 141, 0.15); color: #95a5a6; }
+.badge-resolved { background: rgba(127, 140, 141, 0.10); color: #7f8c8d; }
+
+.badge-state { background: rgba(239, 68, 68, 0.15); color: var(--nx-red); }
+.badge-public { background: var(--nx-blue-soft); color: var(--nx-blue); }
+.badge-private { background: rgba(127, 140, 141, 0.12); color: #95a5a6; }
+.badge-academic, .badge-nonprofit { background: var(--nx-green-soft); color: var(--nx-green); }
+.badge-unknown { background: rgba(127, 140, 141, 0.10); color: #7f8c8d; }
+
+.badge-accepted { background: var(--nx-green-soft); color: var(--nx-green); }
+.badge-rejected { background: var(--nx-red-soft); color: var(--nx-red); }
+
+/* ── Entity Tags ── */
+
+.entity-tag {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    background: var(--nx-accent-soft);
+    color: var(--nx-accent);
+    transition: background var(--nx-transition);
+}
+
+a.entity-tag:hover {
+    background: var(--nx-accent-hover);
+    color: var(--nx-accent-light);
+}
+
+/* ── Significance ── */
+
+.sig-indicator {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.sig-high { background: var(--nx-red-soft); color: var(--nx-red); }
+.sig-med { background: var(--nx-orange-soft); color: var(--nx-orange); }
+.sig-low { background: rgba(127, 140, 141, 0.15); color: #95a5a6; }
+
+.sig-bar {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+}
+
+.sig-bar-segment {
+    width: 12px;
+    height: 6px;
+    border-radius: 2px;
+    background: var(--nx-glass);
+}
+
+.sig-bar-segment.filled { background: var(--nx-accent); }
+.sig-bar-segment.filled.high { background: var(--nx-red); }
+.sig-bar-segment.filled.med { background: var(--nx-orange); }
+
+/* ═══════════════════════════════════════════════════════
+   BRIEFING (Homepage)
+   ═══════════════════════════════════════════════════════ */
+
+.briefing-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 2.5rem;
+    align-items: start;
+}
+
+@media (max-width: 900px) {
+    .briefing-layout { grid-template-columns: 1fr; }
+}
+
+.briefing-header {
+    margin-bottom: 2rem;
+}
+
+.briefing-header-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 2rem;
+}
+
+.briefing-header-left {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ── Pipeline Controls ── */
+
+.pipeline-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-shrink: 0;
+}
+
+.last-run-label {
+    font-size: 0.78rem;
+    color: var(--nx-text-dim);
+}
+
+.status-badge {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.status-badge.status-failed {
+    background: var(--nx-red-soft);
+    color: #ef4444;
+}
+
+.btn-sm {
+    font-size: 0.78rem;
+    padding: 0.35rem 0.85rem;
+    border-radius: 6px;
+    border: 1px solid var(--nx-border);
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+.btn-sm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-accent {
+    background: var(--nx-accent);
+    color: #fff;
+    border-color: var(--nx-accent);
+}
+.btn-accent:hover:not(:disabled) {
+    filter: brightness(1.1);
+}
+
+.pipeline-controls-status {
+    font-size: 0.78rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 6px;
+}
+.pipeline-controls-status.status-running {
+    background: var(--nx-blue-soft);
+    color: var(--nx-text);
+}
+.pipeline-controls-status.status-error {
+    background: var(--nx-red-soft);
+    color: #ef4444;
+}
+.pipeline-controls-status.status-done {
+    background: var(--nx-green-soft);
+    color: #10b981;
+}
+.pipeline-controls-status.status-cooldown {
+    color: var(--nx-text-dim);
+}
+.pipeline-controls-status a {
+    color: var(--nx-accent);
+    text-decoration: underline;
+    margin-left: 0.3rem;
+}
+
+/* ── Audio Player ── */
+
+.audio-player-card {
+    flex-shrink: 0;
+    width: 320px;
+    background: var(--nx-bg-raised);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius-lg);
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.audio-player-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.audio-player-icon {
+    font-size: 1.25rem;
+}
+
+.audio-player-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--nx-text);
+    flex: 1;
+}
+
+.audio-lang-select {
+    appearance: none;
+    background: var(--nx-bg-hover);
+    color: var(--nx-text);
+    border: 1px solid var(--nx-border);
+    border-radius: 6px;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.75rem;
+    font-family: var(--nx-font);
+    cursor: pointer;
+    transition: border-color var(--nx-transition);
+}
+
+.audio-lang-select:hover {
+    border-color: var(--nx-border-hover);
+}
+
+.audio-lang-select:focus {
+    outline: none;
+    border-color: var(--nx-accent);
+}
+
+.audio-player-card audio {
+    width: 100%;
+    height: 36px;
+    border-radius: 6px;
+    outline: none;
+    color-scheme: dark;
+    filter: invert(1) hue-rotate(180deg);
+}
+
+.audio-player-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.audio-download-btn,
+.audio-rss-btn {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--nx-text-secondary);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--nx-border);
+    transition: all var(--nx-transition);
+    text-decoration: none;
+}
+
+.audio-download-btn:hover,
+.audio-rss-btn:hover {
+    color: var(--nx-text);
+    border-color: var(--nx-border-hover);
+    background: var(--nx-bg-hover);
+}
+
+@media (max-width: 900px) {
+    .briefing-header-top {
+        flex-direction: column;
+    }
+    .audio-player-card {
+        width: 100%;
+    }
+}
+
+.briefing-date {
+    font-size: 1rem;
+    color: var(--nx-text-secondary);
+    font-weight: 500;
+}
+
+.briefing-nav {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.briefing-nav a {
+    padding: 0.3rem 0.7rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--nx-text-secondary);
+    border: 1px solid var(--nx-border);
+    transition: all var(--nx-transition);
+}
+
+.briefing-nav a:hover {
+    border-color: var(--nx-border-hover);
+    color: var(--nx-text);
+}
+
+.briefing-nav a.current {
+    background: var(--nx-accent-soft);
+    border-color: transparent;
+    color: var(--nx-accent);
+}
+
+.briefing-content {
+    line-height: 1.8;
+    font-size: 0.95rem;
+}
+
+.briefing-content h2 {
+    font-size: 1.25rem;
+    margin-top: 2.25rem;
+    margin-bottom: 0.75rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--nx-border);
+}
+
+.briefing-content h2:first-child {
+    border-top: none;
+    padding-top: 0;
+    margin-top: 0;
+}
+
+.briefing-content p {
+    margin-bottom: 1rem;
+    color: var(--nx-text);
+}
+
+/* Source citations — *italic* text becomes source pills */
+.briefing-content em {
+    font-style: normal;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    background: var(--nx-glass-subtle);
+    color: var(--nx-text-secondary);
+    border: 1px solid var(--nx-border);
+    white-space: nowrap;
+}
+
+.briefing-footer {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--nx-border);
+    font-size: 0.82rem;
+    color: var(--nx-text-dim);
+}
+
+/* ── Topic Tabs ── */
+
+/* ── Stats Bar ── */
+.briefing-stats-bar {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+.stat-card {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    padding: 0.75rem 1.2rem;
+    background: var(--nx-glass);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    min-width: 120px;
+}
+.stat-value {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--nx-heading);
+    line-height: 1.2;
+}
+.stat-sub {
+    font-size: 0.72rem;
+    font-weight: 400;
+    color: var(--nx-text-dim);
+    margin-left: 0.2rem;
+}
+.stat-label {
+    font-size: 0.68rem;
+    color: var(--nx-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* ── Topic Highlight ── */
+.topic-highlight {
+    background: var(--nx-accent-soft);
+    border: 1px solid rgba(6, 182, 212, 0.15);
+    border-radius: var(--nx-radius);
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+}
+.topic-highlight-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--nx-accent);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.4rem;
+}
+.topic-highlight-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.topic-highlight-list li {
+    font-size: 0.82rem;
+    color: var(--nx-text);
+    line-height: 1.45;
+    padding: 0.15rem 0;
+    padding-left: 0.8rem;
+    position: relative;
+}
+.topic-highlight-list li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.55rem;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--nx-accent);
+}
+
+/* ── Sidebar Forecast ── */
+.sidebar-forecast {
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--nx-glass-border);
+}
+.sidebar-forecast:last-of-type { border-bottom: none; }
+.sidebar-forecast-context {
+    font-size: 0.68rem;
+    color: var(--nx-text-dim);
+    margin-bottom: 0.1rem;
+}
+.sidebar-forecast-question {
+    font-size: 0.8rem;
+    color: var(--nx-text);
+    line-height: 1.35;
+    margin-bottom: 0.25rem;
+}
+.sidebar-forecast-probs {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.72rem;
+}
+.sidebar-forecast-prob {
+    font-weight: 600;
+    color: var(--nx-heading);
+}
+.sidebar-forecast-vs {
+    color: var(--nx-text-dim);
+}
+.sidebar-empty {
+    font-size: 0.78rem;
+    color: var(--nx-text-dim);
+    padding: 0.3rem 0;
+}
+
+.topic-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid var(--nx-border);
+    padding-bottom: 0;
+}
+
+.topic-tab {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.6rem 1rem;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    color: var(--nx-text-secondary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    font-family: var(--nx-font);
+    white-space: nowrap;
+    transition: all 0.15s;
+}
+
+.topic-tab:hover {
+    color: var(--nx-text);
+    background: var(--nx-bg-hover);
+}
+
+.topic-tab.active {
+    color: var(--nx-accent);
+    border-bottom-color: var(--nx-accent);
+}
+
+.topic-tab-emoji { font-size: 1rem; }
+
+.topic-tab-count {
+    font-size: 0.65rem;
+    background: var(--nx-glass);
+    padding: 0.1rem 0.35rem;
+    border-radius: 8px;
+    color: var(--nx-text-dim);
+}
+
+.topic-tab.active .topic-tab-count {
+    background: var(--nx-accent-soft);
+    color: var(--nx-accent);
+}
+
+/* ── Topic Panels ── */
+
+.topic-panel {
+    display: none;
+}
+
+.topic-panel.active {
+    display: block;
+}
+
+.topic-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--nx-border);
+}
+
+/* ── Structured Briefing (Topic Sections) ── */
+
+.topic-section {
+    background: var(--nx-bg-card);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    padding: 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.topic-section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--nx-border);
+}
+
+.topic-section-header h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--nx-text);
+    flex: 1;
+}
+
+.topic-section-emoji {
+    font-size: 1.2rem;
+}
+
+.topic-section-stats {
+    font-size: 0.72rem;
+    color: var(--nx-text-dim);
+    white-space: nowrap;
+}
+
+.briefing-thread-card {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--nx-border);
+}
+
+.briefing-thread-card:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.briefing-thread-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+}
+
+.briefing-thread-headline {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--nx-text);
+    text-decoration: none;
+    flex: 1;
+}
+
+.briefing-thread-headline:hover {
+    color: var(--nx-accent);
+}
+
+.briefing-thread-entities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.briefing-event {
+    padding: 0.35rem 0.55rem;
+    margin: 0.25rem 0;
+    border-radius: 6px;
+    background: var(--nx-bg-raised);
+    border-left: 3px solid var(--nx-border);
+}
+
+.briefing-event.major {
+    border-left-color: var(--nx-orange);
+    background: var(--nx-orange-soft);
+}
+
+.briefing-event-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.2rem;
+}
+
+.briefing-event-date {
+    font-size: 0.72rem;
+    color: var(--nx-text-dim);
+    font-weight: 500;
+}
+
+.briefing-event-sig {
+    font-size: 0.6rem;
+    font-weight: 700;
+    background: var(--nx-glass);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    color: var(--nx-text-secondary);
+}
+
+.briefing-event-summary {
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--nx-text);
+    margin-bottom: 0.25rem;
+}
+
+.briefing-event-sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.source-badge-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.72rem;
+    color: var(--nx-text-secondary);
+    text-decoration: none;
+    padding: 0.12rem 0.4rem;
+    border-radius: 4px;
+    background: var(--nx-glass-subtle);
+    border: 1px solid var(--nx-border);
+    transition: all 0.15s;
+}
+
+.source-badge-link:hover {
+    background: var(--nx-accent-soft);
+    border-color: var(--nx-accent);
+    color: var(--nx-accent);
+}
+
+.source-badge-link .ext-arrow {
+    font-size: 0.6rem;
+    opacity: 0.5;
+}
+
+/* Convergence / Divergence Callouts */
+
+.convergence-callout, .divergence-callout {
+    display: flex;
+    gap: 0.6rem;
+    padding: 0.6rem 0.75rem;
+    margin-top: 0.5rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+
+.convergence-callout {
+    background: var(--nx-green-soft);
+    border-left: 3px solid var(--nx-green);
+}
+
+.divergence-callout {
+    background: var(--nx-orange-soft);
+    border-left: 3px solid var(--nx-orange);
+}
+
+.callout-icon {
+    font-size: 0.9rem;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+}
+
+.convergence-callout .callout-icon { color: var(--nx-green); }
+.divergence-callout .callout-icon { color: var(--nx-orange); }
+
+.callout-body {
+    flex: 1;
+}
+
+.callout-label {
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.15rem;
+}
+
+.convergence-callout .callout-label { color: var(--nx-green); }
+.divergence-callout .callout-label { color: var(--nx-orange); }
+
+.callout-sources {
+    display: inline;
+    margin-left: 0.3rem;
+}
+
+.callout-source-name {
+    font-size: 0.72rem;
+    color: var(--nx-text-secondary);
+    padding: 0.05rem 0.3rem;
+    background: var(--nx-glass-subtle);
+    border-radius: 3px;
+    margin-left: 0.15rem;
+}
+
+.callout-side {
+    display: block;
+    font-size: 0.82rem;
+}
+
+.callout-vs {
+    display: block;
+    font-size: 0.65rem;
+    color: var(--nx-text-dim);
+    text-transform: uppercase;
+    font-weight: 700;
+    margin: 0.15rem 0;
+}
+
+/* Sidebar */
+
+.sidebar {
+    position: sticky;
+    top: 80px;
+}
+
+.sidebar-section {
+    margin-bottom: 1.75rem;
+}
+
+.sidebar-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--nx-text-dim);
+    margin-bottom: 0.6rem;
+}
+
+.sidebar-thread {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.45rem 0;
+    border-bottom: 1px solid var(--nx-glass-border);
+    font-size: 0.85rem;
+}
+
+.sidebar-thread a {
+    color: var(--nx-text);
+    flex: 1;
+    margin-right: 0.5rem;
+    line-height: 1.3;
+}
+
+.sidebar-thread a:hover { color: var(--nx-accent); }
+
+.sidebar-insight {
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--nx-glass-border);
+    font-size: 0.82rem;
+}
+
+.sidebar-insight:last-child { border-bottom: none; }
+
+.sidebar-insight-claim {
+    color: var(--nx-text);
+    line-height: 1.35;
+}
+
+.sidebar-insight-reasoning {
+    font-size: 0.75rem;
+    color: var(--nx-text-dim);
+    line-height: 1.3;
+    margin-top: 0.2rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.source-badge-high { background: rgba(var(--nx-green-rgb, 76, 175, 80), 0.15); color: var(--nx-green); }
+.source-badge-medium { background: rgba(var(--nx-accent-rgb, 255, 193, 7), 0.15); color: var(--nx-accent); }
+.source-badge-low { background: rgba(var(--nx-text-dim-rgb, 150, 150, 150), 0.15); color: var(--nx-text-dim); }
+
+/* ── Kalshi sidebar ── */
+
+.sidebar-kalshi {
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--nx-glass-border);
+}
+
+.sidebar-kalshi:last-child { border-bottom: none; }
+
+.sidebar-kalshi-question {
+    font-size: 0.78rem;
+    color: var(--nx-text);
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.sidebar-kalshi-probs {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 0.25rem;
+    font-size: 0.72rem;
+}
+
+.sidebar-kalshi-us {
+    color: var(--nx-accent);
+    font-weight: 600;
+}
+
+.sidebar-kalshi-mkt {
+    color: var(--nx-text-dim);
+}
+
+.sidebar-kalshi-gap {
+    color: var(--nx-blue);
+    font-weight: 500;
+}
+
+.sidebar-bridge {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--nx-glass-border);
+}
+
+.sidebar-bridge:last-child { border-bottom: none; }
+
+.sidebar-bridge-entity {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--nx-accent);
+    margin-bottom: 0.2rem;
+}
+
+.sidebar-bridge-event {
+    font-size: 0.78rem;
+    line-height: 1.3;
+    color: var(--nx-text-secondary);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.sidebar-bridge-event a {
+    color: var(--nx-text-secondary);
+}
+
+.sidebar-bridge-event a:hover {
+    color: var(--nx-accent);
+}
+
+.sidebar-bridge-related {
+    margin-top: 0.15rem;
+    padding-left: 0.6rem;
+    border-left: 2px solid var(--nx-glass);
+}
+
+/* Breaking alerts sidebar */
+.sidebar-breaking-topic { margin-bottom: 0.5rem; }
+.sidebar-breaking-topic-name {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--nx-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.sidebar-breaking-alert {
+    display: flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    padding: 0.2rem 0;
+    font-size: 0.82rem;
+}
+.sidebar-breaking-alert a {
+    color: var(--nx-text);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.sidebar-breaking-alert a:hover { color: var(--nx-accent); }
+.sidebar-breaking-score {
+    color: var(--nx-accent);
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.fp-rate-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--nx-glass);
+    color: var(--nx-text-dim);
+    margin-left: 0.3rem;
+}
+
+.sidebar-topic {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.4rem 0;
+    font-size: 0.85rem;
+    color: var(--nx-text);
+}
+
+.sidebar-topic:hover { color: var(--nx-accent); }
+
+.sidebar-topic .topic-count {
+    color: var(--nx-text-dim);
+    font-size: 0.78rem;
+    margin-left: auto;
+}
+
+.sidebar-metric {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.3rem 0;
+    font-size: 0.82rem;
+}
+
+.sidebar-metric-label { color: var(--nx-text-dim); }
+.sidebar-metric-value { color: var(--nx-text); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* ═══════════════════════════════════════════════════════
+   THREAD TRACKER
+   ═══════════════════════════════════════════════════════ */
+
+/* Thread List */
+
+.thread-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.thread-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    padding: 1rem 1.25rem;
+    border-radius: var(--nx-radius-lg);
+    border: 1px solid var(--nx-border);
+    background: var(--nx-bg-card);
+    transition: all var(--nx-transition);
+}
+
+.thread-card:hover {
+    border-color: var(--nx-border-hover);
+    background: var(--nx-bg-hover);
+    transform: translateY(-1px);
+}
+
+.thread-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.thread-headline {
+    font-weight: 600;
+    font-size: 0.95rem;
+    line-height: 1.35;
+    color: var(--nx-text);
+}
+
+.thread-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+}
+
+.thread-card-stats {
+    font-size: 0.78rem;
+    color: var(--nx-text-dim);
+    margin-top: 0.25rem;
+}
+
+.thread-card-time {
+    font-size: 0.72rem;
+    color: var(--nx-text-dim);
+    margin-top: 0.25rem;
+}
+
+.sidebar-time {
+    font-size: 0.65rem;
+    color: var(--nx-text-dim);
+    white-space: nowrap;
+}
+
+.thread-cluster {
+    border-left: 3px solid var(--nx-accent);
+    padding-left: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.thread-cluster-label {
+    font-size: 0.72rem;
+    color: var(--nx-accent);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.35rem 0;
+}
+
+.thread-count-badge {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--nx-text-dim);
+    background: var(--nx-bg-card);
+    border: 1px solid var(--nx-border);
+    border-radius: 1rem;
+    padding: 0.15rem 0.6rem;
+}
+
+.filter-count {
+    font-size: 0.68rem;
+    opacity: 0.6;
+    margin-left: 0.2rem;
+}
+
+.thread-stat {
+    font-size: 0.72rem;
+    color: var(--nx-text-dim);
+}
+
+/* Thread Tracker Detail */
+
+.tracker-hero {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--nx-border);
+}
+
+.tracker-hero h2 {
+    font-size: 1.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.tracker-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.tracker-entities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+}
+
+.status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 0.25rem;
+}
+
+.status-dot.active {
+    background: var(--nx-green);
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
+    animation: pulse 2s infinite;
+}
+
+.status-dot.emerging { background: var(--nx-orange); }
+.status-dot.stale { background: #95a5a6; }
+.status-dot.resolved { background: #7f8c8d; }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* Analysis Panel (Convergence / Divergence) */
+
+.analysis-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2.5rem;
+}
+
+@media (max-width: 768px) {
+    .analysis-panel { grid-template-columns: 1fr; }
+}
+
+.analysis-card {
+    background: var(--nx-bg-card);
+    border-radius: var(--nx-radius-lg);
+    border: 1px solid var(--nx-border);
+    overflow: hidden;
+}
+
+.analysis-card-header {
+    padding: 0.7rem 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.analysis-card.convergence .analysis-card-header {
+    background: var(--nx-green-soft);
+    color: var(--nx-green);
+    border-bottom: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.analysis-card.divergence .analysis-card-header {
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+    border-bottom: 1px solid rgba(245, 158, 11, 0.15);
+}
+
+.analysis-card-body {
+    padding: 0.75rem 1rem;
+}
+
+.analysis-item {
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--nx-glass-border);
+}
+
+.analysis-item:last-child { border-bottom: none; }
+
+.analysis-fact {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    margin-bottom: 0.4rem;
+}
+
+.analysis-sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.source-badge {
+    font-size: 0.68rem;
+    font-weight: 500;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    background: var(--nx-accent-soft);
+    color: var(--nx-accent);
+}
+
+.divergence-vs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.divergence-side {
+    padding: 0.6rem;
+    border-radius: var(--nx-radius);
+    background: var(--nx-glass-faint);
+    border: 1px solid var(--nx-border);
+}
+
+.divergence-source {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--nx-text-secondary);
+    margin-bottom: 0.3rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.divergence-framing {
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--nx-text);
+    font-style: italic;
+}
+
+/* Event Timeline */
+
+.tracker-timeline {
+    position: relative;
+    padding-left: 2rem;
+}
+
+.tracker-timeline::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--nx-border);
+}
+
+.timeline-date-marker {
+    position: relative;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--nx-text-dim);
+    margin: 1.5rem 0 0.75rem -2rem;
+    padding-left: 2rem;
+}
+
+.timeline-date-marker:first-child { margin-top: 0; }
+
+.tracker-event {
+    position: relative;
+    margin-bottom: 1rem;
+    padding: 1rem 1.25rem;
+    background: var(--nx-bg-card);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius-lg);
+    transition: border-color var(--nx-transition);
+}
+
+.tracker-event:hover { border-color: var(--nx-border-hover); }
+
+.tracker-event.major {
+    border-left: 3px solid var(--nx-red);
+}
+
+.tracker-event-dot {
+    position: absolute;
+    left: -2rem;
+    top: 1.2rem;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--nx-accent);
+    border: 2px solid var(--nx-bg);
+    transform: translateX(-1px);
+}
+
+.tracker-event.major .tracker-event-dot {
+    background: var(--nx-red);
+    width: 12px;
+    height: 12px;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+}
+
+.tracker-event-summary {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin-bottom: 0.6rem;
+}
+
+.tracker-event-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.source-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    background: var(--nx-bg-hover);
+    color: var(--nx-text-secondary);
+    border: 1px solid var(--nx-border);
+    transition: all var(--nx-transition);
+}
+
+.source-link:hover {
+    border-color: var(--nx-border-hover);
+    color: var(--nx-text);
+}
+
+.source-link .ext-icon { font-size: 0.6rem; }
+
+/* ═══════════════════════════════════════════════════════
+   EXPLORE (Knowledge Graph)
+   ═══════════════════════════════════════════════════════ */
+
+.explore-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.explore-search {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.explore-search input {
+    padding: 0.45rem 0.85rem;
+    border-radius: var(--nx-radius);
+    border: 1px solid var(--nx-border);
+    background: var(--nx-bg-raised);
+    color: var(--nx-text);
+    font-size: 0.85rem;
+    font-family: inherit;
+    outline: none;
+    width: 240px;
+    transition: border-color var(--nx-transition);
+}
+
+.explore-search input:focus {
+    border-color: var(--nx-accent);
+}
+
+.type-filters {
+    display: flex;
+    gap: 0.3rem;
+}
+
+.type-filter {
+    padding: 0.3rem 0.65rem;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    border: 1px solid var(--nx-border);
+    background: none;
+    color: var(--nx-text-secondary);
+    cursor: pointer;
+    transition: all var(--nx-transition);
+    font-family: inherit;
+    text-decoration: none;
+}
+
+.type-filter:hover, .type-filter.active {
+    background: var(--nx-accent-soft);
+    border-color: var(--nx-accent);
+    color: var(--nx-accent);
+}
+
+.explore-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 0.75rem;
+}
+
+.explore-card {
+    display: block;
+    padding: 1rem;
+    background: var(--nx-bg-card);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius-lg);
+    text-decoration: none;
+    color: inherit;
+    transition: all var(--nx-transition);
+}
+
+.explore-card:hover {
+    border-color: var(--nx-border-hover);
+    transform: translateY(-1px);
+}
+
+.explore-card-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 0.35rem;
+    color: var(--nx-text);
+}
+
+.explore-card-type {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.5rem;
+}
+
+.explore-card-type.person { color: var(--nx-blue); }
+.explore-card-type.org { color: var(--nx-accent); }
+.explore-card-type.country { color: var(--nx-green); }
+.explore-card-type.concept { color: var(--nx-orange); }
+.explore-card-type.treaty { color: #a855f7; }
+.explore-card-type.unknown { color: var(--nx-text-dim); }
+
+.explore-card-top {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.5rem;
+}
+
+.explore-card-stats {
+    font-size: 0.78rem;
+    color: var(--nx-text-dim);
+}
+
+/* Entity Avatars */
+
+.entity-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.entity-avatar-lg {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.entity-initial {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+    color: var(--nx-text);
+}
+
+.entity-initial-lg {
+    width: 64px;
+    height: 64px;
+    font-size: 1.4rem;
+}
+
+.entity-initial.person { background: var(--nx-blue-soft); color: var(--nx-blue); }
+.entity-initial.org { background: var(--nx-accent-soft); color: var(--nx-accent); }
+.entity-initial.country { background: var(--nx-green-soft); color: var(--nx-green); }
+.entity-initial.concept { background: var(--nx-orange-soft); color: var(--nx-orange); }
+.entity-initial.treaty { background: rgba(168, 85, 247, 0.12); color: #a855f7; }
+.entity-initial.unknown { background: var(--nx-glass-subtle); }
+
+/* Entity Detail */
+
+.entity-layout {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 2.5rem;
+    align-items: start;
+}
+
+@media (max-width: 900px) {
+    .entity-layout { grid-template-columns: 1fr; }
+}
+
+.entity-header {
+    margin-bottom: 2rem;
+}
+
+.entity-header h2 {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.entity-aliases {
+    color: var(--nx-text-dim);
+    font-size: 0.85rem;
+}
+
+/* SVG Graph */
+
+.graph-container {
+    background: var(--nx-bg-card);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius-lg);
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.graph-container svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.graph-node { cursor: pointer; }
+.graph-node circle { transition: fill var(--nx-transition); }
+.graph-node:hover circle { fill: var(--nx-accent); }
+.graph-node text {
+    fill: var(--nx-text);
+    font-family: var(--nx-font);
+    font-size: 11px;
+    font-weight: 500;
+}
+.graph-center text {
+    font-size: 13px;
+    font-weight: 700;
+}
+.graph-edge { stroke: var(--nx-border-hover); }
+
+/* ── Interactive Graph (D3) — HUD Style ── */
+
+.graph-page {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 56px);
+    background: #0a0a12;
+}
+
+/* HUD top bar */
+.graph-hud {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1.2rem;
+    background: rgba(10, 10, 18, 0.92);
+    border-bottom: 1px solid rgba(234, 179, 56, 0.1);
+    backdrop-filter: blur(8px);
+    flex-shrink: 0;
+    z-index: 5;
+}
+
+.graph-hud-left {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.graph-hud-back {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.7rem;
+    color: rgba(148, 163, 184, 0.6);
+    text-decoration: none;
+    padding: 0.2rem 0.5rem;
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 3px;
+    letter-spacing: 0.04em;
+    transition: color 0.15s, border-color 0.15s;
+}
+.graph-hud-back:hover {
+    color: rgba(56, 189, 248, 0.8);
+    border-color: rgba(56, 189, 248, 0.3);
+}
+
+.graph-hud-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 400;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(234, 179, 56, 0.45);
+}
+
+.graph-hud-stat {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.05rem;
+    font-weight: 400;
+    color: rgba(234, 179, 56, 0.8);
+    font-variant-numeric: tabular-nums;
+}
+
+.graph-hud-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(148, 163, 184, 0.4);
+}
+
+.graph-hud-right {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+}
+
+/* Type filter pills */
+.graph-hud-filters {
+    display: flex;
+    gap: 0.35rem;
+}
+
+.graph-type-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 3px;
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(148, 163, 184, 0.4);
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+}
+.graph-type-pill input[type="checkbox"] { display: none; }
+
+.graph-type-pill:has(input:checked) {
+    color: rgba(226, 232, 240, 0.9);
+}
+
+.person-pill:has(input:checked) { background: rgba(234, 179, 56, 0.08); border-color: rgba(234, 179, 56, 0.3); color: rgba(234, 179, 56, 0.9); }
+.org-pill:has(input:checked) { background: rgba(190, 60, 50, 0.08); border-color: rgba(190, 60, 50, 0.3); color: rgba(190, 60, 50, 0.9); }
+.country-pill:has(input:checked) { background: rgba(200, 185, 155, 0.08); border-color: rgba(200, 185, 155, 0.3); color: rgba(200, 185, 155, 0.9); }
+.concept-pill:has(input:checked) { background: rgba(210, 130, 50, 0.08); border-color: rgba(210, 130, 50, 0.3); color: rgba(210, 130, 50, 0.9); }
+
+/* Density slider */
+.graph-hud-slider {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.graph-hud-slider input[type="range"] {
+    width: 80px;
+    height: 3px;
+    accent-color: var(--nx-accent);
+    background: var(--nx-glass);
+    border-radius: 2px;
+    appearance: none;
+    -webkit-appearance: none;
+}
+.graph-hud-slider input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--nx-accent);
+    cursor: pointer;
+}
+
+/* Canvas */
+.graph-canvas-wrapper {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: #0a0a12;
+}
+
+#graph-svg {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+}
+
+/* Subtle grid overlay */
+.graph-grid-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(rgba(234, 179, 56, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(234, 179, 56, 0.02) 1px, transparent 1px);
+    background-size: 60px 60px;
+    mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 30%, transparent 70%);
+    -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 30%, transparent 70%);
+}
+
+/* Side panel */
+
+.entity-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 340px;
+    height: 100%;
+    background: rgba(12, 12, 22, 0.95);
+    border-left: 1px solid rgba(234, 179, 56, 0.1);
+    backdrop-filter: blur(12px);
+    overflow-y: auto;
+    padding: 1rem;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 10;
+    box-shadow: -8px 0 32px rgba(0,0,0,0.4);
+}
+
+.entity-panel.hidden {
+    transform: translateX(100%);
+    box-shadow: none;
+}
+
+.panel-close {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: none;
+    border: none;
+    color: var(--nx-text-dim);
+    font-size: 1.3rem;
+    cursor: pointer;
+    line-height: 1;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background 0.15s, color 0.15s;
+}
+
+.panel-close:hover {
+    color: var(--nx-text);
+    background: var(--nx-glass);
+}
+
+.panel-section {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--nx-border);
+}
+
+.panel-section-title {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--nx-text-dim);
+    margin-bottom: 0.5rem;
+}
+
+.panel-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.3rem 0;
+    font-size: 0.82rem;
+    color: var(--nx-text);
+    text-decoration: none;
+    gap: 0.4rem;
+}
+
+.panel-link:hover { color: var(--nx-accent); }
+
+.panel-event {
+    padding: 0.3rem 0;
+    border-bottom: 1px solid var(--nx-border);
+}
+
+.panel-event:last-child { border-bottom: none; }
+
+.panel-event-date {
+    font-size: 0.68rem;
+    color: var(--nx-text-dim);
+    display: block;
+}
+
+.panel-event-summary {
+    font-size: 0.78rem;
+    color: var(--nx-text);
+    line-height: 1.4;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SHARED COMPONENTS
+   ═══════════════════════════════════════════════════════ */
+
+/* Section header with link */
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.75rem;
+}
+
+.section-header h3 { margin-bottom: 0; }
+
+.section-link {
+    font-size: 0.82rem;
+    color: var(--nx-text-dim);
+}
+
+.section-link:hover { color: var(--nx-accent); }
+
+/* Topic cards */
+
+.topic-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    margin-bottom: 0.25rem;
+    border-radius: var(--nx-radius);
+    text-decoration: none;
+    color: inherit;
+    transition: background var(--nx-transition);
+}
+
+.topic-card:hover { background: var(--nx-bg-hover); }
+
+.topic-emoji { font-size: 1.3rem; flex-shrink: 0; }
+
+.topic-info { display: flex; flex-direction: column; }
+
+.topic-name { font-weight: 600; font-size: 0.9rem; color: var(--nx-text); }
+
+.topic-meta { font-size: 0.78rem; color: var(--nx-text-dim); }
+
+/* Event cards (used in event list, entity detail, etc.) */
+
+.event-card {
+    display: block;
+    padding: 0.85rem 1rem;
+    margin-bottom: 0.5rem;
+    border-radius: var(--nx-radius);
+    border: 1px solid var(--nx-border);
+    background: var(--nx-bg-card);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color var(--nx-transition);
+}
+
+.event-card:hover { border-color: var(--nx-border-hover); }
+
+.event-card-date {
+    font-size: 0.72rem;
+    color: var(--nx-text-dim);
+    margin-bottom: 0.3rem;
+}
+
+.event-card-summary {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    margin-bottom: 0.4rem;
+}
+
+.event-card-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    align-items: center;
+}
+
+/* Tables (for source stats, cost, filter log, etc.) */
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.data-table th {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 2px solid var(--nx-border);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--nx-text-dim);
+}
+
+.data-table td {
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--nx-glass-border);
+    color: var(--nx-text);
+}
+
+.data-table tbody tr:hover {
+    background: var(--nx-glass-faint);
+}
+
+.data-table .num {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+/* Filter log rows */
+.filter-accepted td { background: rgba(16, 185, 129, 0.04); }
+.filter-rejected_relevance td,
+.filter-rejected_significance td,
+.filter-rejected_diversity td { background: rgba(239, 68, 68, 0.03); }
+
+/* Empty state */
+
+.empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--nx-text-dim);
+}
+
+.empty-state h3 {
+    color: var(--nx-text);
+    margin-bottom: 0.5rem;
+}
+
+.empty-state code {
+    display: inline-block;
+    margin-top: 0.75rem;
+    padding: 0.5rem 1.5rem;
+    background: var(--nx-bg-raised);
+    border-radius: var(--nx-radius);
+    font-size: 0.85rem;
+}
+
+/* ── Cost & Settings ── */
+
+.cost-hero {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--nx-accent);
+    margin-bottom: 0.25rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.settings-provider {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--nx-border);
+}
+
+.settings-provider:last-child { border-bottom: none; }
+
+/* ── Page content (markdown rendered pages) ── */
+
+.page-content {
+    line-height: 1.8;
+    font-size: 0.92rem;
+}
+
+.page-content h2, .page-content h3 {
+    margin-top: 1.5rem;
+}
+
+.page-content p { margin-bottom: 1rem; }
+
+.page-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.85rem;
+}
+
+.page-content table th,
+.page-content table td {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--nx-border);
+    text-align: left;
+}
+
+/* ── Footer ── */
+
+.site-footer {
+    border-top: 1px solid var(--nx-border);
+    padding: 1.5rem;
+    margin-top: auto;
+}
+
+.footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.78rem;
+    color: var(--nx-text-dim);
+}
+
+.footer-brand { font-weight: 600; }
+
+.footer-links {
+    display: flex;
+    gap: 1rem;
+}
+
+.footer-links a {
+    color: var(--nx-text-dim);
+    transition: color var(--nx-transition);
+}
+
+.footer-links a:hover { color: var(--nx-text-secondary); }
+
+/* ═══════════════════════════════════════════════════════
+   SETUP WIZARD & FORMS
+   ═══════════════════════════════════════════════════════ */
+
+.setup-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.setup-container {
+    width: 100%;
+    max-width: 640px;
+    background: var(--nx-bg-card);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius-lg);
+    padding: 2.5rem;
+}
+
+.setup-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+}
+
+.setup-subtitle {
+    font-size: 0.85rem;
+    color: var(--nx-text-dim);
+}
+
+.setup-steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 2rem;
+}
+
+.setup-step-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 600;
+    border: 2px solid var(--nx-border);
+    color: var(--nx-text-dim);
+    flex-shrink: 0;
+}
+
+.setup-step-dot.active {
+    border-color: var(--nx-accent);
+    color: var(--nx-accent);
+    background: var(--nx-accent-soft);
+}
+
+.setup-step-dot.done {
+    border-color: var(--nx-green);
+    color: var(--nx-green);
+    background: var(--nx-green-soft);
+}
+
+.setup-step-line {
+    width: 24px;
+    height: 2px;
+    background: var(--nx-border);
+    flex-shrink: 0;
+}
+
+.setup-step-line.done { background: var(--nx-green); }
+
+.setup-desc {
+    color: var(--nx-text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+}
+
+.setup-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--nx-border);
+}
+
+/* Preset cards */
+
+.preset-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.preset-card {
+    display: block;
+    cursor: pointer;
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    padding: 0.85rem 1rem;
+    transition: all var(--nx-transition);
+    background: var(--nx-bg-raised);
+}
+
+.preset-card:hover {
+    border-color: var(--nx-border-hover);
+    background: var(--nx-bg-hover);
+}
+
+.preset-card.selected,
+.preset-card:has(input:checked) {
+    border-color: var(--nx-accent);
+    background: var(--nx-accent-soft);
+}
+
+.preset-card input[type="radio"] { display: none; }
+
+.preset-card-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.preset-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--nx-text);
+}
+
+.preset-desc {
+    font-size: 0.78rem;
+    color: var(--nx-text-dim);
+}
+
+.preset-badge {
+    display: inline-block;
+    margin-top: 0.25rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    width: fit-content;
+}
+
+.badge-free {
+    background: var(--nx-green-soft);
+    color: var(--nx-green);
+}
+
+/* Tier selector (provider setup) */
+
+.tier-options {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.tier-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    padding: 0.6rem 1rem;
+    background: var(--nx-bg-raised);
+    transition: all var(--nx-transition);
+    font-size: 0.85rem;
+}
+
+.tier-option:hover {
+    border-color: var(--nx-border-hover);
+    background: var(--nx-bg-hover);
+}
+
+.tier-option.selected {
+    border-color: var(--nx-accent);
+    background: var(--nx-accent-soft);
+}
+
+.tier-option input[type="radio"] { display: none; }
+
+/* Topic selection cards */
+
+.topic-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+}
+
+.setup-page .topic-card {
+    display: block;
+    cursor: pointer;
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    padding: 0.85rem 1rem;
+    transition: all var(--nx-transition);
+    background: var(--nx-bg-raised);
+    margin-bottom: 0;
+}
+
+.setup-page .topic-card:hover {
+    border-color: var(--nx-border-hover);
+    background: var(--nx-bg-hover);
+}
+
+.setup-page .topic-card:has(input:checked) {
+    border-color: var(--nx-accent);
+    background: var(--nx-accent-soft);
+}
+
+.setup-page .topic-card input[type="checkbox"] { display: none; }
+
+.topic-card-inner .topic-name {
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--nx-text);
+}
+
+/* Form elements */
+
+.form-group {
+    margin-bottom: 1.25rem;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--nx-text);
+    margin-bottom: 0.4rem;
+}
+
+.form-input, .form-select {
+    width: 100%;
+    padding: 0.6rem 0.85rem;
+    background: var(--nx-bg);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    color: var(--nx-text);
+    font-family: var(--nx-font);
+    font-size: 0.88rem;
+    transition: border-color var(--nx-transition);
+    outline: none;
+}
+
+.form-input:focus, .form-select:focus {
+    border-color: var(--nx-accent);
+}
+
+.form-input::placeholder {
+    color: var(--nx-text-dim);
+}
+
+.form-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238a8a9a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    padding-right: 2rem;
+}
+
+.form-hint {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--nx-text-dim);
+    margin-top: 0.35rem;
+    line-height: 1.4;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+/* Buttons */
+
+.btn-primary {
+    padding: 0.6rem 1.5rem;
+    background: var(--nx-accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--nx-radius);
+    font-family: var(--nx-font);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--nx-transition);
+}
+
+.btn-primary:hover { background: var(--nx-accent-light); }
+
+.btn-primary.btn-lg { padding: 0.75rem 2rem; font-size: 1rem; }
+
+.btn-secondary {
+    padding: 0.6rem 1.25rem;
+    background: transparent;
+    color: var(--nx-text-secondary);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    font-family: var(--nx-font);
+    font-size: 0.88rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all var(--nx-transition);
+}
+
+.btn-secondary:hover {
+    border-color: var(--nx-border-hover);
+    color: var(--nx-text);
+}
+
+.btn-skip {
+    padding: 0.6rem 1.25rem;
+    background: transparent;
+    color: var(--nx-text-dim);
+    border: none;
+    font-family: var(--nx-font);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: color var(--nx-transition);
+}
+
+.btn-skip:hover { color: var(--nx-text-secondary); }
+
+/* Review card */
+
+.review-card {
+    background: var(--nx-bg-raised);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius-lg);
+    overflow: hidden;
+}
+
+.review-section {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--nx-border);
+    gap: 0.75rem;
+}
+
+.review-section:last-child { border-bottom: none; }
+
+.review-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--nx-text-dim);
+    min-width: 100px;
+    flex-shrink: 0;
+}
+
+.review-value {
+    font-size: 0.88rem;
+    color: var(--nx-text);
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.review-tag {
+    background: var(--nx-accent-soft);
+    color: var(--nx-accent);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+
+.review-edit {
+    font-size: 0.75rem;
+    color: var(--nx-text-dim);
+    flex-shrink: 0;
+}
+
+/* Alert messages */
+
+.alert-error {
+    background: var(--nx-red-soft);
+    color: var(--nx-red);
+    padding: 0.65rem 1rem;
+    border-radius: var(--nx-radius);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.alert-success {
+    background: var(--nx-green-soft);
+    color: var(--nx-green);
+    padding: 0.65rem 1rem;
+    border-radius: var(--nx-radius);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.alert-info {
+    background: var(--nx-accent-soft);
+    color: var(--nx-accent);
+    padding: 0.65rem 1rem;
+    border-radius: var(--nx-radius);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+/* Pipeline status bar */
+
+.pipeline-status {
+    padding: 0.75rem 1.5rem;
+    font-size: 0.88rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.pipeline-running {
+    background: var(--nx-accent-soft);
+    color: var(--nx-accent);
+    border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+.pipeline-done {
+    background: var(--nx-green-soft);
+    color: var(--nx-green);
+    border-bottom: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.pipeline-error {
+    background: var(--nx-red-soft);
+    color: var(--nx-red);
+    border-bottom: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.pipeline-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--nx-accent);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.pipeline-elapsed {
+    margin-left: auto;
+    font-size: 0.8rem;
+    opacity: 0.7;
+    font-family: var(--nx-font-mono, 'Share Tech Mono', monospace);
+}
+
+.setup-note {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--nx-accent-soft, rgba(99, 102, 241, 0.08));
+    border-radius: 6px;
+    font-size: 0.82rem;
+    color: var(--nx-text-dim);
+}
+
+/* Sample briefing preview (shown during pipeline wait) */
+
+.sample-preview-label {
+    font-size: 0.82rem;
+    color: var(--nx-text-dim);
+    margin-bottom: 0.75rem;
+}
+
+.sample-preview-card {
+    background: var(--nx-bg-card, rgba(255,255,255,0.03));
+    border: 1px solid var(--nx-border, rgba(255,255,255,0.08));
+    border-radius: 8px;
+    padding: 1.25rem;
+    max-width: 600px;
+}
+
+.sample-thread {
+    margin-bottom: 1rem;
+}
+
+.sample-thread:last-child { margin-bottom: 0; }
+
+.sample-headline {
+    font-weight: 600;
+    font-size: 0.92rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+}
+
+.sample-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--nx-accent);
+    flex-shrink: 0;
+}
+
+.sample-event {
+    font-size: 0.82rem;
+    color: var(--nx-text-dim);
+    margin-bottom: 0.4rem;
+    padding-left: 1rem;
+}
+
+.sample-sources {
+    display: flex;
+    gap: 0.3rem;
+    padding-left: 1rem;
+    font-size: 0.72rem;
+}
+
+/* Settings sections (accordion) */
+
+.settings-section {
+    background: var(--nx-bg-card);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius-lg);
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+}
+
+.settings-section-header {
+    padding: 0.85rem 1.25rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--nx-text);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background var(--nx-transition);
+}
+
+.settings-section-header:hover { background: var(--nx-bg-hover); }
+
+.settings-section-body {
+    padding: 0 1.25rem 1.25rem;
+}
+
+.restart-banner {
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+    padding: 0.65rem 1rem;
+    border-radius: var(--nx-radius);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+/* Demo mode badge */
+
+.demo-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+    margin-left: 0.5rem;
+}
+
+/* ═══════════════════════════════════════════════════════
+   CHAT WIDGET
+   ═══════════════════════════════════════════════════════ */
+
+.chat-widget {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 200;
+}
+
+.chat-toggle {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--nx-accent);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    transition: all var(--nx-transition);
+}
+
+.chat-toggle:hover {
+    background: var(--nx-accent-light);
+    transform: scale(1.05);
+}
+
+.chat-panel {
+    position: absolute;
+    bottom: 60px;
+    right: 0;
+    width: 360px;
+    max-height: 480px;
+    background: var(--nx-bg-card);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+.chat-panel.hidden { display: none; }
+
+.chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--nx-border);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.chat-remaining {
+    font-size: 0.72rem;
+    color: var(--nx-text-dim);
+    font-weight: 400;
+}
+
+.chat-close {
+    background: none;
+    border: none;
+    color: var(--nx-text-dim);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0 0.25rem;
+}
+
+.chat-close:hover { color: var(--nx-text); }
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.75rem;
+    min-height: 200px;
+    max-height: 340px;
+}
+
+.chat-msg {
+    margin-bottom: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--nx-radius);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    max-width: 85%;
+    word-wrap: break-word;
+}
+
+.chat-msg-user {
+    background: var(--nx-accent-soft);
+    color: var(--nx-text);
+    margin-left: auto;
+}
+
+.chat-msg-bot {
+    background: var(--nx-bg-raised);
+    color: var(--nx-text);
+    border: 1px solid var(--nx-border);
+}
+
+.chat-msg-error {
+    background: var(--nx-red-soft);
+    color: var(--nx-red);
+    font-size: 0.78rem;
+}
+
+.chat-input-area {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.65rem;
+    border-top: 1px solid var(--nx-border);
+}
+
+.chat-input {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    background: var(--nx-bg);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    color: var(--nx-text);
+    font-family: var(--nx-font);
+    font-size: 0.85rem;
+    outline: none;
+}
+
+.chat-input:focus { border-color: var(--nx-accent); }
+
+.chat-send {
+    padding: 0.5rem 0.85rem;
+    background: var(--nx-accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--nx-radius);
+    font-family: var(--nx-font);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--nx-transition);
+}
+
+.chat-send:hover { background: var(--nx-accent-light); }
+
+/* ── Responsive ── */
+
+@media (max-width: 600px) {
+    .main-content { padding: 1rem; }
+    .analysis-panel { grid-template-columns: 1fr; }
+    .entity-layout { grid-template-columns: 1fr; }
+    .explore-grid { grid-template-columns: 1fr; }
+    .divergence-vs { grid-template-columns: 1fr; }
+    .footer-inner { flex-direction: column; gap: 0.5rem; }
+    .setup-container { padding: 1.5rem; }
+    .topic-grid { grid-template-columns: 1fr; }
+    .form-row { grid-template-columns: 1fr; }
+    .chat-panel { width: calc(100vw - 2rem); right: -0.5rem; }
+}
+
+/* ── Health Panel ── */
+.health-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+}
+
+.health-overview {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: fit-content;
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}
+
+.health-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.health-ok {
+    background: var(--nx-green-soft);
+    color: var(--nx-green);
+}
+
+.health-warning {
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+}
+
+.health-critical {
+    background: var(--nx-red-soft);
+    color: var(--nx-red);
+}
+
+.health-issues {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.health-issue {
+    font-size: 0.8rem;
+    line-height: 1.4;
+    padding: 0.55rem 0.7rem;
+    border-radius: 10px;
+    border: 1px solid var(--nx-border);
+    background: var(--nx-glass-subtle);
+}
+
+.health-issue-warning {
+    border-color: rgba(245, 158, 11, 0.25);
+    background: var(--nx-orange-soft);
+}
+
+.health-issue-critical {
+    border-color: rgba(239, 68, 68, 0.25);
+    background: var(--nx-red-soft);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Predictions Dashboard
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Summary Cards ── */
+
+.pred-summary {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.pred-stat {
+    flex: 1;
+    min-width: 120px;
+    padding: 1rem 1.25rem;
+    background: var(--nx-bg-raised);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius-lg);
+}
+
+.pred-stat-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--nx-text-dim);
+    margin-bottom: 0.25rem;
+}
+
+.pred-stat-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--nx-heading);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Filter Pills ── */
+
+.pred-filters {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.pred-pill {
+    padding: 0.35rem 0.85rem;
+    border: 1px solid var(--nx-border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--nx-text-secondary);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--nx-transition);
+    font-family: var(--nx-font);
+}
+
+.pred-pill:hover {
+    border-color: var(--nx-border-hover);
+    color: var(--nx-text);
+}
+
+.pred-pill.active {
+    background: var(--nx-accent-soft);
+    border-color: var(--nx-accent);
+    color: var(--nx-accent-light);
+}
+
+/* ── Section Containers ── */
+
+.pred-section {
+    margin-bottom: 1.5rem;
+}
+
+.pred-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--nx-heading);
+    cursor: pointer;
+    padding: 0.6rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    list-style: none;
+}
+
+.pred-section-title::-webkit-details-marker { display: none; }
+
+.pred-section-title::before {
+    content: "▸";
+    font-size: 0.75rem;
+    color: var(--nx-text-dim);
+    transition: transform var(--nx-transition);
+}
+
+.pred-section[open] > .pred-section-title::before {
+    transform: rotate(90deg);
+}
+
+.pred-count {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: var(--nx-glass);
+    color: var(--nx-text-secondary);
+}
+
+/* ── Prediction Cards ── */
+
+.pred-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.pred-card {
+    background: var(--nx-bg-raised);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius-lg);
+    padding: 1rem 1.25rem;
+    transition: border-color var(--nx-transition);
+}
+
+.pred-card:hover {
+    border-color: var(--nx-border-hover);
+}
+
+.pred-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+}
+
+.pred-card-context {
+    font-size: 0.72rem;
+    color: var(--nx-text-dim, #5a5a6e);
+    margin-bottom: 0.15rem;
+    line-height: 1.3;
+}
+.pred-card-question {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--nx-heading);
+    line-height: 1.45;
+    margin-bottom: 0.65rem;
+}
+
+.pred-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+/* ── Probability Row ── */
+
+.pred-prob-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.pred-prob {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--nx-heading);
+    font-variant-numeric: tabular-nums;
+}
+
+.pred-market-prob {
+    font-size: 0.8rem;
+    color: var(--nx-text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.pred-gap {
+    font-size: 0.72rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+    font-weight: 500;
+}
+
+/* ── Probability Bar ── */
+
+.prob-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--nx-glass);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.prob-bar-fill {
+    height: 100%;
+    background: var(--nx-accent);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+/* ── Verdict Badges ── */
+
+.pred-verdict {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+}
+
+.pred-verdict-yes {
+    background: var(--nx-green-soft);
+    color: var(--nx-green);
+}
+
+.pred-verdict-no {
+    background: var(--nx-red-soft);
+    color: var(--nx-red);
+}
+
+.pred-verdict-uncertain {
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+}
+
+/* ── Engine Badges ── */
+
+.engine-badge {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+}
+
+.engine-badge-production {
+    background: var(--nx-accent-soft);
+    color: var(--nx-accent-light);
+}
+
+.engine-badge-strawman {
+    background: var(--nx-glass);
+    color: var(--nx-text-dim);
+}
+
+.engine-badge-research {
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+}
+
+/* ── Source & Countdown Badges ── */
+
+.source-badge {
+    font-size: 0.68rem;
+    font-weight: 500;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+}
+
+.source-kalshi {
+    background: var(--nx-blue-soft);
+    color: var(--nx-blue);
+}
+
+.source-kg {
+    background: var(--nx-green-soft);
+    color: var(--nx-green);
+}
+
+.source-hindcast {
+    background: var(--nx-yellow-soft, #fef3c7);
+    color: var(--nx-yellow, #92400e);
+}
+
+.source-benchmark {
+    background: var(--nx-purple-soft, #ede9fe);
+    color: var(--nx-purple, #6d28d9);
+}
+
+.countdown-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    background: var(--nx-red-soft);
+    color: var(--nx-red);
+}
+
+/* ── Evidence & Meta ── */
+
+.pred-evidence {
+    font-size: 0.78rem;
+    color: var(--nx-green);
+    font-weight: 500;
+}
+
+.pred-meta-dim {
+    font-size: 0.72rem;
+    color: var(--nx-text-dim);
+}
+
+/* ── Resolved Status ── */
+
+.pred-status {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+}
+
+.pred-status-hit {
+    background: var(--nx-green-soft);
+    color: var(--nx-green);
+}
+
+.pred-status-miss {
+    background: var(--nx-red-soft);
+    color: var(--nx-red);
+}
+
+.pred-status-pending {
+    background: var(--nx-glass);
+    color: var(--nx-text-dim);
+}
+.pred-resolved-q { max-width: 500px; }
+.pred-q-clamp {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    cursor: pointer;
+}
+.pred-q-clamp.pred-q-expanded {
+    -webkit-line-clamp: unset;
+    overflow: visible;
+}
+
+/* ── Engine Info Grid ── */
+
+.pred-engines-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.pred-engine-card {
+    padding: 0.85rem 1rem;
+    background: var(--nx-bg-raised);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+}
+
+/* ── Grouped Market Layout ── */
+
+.pred-market-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.pred-market-row {
+    background: var(--nx-bg-raised);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    padding: 0.85rem 1rem;
+    transition: border-color var(--nx-transition);
+}
+
+.pred-market-row:hover {
+    border-color: var(--nx-border-hover);
+}
+
+.pred-market-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+}
+
+.pred-market-question {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--nx-heading);
+    line-height: 1.4;
+}
+
+.pred-market-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.pred-ticker {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--nx-text-dim);
+    background: var(--nx-glass);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+}
+
+.pred-market-price-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+}
+
+.pred-market-label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--nx-text-dim);
+    width: 5.5rem;
+    flex-shrink: 0;
+    text-align: right;
+}
+
+.prob-bar-market {
+    background: var(--nx-glass-subtle);
+}
+
+.prob-bar-fill-market {
+    background: var(--nx-blue) !important;
+    opacity: 0.5;
+}
+
+.pred-engine-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.15rem 0;
+}
+
+.pred-engine-row .engine-badge {
+    width: 5.5rem;
+    flex-shrink: 0;
+    text-align: center;
+}
+
+.pred-engine-row .prob-bar {
+    flex: 1;
+}
+
+.pred-prob-sm {
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--nx-heading);
+    width: 2.5rem;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.pred-prob-yes { color: var(--nx-green); }
+.pred-prob-no { color: var(--nx-red); }
+
+.pred-verdict-mini {
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 0.08rem 0.35rem;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.pred-gap-mini {
+    font-size: 0.68rem;
+    color: var(--nx-text-dim);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    width: 3rem;
+    text-align: right;
+}
+
+.pred-consensus-row {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.3rem;
+    padding-top: 0.3rem;
+    border-top: 1px solid var(--nx-glass-border);
+}
+
+/* ── Engine Rows (name + minibar + pct inside cards) ── */
+
+.pred-engine-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    margin: 0.4rem 0;
+}
+
+.pred-engine-rows-sm { gap: 0.15rem; }
+
+.pred-erow {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.pred-erow-name {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--nx-text-secondary);
+    width: 5.5rem;
+    flex-shrink: 0;
+    text-align: right;
+}
+
+.pred-erow-market {
+    color: var(--nx-blue);
+    font-weight: 600;
+}
+
+.pred-minibar {
+    flex: 1;
+    min-width: 4rem;
+    height: 6px;
+    background: var(--nx-glass);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.pred-minibar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.pred-minibar-market { background: var(--nx-blue); opacity: 0.5; }
+.pred-minibar-yes { background: var(--nx-green); }
+.pred-minibar-no { background: var(--nx-red); }
+.pred-minibar-uncertain { background: var(--nx-orange); }
+
+.pred-erow-pct {
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--nx-heading);
+    width: 2.5rem;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.pred-erow-brier {
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--nx-text-dim);
+    width: 2.8rem;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.pred-verdict-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.pred-verdict-dot-yes { background: var(--nx-green); }
+.pred-verdict-dot-no { background: var(--nx-red); }
+.pred-verdict-dot-uncertain { background: var(--nx-orange); }
+
+/* ── Card Footer ── */
+
+.pred-card-footer {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid var(--nx-glass-border);
+    flex-wrap: wrap;
+}
+
+/* ── Event Group Heading ── */
+
+.pred-event-group {
+    margin-bottom: 1rem;
+}
+
+.pred-event-heading {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--nx-heading);
+    margin-bottom: 0.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+/* ── Resolved Cards ── */
+
+.pred-resolved-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.pred-resolved-card {
+    background: var(--nx-bg-raised);
+    border: 1px solid var(--nx-border);
+    border-left: 3px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    padding: 0.65rem 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.pred-resolved-hit {
+    border-left-color: var(--nx-green);
+}
+
+.pred-resolved-miss {
+    border-left-color: var(--nx-red);
+}
+
+.pred-resolved-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.pred-resolved-question {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--nx-heading);
+    flex: 1;
+    line-height: 1.35;
+}
+
+.pred-outcome {
+    font-size: 0.75rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.pred-outcome-yes { color: var(--nx-green); }
+.pred-outcome-no { color: var(--nx-red); }
+
+/* ── Run Mode Badges ── */
+
+.run-badge {
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+}
+
+.run-badge-anchored {
+    background: var(--nx-blue-soft);
+    color: var(--nx-blue);
+}
+
+.run-badge-independent {
+    background: var(--nx-glass);
+    color: var(--nx-text-secondary);
+}
+
+/* ── Analytics ── */
+
+.pred-analytics-heading {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--nx-heading);
+    margin: 1rem 0 0.4rem 0;
+}
+
+.pred-analytics-heading:first-child {
+    margin-top: 0.25rem;
+}
+
+.pred-analytics-table {
+    width: 100%;
+}
+
+.pred-analytics-table td.num {
+    font-variant-numeric: tabular-nums;
+}
+
+.pred-beats { color: var(--nx-green); }
+.pred-behind { color: var(--nx-red); }
+.pred-row-best td { font-weight: 600; }
+
+/* ── Brier Bar Chart ── */
+
+.analytics-chart-section {
+    margin-bottom: 1.5rem;
+}
+
+.brier-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    margin-top: 0.4rem;
+}
+
+.brier-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.brier-row-best .brier-label {
+    font-weight: 700;
+}
+
+.brier-label {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--nx-text-secondary);
+    width: 6rem;
+    flex-shrink: 0;
+    text-align: right;
+}
+
+.brier-bar-track {
+    flex: 1;
+    max-width: 280px;
+    height: 8px;
+    background: var(--nx-glass);
+    border-radius: 4px;
+    overflow: visible;
+    position: relative;
+}
+
+.brier-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.4s ease;
+}
+
+.brier-bar-beats {
+    background: var(--nx-green);
+    opacity: 0.7;
+}
+
+.brier-bar-behind {
+    background: var(--nx-red);
+    opacity: 0.45;
+}
+
+.brier-baseline {
+    position: absolute;
+    top: -3px;
+    width: 2px;
+    height: 14px;
+    background: var(--nx-blue);
+    border-radius: 1px;
+    opacity: 0.8;
+}
+
+.brier-value {
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    width: 3rem;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.brier-vs {
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    width: 3.5rem;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.brier-meta {
+    font-size: 0.68rem;
+    color: var(--nx-text-dim);
+    white-space: nowrap;
+}
+
+/* ── Summary Sub-label ── */
+
+.pred-stat-sub {
+    font-size: 0.65rem;
+    color: var(--nx-text-dim);
+    margin-top: 0.15rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* ── Filter separator ── */
+
+.pred-filter-sep {
+    color: var(--nx-text-dim);
+    align-self: center;
+}
+
+/* ── Experimental engine toggle ── */
+
+.pred-toggle-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    font-size: 0.78rem;
+    color: var(--nx-text-dim);
+}
+.pred-toggle-input {
+    accent-color: var(--nx-accent);
+}
+.pred-toggle-text {
+    user-select: none;
+}
+
+/* ── New source badges ── */
+
+.source-freeform, .source-intelligence {
+    background: var(--nx-purple-soft, #ede9fe);
+    color: var(--nx-purple, #6d28d9);
+}
+.source-thread {
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+}
+
+/* ── Featured card styling ── */
+
+.pred-card-featured {
+    border-left: 3px solid var(--nx-accent);
+}
+
+.pred-cards-featured {
+    gap: 0.75rem;
+}
+
+/* ── Verdict large display ── */
+
+.pred-verdict-large {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0.3rem 0 0.5rem;
+    letter-spacing: 0.02em;
+}
+.pred-verdict-large-yes { color: var(--nx-green); }
+.pred-verdict-large-no { color: var(--nx-red); }
+.pred-verdict-large-uncertain { color: var(--nx-orange); }
+
+/* ── Countdown badge (enhanced) ── */
+
+.pred-countdown {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    background: var(--nx-glass);
+    color: var(--nx-text-dim);
+    flex-shrink: 0;
+}
+.pred-countdown-urgent {
+    background: var(--nx-red-soft);
+    color: var(--nx-red);
+}
+.pred-countdown-soon {
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+}
+
+/* ── Primary engine name ── */
+
+.pred-erow-primary .pred-erow-name {
+    font-weight: 600;
+}
+
+/* ── Reasoning panel ── */
+
+.pred-reasoning-panel {
+    margin: 0.4rem 0 0.2rem;
+    border-top: 1px solid var(--nx-glass);
+    padding-top: 0.3rem;
+}
+.pred-reasoning-toggle {
+    font-size: 0.78rem;
+    color: var(--nx-accent);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    padding: 0.15rem 0;
+}
+.pred-reasoning-toggle::-webkit-details-marker { display: none; }
+.pred-reasoning-toggle::before {
+    content: "\25B8 ";
+    font-size: 0.7rem;
+}
+.pred-reasoning-panel[open] .pred-reasoning-toggle::before {
+    content: "\25BE ";
+}
+.pred-reasoning-body {
+    padding: 0.4rem 0 0.2rem;
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+.pred-actor-row {
+    padding: 0.3rem 0;
+    border-bottom: 1px solid var(--nx-glass);
+}
+.pred-actor-row:last-child { border-bottom: none; }
+.pred-actor-name {
+    font-weight: 600;
+    color: var(--nx-text-primary);
+}
+.pred-actor-direction {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-left: 0.3rem;
+}
+.pred-actor-dir-increases { color: var(--nx-green); }
+.pred-actor-dir-decreases { color: var(--nx-red); }
+.pred-actor-dir-neutral { color: var(--nx-text-dim); }
+.pred-actor-shift {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--nx-text-secondary);
+    margin-left: 0.3rem;
+}
+.pred-actor-reasoning {
+    color: var(--nx-text-secondary);
+    margin-top: 0.15rem;
+}
+.pred-actor-uncertainty {
+    color: var(--nx-orange);
+    font-size: 0.72rem;
+    margin-top: 0.1rem;
+}
+.pred-synthesis {
+    color: var(--nx-text-secondary);
+    margin-top: 0.4rem;
+    padding-top: 0.3rem;
+    border-top: 1px solid var(--nx-glass);
+    font-style: italic;
+}
+.pred-contrarian-view {
+    color: var(--nx-orange);
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+}
+
+/* ── Tags (contrarian, experimental) ── */
+
+.pred-tag {
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.08rem 0.35rem;
+    border-radius: 3px;
+}
+.pred-tag-contrarian {
+    background: var(--nx-orange-soft);
+    color: var(--nx-orange);
+}
+.pred-tag-experimental {
+    background: var(--nx-glass);
+    color: var(--nx-text-dim);
+}
+
+/* ── Trend indicator ── */
+
+.pred-trend {
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+.pred-trend-up { color: var(--nx-green); }
+.pred-trend-down { color: var(--nx-red); }
+.pred-trend-stable { color: var(--nx-text-dim); }
+
+/* ── Event group heading ── */
+
+.pred-event-heading {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--nx-text-secondary);
+    padding: 0.5rem 0 0.3rem;
+    border-bottom: 1px solid var(--nx-glass);
+    margin-bottom: 0.5rem;
+}
+
+/* ── Mini prediction cards (topic page) ── */
+
+.pred-mini-card {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--nx-glass);
+}
+.pred-mini-card:last-of-type { border-bottom: none; }
+.pred-mini-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+.pred-mini-question {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--nx-text-primary);
+}
+.pred-mini-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-top: 0.2rem;
+}
+.pred-see-all {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.78rem;
+    color: var(--nx-accent);
+    text-decoration: none;
+}
+.pred-see-all:hover { text-decoration: underline; }
+
+/* ── Benchmark table ── */
+
+.benchmark-table-wrap {
+    overflow-x: auto;
+    margin-top: 0.5rem;
+}
+.benchmark-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+}
+.benchmark-table th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--nx-text-dim);
+    padding: 0.4rem 0.6rem;
+    border-bottom: 2px solid var(--nx-glass);
+    white-space: nowrap;
+}
+.benchmark-table td {
+    padding: 0.35rem 0.6rem;
+    border-bottom: 1px solid var(--nx-glass);
+    vertical-align: middle;
+}
+.benchmark-table tr:hover td {
+    background: var(--nx-glass);
+}
+.benchmark-q-cell {
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Hit/miss verdict badges for benchmark table */
+.bench-verdict {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.bench-hit {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--nx-green);
+}
+.bench-miss {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--nx-red);
+}
+
+/* Contrarian/contested tags for topic predictions */
+.pred-tag-contrarian {
+    background: rgba(251, 146, 60, 0.15);
+    color: #fb923c;
+}
+.pred-tag-contested {
+    background: rgba(250, 204, 21, 0.15);
+    color: #facc15;
+}
+
+/* ── Staleness badges ── */
+
+.staleness-badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+    letter-spacing: 0.02em;
+}
+.staleness-fresh { background: var(--nx-green-soft); color: var(--nx-green); }
+.staleness-recent { background: var(--nx-orange-soft); color: var(--nx-orange); }
+.staleness-stale { background: var(--nx-red-soft); color: var(--nx-red); }
+
+/* ── Onboarding card ── */
+
+.onboarding-card {
+    background: var(--nx-bg-raised);
+    border: 1px solid var(--nx-accent-soft);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+.onboarding-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+.onboarding-header strong { color: var(--nx-heading); font-size: 1rem; }
+.onboarding-card p { color: var(--nx-text-secondary); font-size: 0.85rem; margin-bottom: 0.75rem; }
+.onboarding-highlights {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+}
+.onboarding-item {
+    display: block;
+    padding: 0.75rem;
+    background: var(--nx-bg-card);
+    border: 1px solid var(--nx-border);
+    border-radius: 0.5rem;
+    text-decoration: none;
+    transition: border-color 0.15s;
+}
+.onboarding-item:hover { border-color: var(--nx-accent); }
+.onboarding-item strong { display: block; color: var(--nx-heading); font-size: 0.85rem; margin-bottom: 0.25rem; }
+.onboarding-item span { color: var(--nx-text-dim); font-size: 0.78rem; }
+.btn-dismiss {
+    background: none;
+    border: none;
+    color: var(--nx-text-dim);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+}
+.btn-dismiss:hover { color: var(--nx-text); }
+
+/* ── Stale thread treatment ── */
+
+.thread-card-stale { opacity: 0.55; }
+
+/* ── Settings validation & restart indicators ── */
+
+.field-error {
+    color: var(--nx-red);
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-left: 0.5rem;
+}
+.input-error { border-color: var(--nx-red) !important; }
+.restart-required {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: var(--nx-orange);
+    background: var(--nx-orange-soft);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    vertical-align: middle;
+    margin-left: 0.35rem;
+}
+
+/* ── Feed Health ── */
+
+.feed-health-warning {
+    background: rgba(255, 60, 60, 0.08);
+    border: 1px solid rgba(255, 60, 60, 0.25);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+}
+.feed-health-warning ul {
+    margin: 0.4rem 0 0 1.2rem;
+    padding: 0;
+}
+.feed-health-error {
+    color: var(--nx-text-dim);
+    font-size: 0.78rem;
+}
+.feed-status {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.feed-status-healthy { background: rgba(0, 200, 120, 0.15); color: #00c878; }
+.feed-status-degraded { background: rgba(255, 180, 0, 0.15); color: #e6a800; }
+.feed-status-dead { background: rgba(255, 60, 60, 0.15); color: #ff3c3c; }
+.feed-row-dead { opacity: 0.5; }
+.feed-row-degraded { opacity: 0.75; }
+.feed-url { font-family: var(--nx-font-mono); font-size: 0.78rem; }
+
+/* Beta badge */
+.beta-badge {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--nx-text-dim);
+    background: var(--nx-glass);
+    border: 1px solid var(--nx-border);
+    border-radius: 4px;
+    vertical-align: middle;
+    margin-left: 0.3rem;
+}
+</style>
+    
+</head>
+<body>
+    <header class="site-header">
+        <nav class="site-nav">
+            <a href="demo.html" class="brand"><svg width="16" height="16" viewBox="0 0 64 64" style="vertical-align:-2px"><path d="M32 6 L35 16 L32 26 L29 16Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 16)"/><path d="M38 32 L48 29 L58 32 L48 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 48 32)"/><path d="M32 38 L35 48 L32 58 L29 48Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 48)"/><path d="M6 32 L16 29 L26 32 L16 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 16 32)"/><path d="M32 27 L37 32 L32 37 L27 32Z" fill="#06b6d4" opacity=".7"/></svg> Nexus</a>
+            
+            <button class="nav-hamburger" onclick="document.querySelector('.site-nav').classList.toggle('nav-open')" aria-label="Toggle navigation">
+                <span></span><span></span><span></span>
+            </button>
+            <div class="nav-primary">
+                <a href="demo.html" class="nav-link ">Briefing</a>
+                
+                <a href="demo-threads.html" class="nav-link ">Threads</a>
+                <a href="demo-forward-look.html" class="nav-link active">Forward Look</a>
+                <a href="demo-explore.html" class="nav-link ">Explore</a>
+                
+            </div>
+            <div class="nav-secondary">
+                <button class="density-toggle" onclick="toggleDensity()" aria-label="Toggle info density" title="Toggle comfort/full density">
+                    <span class="density-icon-full" aria-hidden="true">&#9783;</span>
+                    <span class="density-icon-comfort" aria-hidden="true">&#9776;</span>
+                </button>
+                <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme" title="Toggle light/dark mode">
+                    <span class="theme-icon-dark">&#9789;</span>
+                    <span class="theme-icon-light">&#9728;</span>
+                </button>
+                <div class="nav-dropdown">
+                    <button class="nav-link nav-more-btn" aria-expanded="false">More</button>
+                    <div class="nav-dropdown-menu">
+                        
+                        <a href="#" onclick="return false">Changes</a>
+                        <a href="#" onclick="return false">Filters</a>
+                        <a href="#" onclick="return false">Entities</a>
+                        
+                        <a href="#" onclick="return false">Sources</a>
+                        <a href="#" onclick="return false">Cost</a>
+                        <a href="#" onclick="return false">Settings</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+    
+    <main class="main-content ">
+        
+
+<div class="page-header">
+    <h2>Forward Look <span class="beta-badge">Beta</span></h2>
+    <p class="page-subtitle">Actor-generated forward-looking intelligence, with optional Kalshi comparison when market data is available.
+        
+        <span style="margin-left:0.5rem;font-size:0.8rem;color:var(--nx-text-dim);">Last updated: 2026-03-19</span>
+        
+    </p>
+</div>
+
+<div class="pred-summary">
+    <div class="pred-stat">
+        <div class="pred-stat-label">Active</div>
+        <div class="pred-stat-value">38</div>
+    </div>
+    <div class="pred-stat">
+        <div class="pred-stat-label">Independent</div>
+        <div class="pred-stat-value">24</div>
+    </div>
+    <div class="pred-stat">
+        <div class="pred-stat-label">Kalshi-linked</div>
+        <div class="pred-stat-value">14</div>
+    </div>
+    <div class="pred-stat">
+        <div class="pred-stat-label">Resolved</div>
+        <div class="pred-stat-value">0</div>
+    </div>
+</div>
+
+<div class="pred-filters" id="pred-filters">
+    <button class="pred-pill active" data-filter="all">All</button>
+    <button class="pred-pill" data-filter="kalshi">Kalshi</button>
+    <button class="pred-pill" data-filter="intelligence">Intelligence</button>
+    <button class="pred-pill" data-filter="thread">Thread</button>
+    <span class="pred-filter-sep">|</span>
+    <button class="pred-pill active" data-filter-run="all">Both</button>
+    <button class="pred-pill" data-filter-run="independent">Independent</button>
+    <button class="pred-pill" data-filter-run="anchored">Anchored</button>
+</div>
+
+
+
+
+<details class="pred-section" open>
+    <summary class="pred-section-title">Featured <span class="pred-count">8</span></summary>
+    <div class="pred-cards pred-cards-featured">
+    
+        
+
+<div class="pred-card pred-card-featured"
+     data-source="kalshi" data-run-label="anchored">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">What will Donald Trump say during Bilateral Meeting</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            0d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-yes">
+        YES (88%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-mini-meta" style="margin-bottom: 0.75rem;">
+            <span class="pred-meta-dim">Kalshi 89%</span>
+            
+            <span class="pred-meta-dim">pp gap</span>
+            
+        </div>
+        
+    </div>
+
+    
+    
+    <details class="pred-reasoning-panel">
+        <summary class="pred-reasoning-toggle">Actor reasoning</summary>
+        <div class="pred-reasoning-body">
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">Donald Trump</span>
+                <span class="pred-actor-direction pred-actor-dir-increases">INCREASES</span>
+                
+                <span class="pred-actor-shift">+25pp</span>
+                
+                
+                <div class="pred-actor-reasoning">Based on the 2026 intelligence, Trump is actively leading a military conflict with Iran, including airstrikes and a blockade of the Strait of Hormuz. His recent public criticism of UK Prime Minister K</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: The extent to which Trump will link Japanese automotive trade concessions to their level of military participation in the Iran conflict.</div>
+                
+            </div>
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">Japan</span>
+                <span class="pred-actor-direction pred-actor-dir-increases">INCREASES</span>
+                
+                <span class="pred-actor-shift">+25pp</span>
+                
+                
+                <div class="pred-actor-reasoning">Recent intelligence from March 2026 indicates that President Trump is specifically pressuring &#39;Asian allies&#39; to deploy warships to the Strait of Hormuz following US-Israeli military actions against Ir</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: The primary uncertainty is whether Japan has already made private commitments that might soften Trump&#39;s public rhetoric, or if constitutional constraints (Article 9) will trigger more aggressive public pressure from the US President.</div>
+                
+            </div>
+            
+            
+            <div class="pred-synthesis">The synthesis of actor analyses indicates a high degree of convergence: President Trump&#39;s current geopolitical priority is the Iran conflict, and Japan is a primary target for his burden-sharing demands due to its maritime capabilities and oil dependency. The market anchor of 0.89 reflects a strong </div>
+            
+        </div>
+    </details>
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-kalshi">kalshi</span>
+        
+        <span class="run-badge run-badge-anchored">anchored</span>
+        
+        
+        
+        <span class="pred-ticker">KXTRUMPMENTION-26MAR19-TARI</span>
+        
+    </div>
+</div>
+
+    
+        
+
+<div class="pred-card pred-card-featured"
+     data-source="intelligence" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">The Islamic Revolutionary Guard Corps (IRGC) will seize or disable at least one commercial oil tanker flagged by a NATO-member state in the Strait of Hormuz by March 23, 2026.</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-yes">
+        YES (80%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-intelligence">intelligence</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        <span class="pred-tag pred-tag-contrarian">bold</span>
+        
+        
+        
+    </div>
+</div>
+
+    
+        
+
+<div class="pred-card pred-card-featured"
+     data-source="kalshi" data-run-label="anchored">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-context">Best AI this week</div>
+        
+        <div class="pred-card-question">ChatGPT</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            1d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-no">
+        NO (7%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-mini-meta" style="margin-bottom: 0.75rem;">
+            <span class="pred-meta-dim">Kalshi 5%</span>
+            
+            <span class="pred-meta-dim">pp gap</span>
+            
+        </div>
+        
+    </div>
+
+    
+    
+    <details class="pred-reasoning-panel">
+        <summary class="pred-reasoning-toggle">Actor reasoning</summary>
+        <div class="pred-reasoning-body">
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">ChatGPT</span>
+                <span class="pred-actor-direction pred-actor-dir-decreases">DECREASES</span>
+                
+                <span class="pred-actor-shift">-10pp</span>
+                
+                
+                <div class="pred-actor-reasoning">Recent intelligence highlights two significant challenges for ChatGPT: the identification of &#39;helicoid dynamics,&#39; a failure mode in frontier LLMs regarding error correction in high-stakes scenarios, a</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: The comparative performance results of the medical reasoning study are not fully detailed; if competitors performed significantly worse, ChatGPT could still retain its top position by comparison despite the identified flaws.</div>
+                
+            </div>
+            
+            
+            <div class="pred-synthesis">The market anchor is extremely low at 0.05, indicating that ChatGPT is currently trailing competitors—likely Claude 3.5 Sonnet or newer specialized models—in prevailing rankings. The actor analysis supports this bearish outlook with a negative shift (-0.10), highlighting specific technical vulnerabi</div>
+            
+        </div>
+    </details>
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-kalshi">kalshi</span>
+        
+        <span class="run-badge run-badge-anchored">anchored</span>
+        
+        
+        
+        <span class="pred-ticker">KXLLM1-26MAR21-OPEN</span>
+        
+    </div>
+</div>
+
+    
+        
+
+<div class="pred-card pred-card-featured"
+     data-source="intelligence" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Between March 17 and March 22, 2026, a missile or drone strike attributed to Iranian-aligned forces will target a major oil processing facility in Saudi Arabia or Kuwait, resulting in a documented fire.</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-yes">
+        YES (80%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-intelligence">intelligence</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        <span class="pred-tag pred-tag-contrarian">bold</span>
+        
+        
+        
+    </div>
+</div>
+
+    
+        
+
+<div class="pred-card pred-card-featured"
+     data-source="kalshi" data-run-label="anchored">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-context">Best AI in Mar 2026</div>
+        
+        <div class="pred-card-question">Gemini</div>
+        
+        <span class="pred-countdown ">
+            11d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-no">
+        NO (14%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-mini-meta" style="margin-bottom: 0.75rem;">
+            <span class="pred-meta-dim">Kalshi 5%</span>
+            
+            <span class="pred-meta-dim">pp gap</span>
+            
+        </div>
+        
+    </div>
+
+    
+    
+    <details class="pred-reasoning-panel">
+        <summary class="pred-reasoning-toggle">Actor reasoning</summary>
+        <div class="pred-reasoning-body">
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">Gemini</span>
+                <span class="pred-actor-direction pred-actor-dir-increases">INCREASES</span>
+                
+                <span class="pred-actor-shift">+15pp</span>
+                
+                
+                <div class="pred-actor-reasoning">Gemini&#39;s recent deployment of a beta task automation feature on the Samsung Galaxy S26 Ultra (March 12, 2026) signifies a major transition from a conversational AI to a functional agent integrated int</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: The full results of the medical reasoning faithfulness study and the degree to which Gemini is uniquely affected by &#39;helicoid dynamics&#39; compared to its primary competitors.</div>
+                
+            </div>
+            
+            
+            <div class="pred-synthesis">The market currently heavily discounts Gemini (0.05), likely due to historical inconsistencies and the dominance of OpenAI and Anthropic in developer mindshare. However, the actor analysis provides a significant upward adjustment (+0.15) based on tangible March 2026 milestones: deep hardware integra</div>
+            
+        </div>
+    </details>
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-kalshi">kalshi</span>
+        
+        <span class="run-badge run-badge-anchored">anchored</span>
+        
+        
+        
+        <span class="pred-ticker">KXLLM1-26MAR31-GOOG</span>
+        
+    </div>
+</div>
+
+    
+        
+
+<div class="pred-card pred-card-featured"
+     data-source="intelligence" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">A major Western developer platform, specifically Vercel, Replit, or LangChain, will announce a formal integration or official deployment template for the NanoClaw or OpenClaw framework by March 20, 2026.</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-yes">
+        YES (80%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-intelligence">intelligence</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        <span class="pred-tag pred-tag-contrarian">bold</span>
+        
+        
+        
+    </div>
+</div>
+
+    
+        
+
+<div class="pred-card pred-card-featured"
+     data-source="kalshi" data-run-label="anchored">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Donald Trump and Xi Jinping meet before Apr 1, 2026</div>
+        
+        <span class="pred-countdown ">
+            12d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-no">
+        NO (22%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-mini-meta" style="margin-bottom: 0.75rem;">
+            <span class="pred-meta-dim">Kalshi 27%</span>
+            
+            <span class="pred-meta-dim">pp gap</span>
+            
+        </div>
+        
+    </div>
+
+    
+    
+    <details class="pred-reasoning-panel">
+        <summary class="pred-reasoning-toggle">Actor reasoning</summary>
+        <div class="pred-reasoning-body">
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">Donald Trump</span>
+                <span class="pred-actor-direction pred-actor-dir-decreases">DECREASES</span>
+                
+                <span class="pred-actor-shift">-25pp</span>
+                
+                
+                <div class="pred-actor-reasoning">As of mid-March 2026, the Trump administration is deeply embroiled in an escalating military conflict with Iran, including airstrikes and a blockade of the Strait of Hormuz. This conflict is causing d</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: The potential for a sudden, unannounced diplomatic breakthrough or a high-level emergency summit specifically to address the Iran-Israel-US crisis, which could involve China as a mediator.</div>
+                
+            </div>
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">Xi Jinping</span>
+                <span class="pred-actor-direction pred-actor-dir-increases">INCREASES</span>
+                
+                <span class="pred-actor-shift">+5pp</span>
+                
+                
+                <div class="pred-actor-reasoning">Donald Trump&#39;s recent actions in mid-March 2026, specifically intensifying pressure on Asian allies regarding the Strait of Hormuz, create a diplomatic environment where direct communication with Xi J</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: The extremely limited timeframe remaining in March (approximately two weeks) makes a physical summit logistically difficult, though it increases the probability of a high-level virtual meeting or phone call to address the escalating security warnings.</div>
+                
+            </div>
+            
+            
+            <div class="pred-synthesis">The probability is heavily constrained by the short timeframe remaining in March (approximately two weeks) and the current geopolitical context. Donald Trump&#39;s administration is reportedly focused on a significant military escalation in the Middle East, specifically regarding Iran and the Strait of </div>
+            
+        </div>
+    </details>
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-kalshi">kalshi</span>
+        
+        <span class="run-badge run-badge-anchored">anchored</span>
+        
+        
+        
+        <span class="pred-ticker">KXTRUMPMEET-26MAR-XJIN</span>
+        
+    </div>
+</div>
+
+    
+        
+
+<div class="pred-card pred-card-featured"
+     data-source="intelligence" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">The UK&#39;s National Farmers&#39; Union (NFU) will formally petition the Treasury for an emergency &#39;Fertilizer and Fuel Security&#39; fund by March 23, 2026, in response to the 50% cost surge driven by the Strait of Hormuz blockade.</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-yes">
+        YES (80%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-intelligence">intelligence</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        <span class="pred-tag pred-tag-contrarian">bold</span>
+        
+        
+        
+    </div>
+</div>
+
+    
+    </div>
+</details>
+
+
+
+<details class="pred-section" >
+    <summary class="pred-section-title">All Active <span class="pred-count">38</span></summary>
+    
+    <div class="pred-event-group">
+        
+        <div class="pred-cards">
+        
+            
+
+<div class="pred-card "
+     data-source="thread" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Lebanon Incursion and the Strait of Hormuz Crisis produce significant new developments within 7 days</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (50%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-thread">thread</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+        </div>
+    </div>
+    
+    <div class="pred-event-group">
+        
+        <div class="pred-cards">
+        
+            
+
+<div class="pred-card "
+     data-source="thread" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Will Post-Strike Logistics of Securing Iranian Nuclear Material produce significant new developments within 7 days</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (50%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-thread">thread</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="thread" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Will Autonomous Software and Scientific Engineering Frameworks produce significant new developments within 7 days</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (50%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-thread">thread</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="thread" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Will Vulnerabilities in AI Safety Benchmarks and Evaluative Metrics produce significant new developments within 7 days</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (50%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-thread">thread</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="thread" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Will Mechanistic Analysis of Model Authority and Security Refusal produce significant new developments within 7 days</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (50%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-thread">thread</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="thread" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Will Geopolitical Conflict and Energy Price Volatility produce significant new developments within 7 days</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (50%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-thread">thread</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="thread" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Will China&#39;s Geopolitical Leadership in Clean Energy Infrastructure produce significant new developments within 7 days</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (50%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-thread">thread</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="thread" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Will Technological Advancements and Industrialization in Solar Energy produce significant new developments within 7 days</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (50%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-thread">thread</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="thread" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Will Fernando Alonso Retires from Chinese GP Amid Serious Health Concerns produce significant new developments within 7 days</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (50%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-thread">thread</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="intelligence" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">The United Kingdom or France will officially announce the deployment of at least one additional guided-missile destroyer to the Persian Gulf to join the U.S.-led maritime coalition by March 21, 2026.</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (60%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-intelligence">intelligence</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="intelligence" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">IAEA Director General Rafael Grossi will issue a formal statement by March 25, 2026, confirming that the IAEA can no longer verify the location of significant quantities of enriched uranium following the strikes on Iranian facilities.</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (60%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-intelligence">intelligence</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="intelligence" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">By March 23, 2026, either the United Kingdom or France will formally announce the deployment of at least one naval vessel to the new Trump-led multinational coalition for the Strait of Hormuz.</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (60%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-intelligence">intelligence</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="intelligence" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">By March 30, 2026, IAEA Director General Rafael Grossi will issue a formal statement confirming that the agency has lost &#39;continuity of knowledge&#39; or remote monitoring capabilities at the Natanz or Fordow facilities.</div>
+        
+        <span class="pred-countdown ">
+            10d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-yes">
+        YES (80%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-intelligence">intelligence</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        <span class="pred-tag pred-tag-contrarian">bold</span>
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="intelligence" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">A new evaluation of the Darwin Gödel Machine (DGM) will be published on the SWE-bench leaderboard or via an arXiv update by March 27, 2026, establishing a new state-of-the-art (SOTA) score for autonomous software engineering.</div>
+        
+        <span class="pred-countdown ">
+            10d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (60%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-intelligence">intelligence</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="intelligence" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">By March 27, 2026, a research paper or technical report will be released on arXiv applying the Disentangled Safety Hypothesis (DSH) to bypass safety filters in Llama 3.1 or Qwen 2.5 without fine-tuning, specifically in the domain of autonomous cyber-attacks.</div>
+        
+        <span class="pred-countdown ">
+            10d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (60%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-intelligence">intelligence</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="intelligence" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">By March 27, 2026, the European Commission will announce a formal reduction in the individual countervailing duty rate for Geely-owned Volvo Cars manufactured in China, following the precedent set by the CUPRA Tavascan exemption.</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (60%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-intelligence">intelligence</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="intelligence" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">The US Department of Energy will issue a formal &#39;Notice of Sale&#39; for the first tranche of at least 30 million barrels of crude oil from the Strategic Petroleum Reserve by March 24, 2026, following the 400 million barrel IEA authorization.</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-yes">
+        YES (80%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-intelligence">intelligence</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        <span class="pred-tag pred-tag-contrarian">bold</span>
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="intelligence" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Fernando Alonso will be officially replaced by a reserve driver for the Saudi Arabian Grand Prix weekend following his neurological symptoms in China.</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (60%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-intelligence">intelligence</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="intelligence" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">The FIA will issue a Technical Directive by March 25th specifically clarifying the legality of Ferrari&#39;s &#39;macarena&#39; rotating rear wing components.</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-yes">
+        YES (80%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-intelligence">intelligence</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        <span class="pred-tag pred-tag-contrarian">bold</span>
+        
+        
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="intelligence" data-run-label="independent">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Formula One Management (FOM) will release an official security assessment by March 19th regarding the status of the Saudi Arabian Grand Prix scheduled for late March.</div>
+        
+        <span class="pred-countdown pred-countdown-urgent">
+            3d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-yes">
+        YES (80%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-meta-dim" style="margin-bottom: 0.75rem;">Independent forward look</div>
+        
+    </div>
+
+    
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-intelligence">intelligence</span>
+        
+        <span class="run-badge run-badge-independent">independent</span>
+        
+        
+        
+        <span class="pred-tag pred-tag-contrarian">bold</span>
+        
+        
+        
+    </div>
+</div>
+
+        
+        </div>
+    </div>
+    
+    <div class="pred-event-group">
+        
+        <div class="pred-cards">
+        
+            
+
+<div class="pred-card "
+     data-source="kalshi" data-run-label="anchored">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Will Donald Trump issue any executive action on revoking, terminating, or rescinding the suspension of entry for nationals of Haiti, Iran, Côte d&#39;Ivoire, or Senegal before the World Cup</div>
+        
+        <span class="pred-countdown ">
+            83d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-no">
+        NO (17%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-mini-meta" style="margin-bottom: 0.75rem;">
+            <span class="pred-meta-dim">Kalshi 19%</span>
+            
+            <span class="pred-meta-dim">pp gap</span>
+            
+        </div>
+        
+    </div>
+
+    
+    
+    <details class="pred-reasoning-panel">
+        <summary class="pred-reasoning-toggle">Actor reasoning</summary>
+        <div class="pred-reasoning-body">
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">Donald Trump</span>
+                <span class="pred-actor-direction pred-actor-dir-decreases">DECREASES</span>
+                
+                <span class="pred-actor-shift">-30pp</span>
+                
+                
+                <div class="pred-actor-reasoning">Recent intelligence from March 2026 indicates that the United States, under the Trump administration, is currently engaged in an &#39;ongoing war&#39; with Iran, including active airstrikes on military facili</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: Whether diplomatic pressures specifically related to hosting the World Cup or separate agreements with Haiti, Côte d&#39;Ivoire, or Senegal could lead to targeted exemptions, despite the active conflict with Iran.</div>
+                
+            </div>
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">Iran</span>
+                <span class="pred-actor-direction pred-actor-dir-decreases">DECREASES</span>
+                
+                <span class="pred-actor-shift">-30pp</span>
+                
+                
+                <div class="pred-actor-reasoning">The provided intelligence describes a state of active, high-intensity warfare between the United States, Israel, and Iran as of March 2026. Specific actions include US military strikes on Iranian anti</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: Whether a sudden diplomatic breakthrough or a total Iranian surrender occurs before the World Cup, which seems unlikely given the involvement of Russia and the severity of the strikes.</div>
+                
+            </div>
+            
+            
+            <div class="pred-synthesis">The intelligence indicates a state of high-intensity warfare between the United States and Iran as of March 2026, including direct airstrikes and the destruction of Iranian strategic assets. In such a context, it is virtually inconceivable that the Trump administration would rescind travel restricti</div>
+            
+        </div>
+    </details>
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-kalshi">kalshi</span>
+        
+        <span class="run-badge run-badge-anchored">anchored</span>
+        
+        
+        
+        <span class="pred-ticker">KXFIFATRAVEL-26JUN11</span>
+        
+    </div>
+</div>
+
+        
+        </div>
+    </div>
+    
+    <div class="pred-event-group">
+        
+        <div class="pred-cards">
+        
+            
+
+<div class="pred-card "
+     data-source="kalshi" data-run-label="anchored">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Donald Trump and Gavin Newsom meet before Apr 1, 2026</div>
+        
+        <span class="pred-countdown ">
+            12d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-no">
+        NO (19%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-mini-meta" style="margin-bottom: 0.75rem;">
+            <span class="pred-meta-dim">Kalshi 19%</span>
+            
+            <span class="pred-meta-dim">pp gap</span>
+            
+        </div>
+        
+    </div>
+
+    
+    
+    <details class="pred-reasoning-panel">
+        <summary class="pred-reasoning-toggle">Actor reasoning</summary>
+        <div class="pred-reasoning-body">
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">Donald Trump</span>
+                <span class="pred-actor-direction pred-actor-dir-decreases">DECREASES</span>
+                
+                <span class="pred-actor-shift">-5pp</span>
+                
+                
+                <div class="pred-actor-reasoning">The intelligence indicates that Donald Trump&#39;s schedule and attention are heavily consumed by a major military conflict with Iran, including airstrikes, a blockade of the Strait of Hormuz, and retalia</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: The possibility of a national emergency or a presidential visit to California to highlight energy policy successes (the Santa Ynez pipeline) that might necessitate a formal meeting with the Governor.</div>
+                
+            </div>
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">Gavin Newsom</span>
+                <span class="pred-actor-direction pred-actor-dir-increases">INCREASES</span>
+                
+                <span class="pred-actor-shift">+15pp</span>
+                
+                
+                <div class="pred-actor-reasoning">The restart of the Santa Ynez pipeline on March 16, 2026, directly involving Donald Trump and the US Department of Energy, creates a significant flashpoint in California-Federal relations. As Governor</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: Whether the interaction will manifest as a formal meeting versus purely legal/litigious opposition, and whether Newsom chooses to delegate the response to state agencies rather than meeting with Trump directly.</div>
+                
+            </div>
+            
+            
+            <div class="pred-synthesis">The synthesis of actor analyses suggests a low probability of a meeting, primarily driven by Donald Trump&#39;s preoccupation with a high-intensity military conflict with Iran. While the restart of the Santa Ynez pipeline on March 16 provides a localized catalyst for California-Federal interaction, the </div>
+            
+        </div>
+    </details>
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-kalshi">kalshi</span>
+        
+        <span class="run-badge run-badge-anchored">anchored</span>
+        
+        
+        
+        <span class="pred-ticker">KXTRUMPMEET-26MAR-GNEW</span>
+        
+    </div>
+</div>
+
+        
+        </div>
+    </div>
+    
+    <div class="pred-event-group">
+        
+        <div class="pred-cards">
+        
+            
+
+<div class="pred-card "
+     data-source="kalshi" data-run-label="anchored">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-question">Will Donald Trump sue Siena College before May 2026</div>
+        
+        <span class="pred-countdown ">
+            42d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-no">
+        NO (14%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-mini-meta" style="margin-bottom: 0.75rem;">
+            <span class="pred-meta-dim">Kalshi 13%</span>
+            
+            <span class="pred-meta-dim">pp gap</span>
+            
+        </div>
+        
+    </div>
+
+    
+    
+    <details class="pred-reasoning-panel">
+        <summary class="pred-reasoning-toggle">Actor reasoning</summary>
+        <div class="pred-reasoning-body">
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">Donald Trump</span>
+                <span class="pred-actor-direction pred-actor-dir-neutral">NEUTRAL</span>
+                
+                <span class="pred-actor-shift">+0pp</span>
+                
+                
+                <div class="pred-actor-reasoning">The provided intelligence focus heavily on Donald Trump&#39;s involvement in a military conflict with Iran, international tensions with the UK and EU, and energy policy. There is no mention of Siena Colle</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: The primary uncertainty is whether Siena College releases a poll or report in the coming weeks that Trump perceives as &#39;fraudulent&#39; or &#39;biased&#39; regarding the Iran conflict, which could trigger his typical litigious response.</div>
+                
+            </div>
+            
+            
+            <div class="pred-synthesis">Donald Trump&#39;s current strategic focus in the 2026 scenario is heavily weighted toward high-stakes geopolitical conflicts and domestic energy deregulation, rather than domestic polling grievances. While he possesses a well-documented history of litigiousness and often criticizes Siena College/New Yo</div>
+            
+        </div>
+    </details>
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-kalshi">kalshi</span>
+        
+        <span class="run-badge run-badge-anchored">anchored</span>
+        
+        
+        
+        <span class="pred-ticker">KXTRUMPSUE-26-SIEN</span>
+        
+    </div>
+</div>
+
+        
+        </div>
+    </div>
+    
+    <div class="pred-event-group">
+        
+        <div class="pred-cards">
+        
+            
+
+<div class="pred-card "
+     data-source="kalshi" data-run-label="anchored">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-context">Best AI in Mar 2026</div>
+        
+        <div class="pred-card-question">ChatGPT</div>
+        
+        <span class="pred-countdown ">
+            11d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-no">
+        NO (9%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-mini-meta" style="margin-bottom: 0.75rem;">
+            <span class="pred-meta-dim">Kalshi 5%</span>
+            
+            <span class="pred-meta-dim">pp gap</span>
+            
+        </div>
+        
+    </div>
+
+    
+    
+    <details class="pred-reasoning-panel">
+        <summary class="pred-reasoning-toggle">Actor reasoning</summary>
+        <div class="pred-reasoning-body">
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">ChatGPT</span>
+                <span class="pred-actor-direction pred-actor-dir-increases">INCREASES</span>
+                
+                <span class="pred-actor-shift">+5pp</span>
+                
+                
+                <div class="pred-actor-reasoning">In the period leading up to mid-March 2026, ChatGPT&#39;s primary competitors—specifically Claude, Llama, and DeepSeek—were identified as suffering from &#39;helicoid dynamics,&#39; a failure mode where models re</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: The full results of the March 14th faithfulness evaluation comparing ChatGPT and Gemini are not fully detailed in the intelligence; a superior performance by Gemini in that study would challenge ChatGPT&#39;s lead.</div>
+                
+            </div>
+            
+            
+            <div class="pred-synthesis">The market anchor for ChatGPT being the &#39;best&#39; AI in March 2026 is quite low at 0.05, likely reflecting intense competition from Google&#39;s Gemini and the rapid iteration of open-source models. However, intelligence regarding &#39;helicoid dynamics&#39; suggests that several primary rivals (Claude, Llama, Dee</div>
+            
+        </div>
+    </details>
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-kalshi">kalshi</span>
+        
+        <span class="run-badge run-badge-anchored">anchored</span>
+        
+        
+        
+        <span class="pred-ticker">KXLLM1-26MAR31-OAI</span>
+        
+    </div>
+</div>
+
+        
+        </div>
+    </div>
+    
+    <div class="pred-event-group">
+        
+        <div class="pred-event-heading">
+            When will OpenAI officially announce an IPO
+            <span class="pred-count">2</span>
+        </div>
+        
+        <div class="pred-cards">
+        
+            
+
+<div class="pred-card "
+     data-source="kalshi" data-run-label="anchored">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-context">When will OpenAI officially announce an IPO</div>
+        
+        <div class="pred-card-question">When will OpenAI IPO</div>
+        
+        <span class="pred-countdown ">
+            42d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-no">
+        NO (7%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-mini-meta" style="margin-bottom: 0.75rem;">
+            <span class="pred-meta-dim">Kalshi 5%</span>
+            
+            <span class="pred-meta-dim">pp gap</span>
+            
+        </div>
+        
+    </div>
+
+    
+    
+    <details class="pred-reasoning-panel">
+        <summary class="pred-reasoning-toggle">Actor reasoning</summary>
+        <div class="pred-reasoning-body">
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">OpenAI</span>
+                <span class="pred-actor-direction pred-actor-dir-decreases">DECREASES</span>
+                
+                <span class="pred-actor-shift">-5pp</span>
+                
+                
+                <div class="pred-actor-reasoning">The intelligence indicates OpenAI is pivoting towards high-stakes strategic sectors, including military applications (Pentagon target prioritization) and autonomous offensive AI capabilities. These de</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: A shift in OpenAI&#39;s governance structure to a fully for-profit model, which would be a prerequisite for an IPO regardless of technological progress.</div>
+                
+            </div>
+            
+            
+            <div class="pred-synthesis">The synthesis of market data and actor-specific analysis indicates a very low likelihood of a near-term IPO. OpenAI&#39;s strategic pivot toward sensitive sectors—specifically military applications and autonomous offensive capabilities—creates significant barriers to the transparency and regulatory over</div>
+            
+        </div>
+    </details>
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-kalshi">kalshi</span>
+        
+        <span class="run-badge run-badge-anchored">anchored</span>
+        
+        
+        
+        <span class="pred-ticker">KXIPOOPENAI-26MAY01</span>
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="kalshi" data-run-label="anchored">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-context">When will OpenAI officially announce an IPO</div>
+        
+        <div class="pred-card-question">When will OpenAI IPO</div>
+        
+        <span class="pred-countdown ">
+            73d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-no">
+        NO (12%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-mini-meta" style="margin-bottom: 0.75rem;">
+            <span class="pred-meta-dim">Kalshi 6%</span>
+            
+            <span class="pred-meta-dim">pp gap</span>
+            
+        </div>
+        
+    </div>
+
+    
+    
+    <details class="pred-reasoning-panel">
+        <summary class="pred-reasoning-toggle">Actor reasoning</summary>
+        <div class="pred-reasoning-body">
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">OpenAI</span>
+                <span class="pred-actor-direction pred-actor-dir-increases">INCREASES</span>
+                
+                <span class="pred-actor-shift">+10pp</span>
+                
+                
+                <div class="pred-actor-reasoning">As of March 2026, OpenAI has achieved significant product maturity with the release of the GPT-5.4 family and the development of specialized agentic models for high-volume enterprise use. The integrat</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: OpenAI&#39;s complex non-profit/for-profit hybrid governance structure and potential regulatory pushback regarding the public listing of an entity pursuing AGI remain the primary hurdles.</div>
+                
+            </div>
+            
+            
+            <div class="pred-synthesis">The synthesis reflects a tension between OpenAI&#39;s massive capital requirements for AGI-level compute and its restrictive governance structure. While the market anchor is low (0.06), indicating high skepticism due to the non-profit board&#39;s control and Sam Altman&#39;s previous public stance against IPOs,</div>
+            
+        </div>
+    </details>
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-kalshi">kalshi</span>
+        
+        <span class="run-badge run-badge-anchored">anchored</span>
+        
+        
+        
+        <span class="pred-ticker">KXIPOOPENAI-26JUN01</span>
+        
+    </div>
+</div>
+
+        
+        </div>
+    </div>
+    
+    <div class="pred-event-group">
+        
+        <div class="pred-event-heading">
+            When will Trump visit China
+            <span class="pred-count">4</span>
+        </div>
+        
+        <div class="pred-cards">
+        
+            
+
+<div class="pred-card "
+     data-source="kalshi" data-run-label="anchored">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-context">When will Trump visit China</div>
+        
+        <div class="pred-card-question">Will Donald Trump visit China before Apr 24, 2026</div>
+        
+        <span class="pred-countdown ">
+            35d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-no">
+        NO (28%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-mini-meta" style="margin-bottom: 0.75rem;">
+            <span class="pred-meta-dim">Kalshi 29%</span>
+            
+            <span class="pred-meta-dim">pp gap</span>
+            
+        </div>
+        
+    </div>
+
+    
+    
+    <details class="pred-reasoning-panel">
+        <summary class="pred-reasoning-toggle">Actor reasoning</summary>
+        <div class="pred-reasoning-body">
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">China</span>
+                <span class="pred-actor-direction pred-actor-dir-increases">INCREASES</span>
+                
+                <span class="pred-actor-shift">+5pp</span>
+                
+                
+                <div class="pred-actor-reasoning">Current intelligence indicates that President Trump is actively pressuring China to join a multinational coalition to secure the Strait of Hormuz amidst an escalating U.S.-Iran conflict. Trump&#39;s histo</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: The extremely short timeframe (roughly five weeks until the April 24, 2026 deadline) makes the logistical planning for a presidential visit difficult, especially if China refuses to comply with Trump&#39;s pressure regarding the naval coalition.</div>
+                
+            </div>
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">Donald Trump</span>
+                <span class="pred-actor-direction pred-actor-dir-decreases">DECREASES</span>
+                
+                <span class="pred-actor-shift">-25pp</span>
+                
+                
+                <div class="pred-actor-reasoning">As of mid-March 2026, Donald Trump is currently leading a major military conflict with Iran, characterized by recent airstrikes, the blockade of the Strait of Hormuz, and threats of retaliation agains</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: The potential for a sudden, high-stakes diplomatic pivot to China to seek mediation in the Iran conflict or a massive trade distraction, though current intelligence shows no evidence of such planning.</div>
+                
+            </div>
+            
+            
+            <div class="pred-synthesis">The synthesis of actor analyses indicates a strong downward trend compared to the market anchor. The primary constraint is the extremely narrow five-week window before the April 24, 2026, deadline. While Donald Trump is known for impulsive diplomatic maneuvers, his current preoccupation with an acti</div>
+            
+        </div>
+    </details>
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-kalshi">kalshi</span>
+        
+        <span class="run-badge run-badge-anchored">anchored</span>
+        
+        
+        
+        <span class="pred-ticker">KXTRUMPCHINA-26-APR24</span>
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="kalshi" data-run-label="anchored">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-context">When will Trump visit China</div>
+        
+        <div class="pred-card-question">Will Donald Trump visit China before May 8, 2026</div>
+        
+        <span class="pred-countdown ">
+            49d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-uncertain">
+        UNCERTAIN (48%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-mini-meta" style="margin-bottom: 0.75rem;">
+            <span class="pred-meta-dim">Kalshi 52%</span>
+            
+            <span class="pred-meta-dim">pp gap</span>
+            
+        </div>
+        
+    </div>
+
+    
+    
+    <details class="pred-reasoning-panel">
+        <summary class="pred-reasoning-toggle">Actor reasoning</summary>
+        <div class="pred-reasoning-body">
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">China</span>
+                <span class="pred-actor-direction pred-actor-dir-neutral">NEUTRAL</span>
+                
+                <span class="pred-actor-shift">+0pp</span>
+                
+                
+                <div class="pred-actor-reasoning">Analysis unavailable: &#39;list&#39; object has no attribute &#39;get&#39;</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: LLM failure</div>
+                
+            </div>
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">Donald Trump</span>
+                <span class="pred-actor-direction pred-actor-dir-decreases">DECREASES</span>
+                
+                <span class="pred-actor-shift">-25pp</span>
+                
+                
+                <div class="pred-actor-reasoning">The intelligence indicates that the Trump administration is currently engaged in an active and escalating military conflict with Iran, including recent airstrikes and threats of retaliation. This wart</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: The possibility that a sudden need for high-level mediation from China regarding the Iran conflict could trigger an emergency diplomatic summit, though this would differ from a standard state visit.</div>
+                
+            </div>
+            
+            
+            <div class="pred-synthesis">The probability estimate is heavily influenced by a conflict between the market&#39;s high anchor (0.52) and the situational intelligence indicating an active, escalating war with Iran. While the market suggests a high likelihood of a visit—perhaps anticipating an emergency diplomatic summit or a major </div>
+            
+        </div>
+    </details>
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-kalshi">kalshi</span>
+        
+        <span class="run-badge run-badge-anchored">anchored</span>
+        
+        
+        
+        <span class="pred-ticker">KXTRUMPCHINA-26-MAY08</span>
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="kalshi" data-run-label="anchored">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-context">When will Trump visit China</div>
+        
+        <div class="pred-card-question">Will Donald Trump visit China before Apr 17, 2026</div>
+        
+        <span class="pred-countdown ">
+            28d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-no">
+        NO (14%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-mini-meta" style="margin-bottom: 0.75rem;">
+            <span class="pred-meta-dim">Kalshi 16%</span>
+            
+            <span class="pred-meta-dim">pp gap</span>
+            
+        </div>
+        
+    </div>
+
+    
+    
+    <details class="pred-reasoning-panel">
+        <summary class="pred-reasoning-toggle">Actor reasoning</summary>
+        <div class="pred-reasoning-body">
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">China</span>
+                <span class="pred-actor-direction pred-actor-dir-increases">INCREASES</span>
+                
+                <span class="pred-actor-shift">+5pp</span>
+                
+                
+                <div class="pred-actor-reasoning">The recent intelligence suggests a significant shift in U.S.-China relations driven by the conflict in the Middle East. President Trump is actively pressuring China to join a multinational coalition t</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: Whether China will actually agree to the request to join the coalition or if they will maintain their strategic partnership with Iran, which would likely cancel any plans for a visit.</div>
+                
+            </div>
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">Donald Trump</span>
+                <span class="pred-actor-direction pred-actor-dir-decreases">DECREASES</span>
+                
+                <span class="pred-actor-shift">-20pp</span>
+                
+                
+                <div class="pred-actor-reasoning">As of March 18, 2026, Trump is actively managing a significant military conflict with Iran, including launching airstrikes and dealing with the blockade of the Strait of Hormuz. With only one month re</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: The potential for a sudden diplomatic shift or a crisis-driven summit with China to discuss the global impacts of the Iran conflict or oil prices.</div>
+                
+            </div>
+            
+            
+            <div class="pred-synthesis">The probability is heavily constrained by the extremely narrow timeframe remaining—approximately 30 days from the current date of March 18, 2026. While China&#39;s interest in regional energy security might normally invite a diplomatic summit, the Trump administration&#39;s active involvement in military op</div>
+            
+        </div>
+    </details>
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-kalshi">kalshi</span>
+        
+        <span class="run-badge run-badge-anchored">anchored</span>
+        
+        
+        
+        <span class="pred-ticker">KXTRUMPCHINA-26-APR17</span>
+        
+    </div>
+</div>
+
+        
+            
+
+<div class="pred-card "
+     data-source="kalshi" data-run-label="anchored">
+    <div class="pred-card-header">
+        
+        <div class="pred-card-context">When will Trump visit China</div>
+        
+        <div class="pred-card-question">Will Donald Trump visit China before May 1, 2026</div>
+        
+        <span class="pred-countdown ">
+            42d
+        </span>
+        
+    </div>
+
+    
+    <div class="pred-verdict-large pred-verdict-large-no">
+        NO (28%)
+    </div>
+    
+
+    <div class="pred-card-body">
+        
+        <div class="pred-mini-meta" style="margin-bottom: 0.75rem;">
+            <span class="pred-meta-dim">Kalshi 33%</span>
+            
+            <span class="pred-meta-dim">pp gap</span>
+            
+        </div>
+        
+    </div>
+
+    
+    
+    <details class="pred-reasoning-panel">
+        <summary class="pred-reasoning-toggle">Actor reasoning</summary>
+        <div class="pred-reasoning-body">
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">China</span>
+                <span class="pred-actor-direction pred-actor-dir-increases">INCREASES</span>
+                
+                <span class="pred-actor-shift">+15pp</span>
+                
+                
+                <div class="pred-actor-reasoning">The recent intelligence suggests a significant shift in U.S.-China dynamics where President Trump is actively pressuring China to join a multinational naval coalition to secure the Strait of Hormuz. I</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: The primary constraint is the extremely narrow timeline (less than six weeks from the latest intel to the May 1, 2026 deadline) and whether China&#39;s refusal to join the coalition would lead Trump to cancel any planned diplomatic overtures.</div>
+                
+            </div>
+            
+            <div class="pred-actor-row">
+                <span class="pred-actor-name">Donald Trump</span>
+                <span class="pred-actor-direction pred-actor-dir-decreases">DECREASES</span>
+                
+                <span class="pred-actor-shift">-25pp</span>
+                
+                
+                <div class="pred-actor-reasoning">As of mid-March 2026, the Trump administration is actively engaged in a significant military conflict with Iran, including airstrikes and a blockade of the Strait of Hormuz. Given the intensity of thi</div>
+                
+                
+                <div class="pred-actor-uncertainty">Uncertainty: The possibility of a snap diplomatic summit intended to pressure China into mediating the Iran conflict or to manage global oil supply disruptions caused by the blockade.</div>
+                
+            </div>
+            
+            
+            <div class="pred-synthesis">The combination of an active military conflict with Iran and a very narrow six-week window until the May 1 deadline makes a state visit highly improbable. While China&#39;s interest in securing energy flows through the Strait of Hormuz creates a diplomatic opening, the logistical and security requiremen</div>
+            
+        </div>
+    </details>
+    
+
+    <div class="pred-card-footer">
+        <span class="source-badge source-kalshi">kalshi</span>
+        
+        <span class="run-badge run-badge-anchored">anchored</span>
+        
+        
+        
+        <span class="pred-ticker">KXTRUMPCHINA-26-MAY01</span>
+        
+    </div>
+</div>
+
+        
+        </div>
+    </div>
+    
+</details>
+
+
+
+
+
+
+
+    </main>
+    <footer class="site-footer">
+        <div class="footer-inner">
+            <span class="footer-brand"><svg width="14" height="14" viewBox="0 0 64 64" style="vertical-align:-1px"><path d="M32 6 L35 16 L32 26 L29 16Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 16)"/><path d="M38 32 L48 29 L58 32 L48 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 48 32)"/><path d="M32 38 L35 48 L32 58 L29 48Z" fill="#06b6d4" opacity=".5" transform="rotate(15 32 48)"/><path d="M6 32 L16 29 L26 32 L16 35Z" fill="#22d3ee" opacity=".38" transform="rotate(15 16 32)"/><path d="M32 27 L37 32 L32 37 L27 32Z" fill="#06b6d4" opacity=".7"/></svg> Nexus Intelligence</span>
+            <span class="footer-links">
+                
+                <a href="#" onclick="return false">Entities</a>
+                
+                <a href="#" onclick="return false">Sources</a>
+                <a href="#" onclick="return false">Cost</a>
+                <a href="#" onclick="return false">Settings</a>
+                
+                <a href="#" onclick="return false">Podcast RSS</a>
+                
+            </span>
+        </div>
+    </footer>
+    <script>
+    // Theme toggle
+    function toggleTheme() {
+        const html = document.documentElement;
+        const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+        html.setAttribute('data-theme', next);
+        localStorage.setItem('nexus-theme', next);
+    }
+    // Density toggle (comfort = simplified, full = all details)
+    function toggleDensity() {
+        const html = document.documentElement;
+        const next = html.getAttribute('data-density') === 'comfort' ? 'full' : 'comfort';
+        html.setAttribute('data-density', next);
+        localStorage.setItem('nexus-density', next);
+    }
+    // Dropdown toggle
+    document.querySelectorAll('.nav-more-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const expanded = btn.getAttribute('aria-expanded') === 'true';
+            btn.setAttribute('aria-expanded', !expanded);
+        });
+    });
+    document.addEventListener('click', e => {
+        document.querySelectorAll('.nav-more-btn').forEach(b =>
+            b.setAttribute('aria-expanded', 'false'));
+        // Close mobile menu when clicking a nav link
+        if (e.target.closest('.nav-primary a, .nav-secondary a')) {
+            document.querySelector('.site-nav').classList.remove('nav-open');
+        }
+    });
+    </script>
+    
+    
+<script>
+(function() {
+    const sourcePills = document.querySelectorAll('.pred-pill[data-filter]');
+    const runPills = document.querySelectorAll('.pred-pill[data-filter-run]');
+    let activeSource = 'all';
+    let activeRun = 'all';
+
+    function applyFilters() {
+        document.querySelectorAll('.pred-card[data-source], .pred-resolved-card[data-source]').forEach(el => {
+            const srcMatch = activeSource === 'all' || el.dataset.source === activeSource;
+            const runMatch = activeRun === 'all' || !el.dataset.runLabel || el.dataset.runLabel === activeRun;
+            el.style.display = (srcMatch && runMatch) ? '' : 'none';
+        });
+        document.querySelectorAll('.pred-resolved-group[data-source]').forEach(el => {
+            const visible = el.querySelectorAll('.pred-resolved-card:not([style*="display: none"])');
+            el.style.display = visible.length ? '' : 'none';
+        });
+    }
+
+    sourcePills.forEach(btn => {
+        btn.addEventListener('click', () => {
+            sourcePills.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activeSource = btn.dataset.filter;
+            applyFilters();
+        });
+    });
+    runPills.forEach(btn => {
+        btn.addEventListener('click', () => {
+            runPills.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activeRun = btn.dataset.filterRun;
+            applyFilters();
+        });
+    });
+})();
+</script>
+
+<div style="position:fixed;bottom:0;left:0;right:0;z-index:9999;
+background:rgba(6,182,212,0.9);color:#fff;text-align:center;padding:6px 0;
+font-family:Inter,sans-serif;font-size:13px;font-weight:500;letter-spacing:0.5px">
+Static Preview &mdash; <a href="https://github.com/zantryis/NEXUS"
+style="color:#fff;text-decoration:underline">Get Nexus</a> to explore live
+</div></body>
+</html>
