@@ -6,12 +6,12 @@ An agentic news intelligence compiler that polls 52+ RSS feeds across 8 language
 
 | Metric | Value |
 |--------|-------|
-| Source files | ~130 Python modules |
-| Tests passing | 1,494 (unit + 28 E2E) |
+| Source files | 133 Python modules |
+| Tests passing | 1,625 (1,558 unit + 67 E2E) |
 | Source feeds | 52 global + per-topic registries, 8 languages |
 | LLM providers | Gemini, OpenAI, Anthropic, DeepSeek, Ollama |
 | TTS backends | Gemini native, OpenAI, ElevenLabs |
-| Knowledge store | SQLite, 33 tables, WAL mode, schema v18 |
+| Knowledge store | SQLite, 33 tables, WAL mode, schema v19 |
 | Delivery | Telegram bot + Web dashboard + Podcast RSS |
 
 ---
@@ -352,7 +352,7 @@ NexusConfig
 
 ---
 
-## SQLite Schema (v18)
+## SQLite Schema (v19)
 
 33 tables with WAL mode and foreign keys enabled.
 
@@ -572,11 +572,12 @@ last_error TEXT,
 status TEXT DEFAULT 'healthy'  -- 'healthy' | 'degraded' | 'dead'
 ```
 
-### Additional Columns/Tables (v16-v18)
+### Additional Columns/Tables (v16-v19)
 
 - **v16**: `forecast_questions.reasoning_json` — Persisted forecast reasoning for audit trail
 - **v17**: `pipeline_runs.skipped_topics` — JSON list of topics skipped during pipeline run
 - **v18**: `forecast_questions.updated_at` — Timestamp for last reprice; `forecast_probability_history` table — tracks probability changes over time with source attribution
+- **v19**: `threads.merged_into_id` — Thread merge audit trail (FK to threads.id)
 
 ---
 
@@ -828,7 +829,7 @@ src/nexus/
 │   │   └── filter.py        Two-pass LLM filter + perspective diversity
 │   ├── knowledge/
 │   │   ├── store.py         KnowledgeStore (all SQLite CRUD)
-│   │   ├── schema.py        DDL for 33 tables + migrations (v18)
+│   │   ├── schema.py        DDL for 33 tables + migrations (v19)
 │   │   ├── events.py        Event model, extraction, dedup/merge
 │   │   ├── entities.py      Entity resolution (LLM canonicalization)
 │   │   ├── pages.py         Cached narrative pages with TTL

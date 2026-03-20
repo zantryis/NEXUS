@@ -6,29 +6,28 @@
 
 <p align="center">
   Agentic news intelligence compiler. Self-hosted, model-agnostic, always-on.<br>
-  <a href="https://tyan3001.github.io/NEXUS/">Explore the system map →</a>
+  <a href="https://tyan3001.github.io/NEXUS/">Docs</a> · <a href="https://tyan3001.github.io/NEXUS/pipeline.html">System Map</a>
 </p>
 
 ---
 
-An agentic news intelligence compiler that polls 50+ RSS feeds across 8 languages, extracts structured events via LLM, resolves entities into a knowledge graph, identifies narrative threads with cross-source convergence/divergence analysis, generates daily briefings with podcast audio, delivers via Telegram, and produces actor-based Forward Look forecasts with optional Kalshi market anchoring.
+Nexus monitors news sources across languages, extracts structured events, builds a persistent knowledge graph, and turns it all into daily briefings, podcast episodes, and probabilistic forecasts — delivered to your phone or explored through a live dashboard.
 
-## Features
+You pick the topics. Nexus reads everything, decides what matters, connects the dots, and tells you what changed.
 
-- **Multi-source intelligence** — 50+ RSS feeds across 8 languages with affiliation tracking (state/public/private media)
-- **Two-pass LLM filtering** — Relevance scoring then significance + novelty assessment against known events
-- **Knowledge graph** — SQLite-backed entity resolution, persistent narrative threads, convergence/divergence detection
-- **Podcast audio** — Two-host dialogue script generation + TTS (Gemini, OpenAI, or ElevenLabs)
-- **Telegram delivery** — Daily briefings, breaking news digests, knowledge-grounded Q&A with web search
-- **Web dashboard** — FastAPI + HTMX interface for exploring topics, threads, entities, events, and sources
-- **Web setup wizard** — Browser-based first-run configuration (no YAML editing required)
-- **Web chat** — Built-in Q&A widget on the dashboard, rate-limited per IP
-- **Demo mode** — Read-only dashboard for public showcasing via tunnel
-- **Scheduled pipeline** — APScheduler runs the daily pipeline and breaking news checks automatically
-- **Source auto-discovery** — LLM-powered RSS feed discovery for new topics
-- **Multi-provider LLM** — Gemini, OpenAI, Anthropic, DeepSeek, and Ollama (local)
-- **Budget controls** — Daily spend limits with automatic degradation strategies
-- **Forward Look** — actor-based forward-looking forecasts for topic claims, thread developments, and optional Kalshi-aligned market comparisons
+## What You Get
+
+**Daily briefing + podcast** — A concise intelligence report synthesized from dozens of sources, with a two-host podcast episode generated via TTS. Delivered to Telegram every morning at a time you choose.
+
+**Live dashboard** — Explore topics, narrative threads, entities, events, convergence/divergence signals, source balance, cost tracking, and filter transparency. Everything Nexus knows is browsable.
+
+**Knowledge graph** — Entity resolution across sources and languages. Persistent narrative threads that track how stories evolve over days and weeks. Convergence detection when independent sources confirm the same fact; divergence detection when they frame it differently.
+
+**Forward Look (Beta)** — Actor-based probabilistic forecasts generated from your knowledge graph. Optional Kalshi market comparison when prediction market data is available.
+
+**Breaking news** — Between daily runs, Nexus polls wire feeds and alerts you when something crosses your significance threshold.
+
+**Ask it questions** — Text the Telegram bot a question about any tracked topic. It answers from accumulated knowledge, falling back to web search when needed.
 
 ## Quick Start
 
@@ -37,13 +36,8 @@ An agentic news intelligence compiler that polls 50+ RSS feeds across 8 language
 ```bash
 git clone https://github.com/Tyan3001/NEXUS.git
 cd NEXUS
-cp .env.example .env
 docker compose up
 ```
-
-Open `http://localhost:8080` — the web setup wizard will guide you through configuration. No manual file editing is required before setup; the wizard persists your keys into the project `.env`.
-
-After the wizard saves `data/config.yaml` and `.env`, restart the container once so the scheduler, Telegram bot, and other always-on services start with the updated environment.
 
 ### Without Docker
 
@@ -56,220 +50,127 @@ pip install -e ".[all]"
 python -m nexus run
 ```
 
-Open `http://localhost:8080` to complete setup via the web wizard, or use the CLI wizard:
-
-```bash
-python -m nexus setup    # Interactive CLI setup
-python -m nexus run      # Start all services
-```
-
-If you use the web setup wizard from `python -m nexus run`, restart that process once after setup completes so scheduled jobs and Telegram delivery start with the saved config.
-
-### Manual Setup
-
-If you prefer to configure manually:
-
-```bash
-cp .env.example .env                          # Add your API keys
-cp data/config.example.yaml data/config.yaml  # Customize topics and models
-python -m nexus run
-```
-
-Dashboard at `http://localhost:8080`. Podcast feed at `http://localhost:8080/feed.xml`.
-
-## Try the Demo
-
-No API keys? Try the demo mode to explore the dashboard with sample data:
-
-```bash
-python -m nexus demo seed --from-scratch   # Create demo DB with sample data
-python -m nexus demo serve                 # Start demo server at localhost:8000
-```
-
-If you already have collected data, seed the demo from your live database instead:
-
-```bash
-python -m nexus demo seed    # Exports a sanitized subset of your data
-python -m nexus demo serve
-```
-
-Demo mode is read-only — settings and setup are locked, all pages render with seeded data.
+Open **http://localhost:8080** — the setup wizard walks you through everything: provider, API key, topics, timezone, schedule, and optional Telegram. Source discovery, the first pipeline run, historical backfill, and Forward Look generation all happen automatically.
 
 ## What You Need
 
-Only **one LLM API key** is required to get started. The setup wizard will help you choose:
+One LLM API key. The wizard helps you choose:
 
-| Preset | Provider | Cost/Day | Key Needed |
-|--------|----------|----------|------------|
-| `free` | Ollama (local) | $0 | None (requires running [Ollama](https://ollama.com) server) |
-| `cheap` | DeepSeek V3.2 | ~$0.01 | `DEEPSEEK_API_KEY` |
-| `balanced` | Gemini Flash + Pro | ~$0.05 | `GEMINI_API_KEY` |
-| `quality` | Gemini Pro | ~$0.15 | `GEMINI_API_KEY` |
-| `openai-cheap` | GPT-4.1 Nano + 5 Mini | ~$0.03 | `OPENAI_API_KEY` |
-| `openai-balanced` | GPT-4.1 Mini + 5.4 | ~$0.10 | `OPENAI_API_KEY` |
-| `openai-quality` | GPT-5 Mini + 5.4 | ~$0.25 | `OPENAI_API_KEY` |
-| `anthropic` | Claude Haiku 4.5 / Sonnet 4.6 | ~$0.10 | `ANTHROPIC_API_KEY` |
+| Preset | Provider | ~Cost/Day |
+|--------|----------|-----------|
+| `free` | Ollama (local) | $0 |
+| `cheap` | DeepSeek | $0.01 |
+| `balanced` | Gemini Flash + Pro | $0.05 |
+| `quality` | Gemini Pro | $0.15 |
+| `openai-cheap` | GPT-4.1 Nano + Mini | $0.03 |
+| `openai-balanced` | GPT-4.1 Mini + 5.4 | $0.10 |
+| `openai-quality` | GPT-5 Mini + 5.4 | $0.25 |
+| `anthropic` | Claude Haiku + Sonnet | $0.10 |
 
-**Optional extras** (can be added later via Settings):
-- `TELEGRAM_BOT_TOKEN` — Enable Telegram delivery (get from [@BotFather](https://t.me/BotFather))
-- `ELEVENLABS_API_KEY` — Alternative TTS provider for podcasts
+**Optional:** `TELEGRAM_BOT_TOKEN` for phone delivery ([@BotFather](https://t.me/BotFather)) · `ELEVENLABS_API_KEY` for alternative TTS
 
-## CLI Commands
+## How It Works
+
+```
+RSS Feeds (50+ sources, 8 languages)
+    ↓
+POLL → DEDUP → INGEST → FILTER (2-pass LLM) → EXTRACT → ENTITY RESOLVE
+    ↓
+SYNTHESIZE → PERSIST THREADS → REFRESH PAGES → RENDER BRIEFING → AUDIO
+    ↓                                                           ↓
+Forward Look (actor engine,          Telegram Bot        Dashboard
+ optional Kalshi anchoring)          (delivery + Q&A     (FastAPI +
+                                      + breaking alerts)  Jinja2)
+    ↓
+SQLite Knowledge Graph (single file, WAL mode, 33 tables)
+```
+
+20 pipeline stages. Everything persists to a single SQLite file — no external databases, no cloud infrastructure beyond the LLM API. Back up the system by copying one folder.
+
+For the full technical breakdown: **[System Map →](https://tyan3001.github.io/NEXUS/pipeline.html)**
+
+## Demo Mode
+
+No API keys needed — explore the dashboard with sample data:
 
 ```bash
-python -m nexus run                     # Start all services (binds to localhost by default)
-python -m nexus run --port 9090         # Start on a different port (default: 8080)
-python -m nexus run --host 0.0.0.0      # Explicitly expose beyond localhost
-python -m nexus engine                  # Run pipeline once
-python -m nexus engine --topic <slug>   # Run pipeline for one topic
-python -m nexus engine --capture        # Run pipeline and save fixtures for backtesting
-python -m nexus serve                   # Dashboard only (also accepts --port/--host)
-python -m nexus setup                   # Interactive CLI setup wizard
-python -m nexus sources check           # Test RSS feed health
-python -m nexus sources list            # List all global sources
-python -m nexus sources discover <slug> # Auto-discover RSS feeds for a topic
-python -m nexus forecast generate             # Generate actor-based Forward Look forecasts
-python -m nexus forecast resolve              # Resolve Kalshi-linked forecasts against settled markets
-python -m nexus forecast kalshi-loop --engine actor  # Optional Kalshi-aligned actor pass
-python -m nexus audit-sources <slug>          # Score feed relevance for a topic
-python -m nexus enrich-entities               # Backfill Wikipedia data for entities
-python -m nexus purge-empty-threads           # Remove orphaned threads with no events
-python -m nexus demo seed                        # Seed demo DB from your collected data
-python -m nexus demo seed --from-scratch         # Seed demo DB with static sample data
-python -m nexus demo serve                       # Start dashboard in demo mode
-python -m nexus test                            # E2E smoke test (runs minimal pipeline)
-python -m nexus evaluate synthesis <path>       # Judge synthesis quality
-python -m nexus evaluate compare <path> <path>  # Compare two syntheses
+python -m nexus demo seed --from-scratch
+python -m nexus demo serve
 ```
+
+Demo mode is read-only: settings locked, all pages render with seeded data. Good for screenshots and walkthroughs.
 
 ## Configuration
 
 ### API Keys (`.env`)
 
-| Key | Required | Purpose |
-|-----|----------|---------|
-| `GEMINI_API_KEY` | For Gemini preset | LLM completions + TTS |
-| `OPENAI_API_KEY` | For OpenAI preset | LLM completions + TTS |
-| `ANTHROPIC_API_KEY` | For Anthropic preset | LLM completions |
-| `DEEPSEEK_API_KEY` | For DeepSeek preset | LLM completions (legacy `deepseek` env name is still accepted) |
-| `TELEGRAM_BOT_TOKEN` | No | Telegram delivery (get from [@BotFather](https://t.me/BotFather)) |
-| `ELEVENLABS_API_KEY` | No | Alternative TTS provider |
-| `OLLAMA_BASE_URL` | No | Ollama server URL (default: `http://localhost:11434`) |
-| `NEXUS_ADMIN_TOKEN` | No | Required for remote access to `/setup` and `/settings` |
+| Key | When Needed |
+|-----|-------------|
+| `GEMINI_API_KEY` | Gemini presets |
+| `OPENAI_API_KEY` | OpenAI presets |
+| `ANTHROPIC_API_KEY` | Anthropic preset |
+| `DEEPSEEK_API_KEY` | DeepSeek preset |
+| `TELEGRAM_BOT_TOKEN` | Telegram delivery |
+| `ELEVENLABS_API_KEY` | ElevenLabs TTS |
+| `NEXUS_ADMIN_TOKEN` | Remote access to `/setup` and `/settings` |
 
-At least one LLM API key is required (unless using the free/Ollama preset).
-
-> **Ollama + Docker:** The `free` preset expects Ollama at `localhost:11434`. In Docker, set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in `.env` to reach a host-side Ollama server, or add an Ollama service to `docker-compose.yml`.
-
-### Network Exposure
-
-`python -m nexus run` binds to `127.0.0.1` by default. If you intentionally expose Nexus with `--host 0.0.0.0`, the dashboard becomes network-reachable.
-
-- `/setup` and `/settings` are limited to same-machine access unless you set `NEXUS_ADMIN_TOKEN`
-- Docker Compose enables a narrow local bridge-gateway exception so `http://localhost:8080` still works from your host browser
-- Remote admin access works by opening `http://your-host:8080/settings?admin_token=YOUR_TOKEN` once; Nexus then stores a short-lived admin cookie
-- After first-run setup, the setup wizard is disabled unless you set `NEXUS_ALLOW_SETUP_RESET=1`
-- If you publish Nexus behind a reverse proxy or tunnel, add external auth there too
+At least one LLM key is required (unless using the `free`/Ollama preset).
 
 ### Topics (`data/config.yaml`)
 
-Define your intelligence topics with subtopics, source languages, filter thresholds, and perspective diversity requirements. See `data/config.example.yaml` for the full schema.
+Four topics ship with pre-built source registries: Iran-US Relations, AI/ML Research, Formula 1, and Global Energy Transition. For custom topics, Nexus auto-discovers RSS feeds during setup.
 
-Four topics ship with pre-built source registries: Iran-US Relations, AI/ML Research, Formula 1, and Global Energy Transition. For custom topics, run `python -m nexus sources discover <topic-slug>` to auto-discover RSS feeds.
+Each topic supports subtopics, source languages, filter thresholds (1-10), scope (narrow/medium/broad), and perspective diversity settings. See `data/config.example.yaml` for the full schema.
 
-### Demo Mode
+### Network & Security
 
-To run a read-only demo instance (e.g., for sharing via Cloudflare tunnel):
-
-```bash
-NEXUS_DEMO_MODE=1 python -m nexus run
-```
-
-In demo mode, all settings are locked and a chat widget appears for visitor Q&A (rate-limited to 5 questions/day per IP).
+- Binds to `127.0.0.1` by default — only reachable from your machine
+- Docker Compose adds a narrow gateway exception for `localhost:8080`
+- For remote access: set `NEXUS_ADMIN_TOKEN` and open `http://host:8080/settings?admin_token=YOUR_TOKEN` once
+- Setup wizard is disabled after first run unless `NEXUS_ALLOW_SETUP_RESET=1`
 
 ### Smoke Mode
 
-To cap pipeline ingestion for fast testing (e.g., verifying the setup flow end-to-end):
+Cap ingestion for fast testing:
 
 ```bash
-NEXUS_SMOKE_MODE=20 python -m nexus run   # Limits ingestion to 20 articles per topic
+NEXUS_SMOKE_MODE=20 python -m nexus run   # 20 articles per topic max
 ```
 
-## Architecture
+## CLI Reference
 
-```
-RSS Feeds (50+ sources, 8 languages)
-    |
-    v
-POLL -> DEDUP -> INGEST -> FILTER -> EXTRACT -> DEDUP
-                          (2-pass LLM)
-    -> ENTITY RESOLVE -> SYNTHESIZE -> PERSIST THREADS
-    -> REFRESH PAGES -> RENDER BRIEFING -> AUDIO PIPELINE
-    -> FORWARD LOOK (actor engine, optional Kalshi anchoring)
-    |                    |                    |
-    v                    v                    v
-SQLite Knowledge      Telegram Bot         Dashboard
-  Graph               (delivery +          (FastAPI +
-                       Q&A + alerts)        Jinja2)
+```bash
+python -m nexus run                        # Start all services (dashboard + scheduler + bot)
+python -m nexus engine                     # Run pipeline once
+python -m nexus serve                      # Dashboard only
+python -m nexus setup                      # Interactive CLI setup wizard
+python -m nexus sources discover <slug>    # Auto-discover RSS feeds for a topic
+python -m nexus sources check              # Test RSS feed health
+python -m nexus forecast generate          # Generate Forward Look forecasts
+python -m nexus demo seed [--from-scratch] # Seed demo database
+python -m nexus demo serve                 # Start demo server
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full module map and schema details. The public docs front door for this release is this README plus the static [landing page](docs/index.html) and [system map](docs/pipeline.html).
+Run `python -m nexus --help` for the full command list including benchmark, evaluation, and experiment tooling.
 
-## Experimental / Lab
+## Forward Look (Beta)
 
-Nexus still ships the benchmark, hindcast, and forecast-lab tooling in-repo because it is a curious project and the research work matters. It is not part of the default `v0.1` setup or onboarding path.
+The prediction surface generates calibrated probabilistic forecasts from your knowledge graph using an actor-based reasoning engine. For each question, Nexus identifies relevant actors, reasons about their likely behavior, and synthesizes a probability estimate. Raw outputs are compressed toward 0.5 to correct for LLM overconfidence (gamma=0.8).
 
-- Public story: dashboard, daily pipeline, threads, briefings, Forward Look, optional Kalshi comparison
-- Lab story: benchmark suites, hindcast, engine comparisons, calibration experiments
-- Benchmark methodology and results live in [docs/benchmark-results.md](docs/benchmark-results.md)
+When Kalshi prediction market data is available, Nexus generates independent estimates for the same questions and shows the comparison — useful for spotting where your knowledge graph sees something the market doesn't.
 
-### Pipeline Quality (N=3 topics, mean +/- std)
-
-| Metric | Nexus Pipeline | Naive Baseline | Improvement |
-|--------|---------------|----------------|-------------|
-| Overall | **6.0 +/- 1.2** | 2.3 +/- 0.4 | **+164%** |
-| Completeness | 7.7 +/- 1.2 | 2.0 +/- 0.0 | +284% |
-| Source Balance | 6.7 +/- 1.9 | 3.3 +/- 1.9 | +100% |
-| Convergence Accuracy | 5.3 +/- 2.5 | 2.0 +/- 0.0 | +166% |
-| Entity Coverage | 8.3 +/- 0.5 | 2.0 +/- 0.0 | +316% |
-
-### Key Findings
-
-- **Optimal filter threshold: 4.0** — scores 6.5 overall vs 4.9 at threshold 6.0 (threshold sweep, 5 values x 3 topics)
-- **High source diversity: +43% source balance** — default updated from "low" to "high" (diversity sweep, 3 levels x 3 topics)
-- **Best model config: Flash filter + DeepSeek Reasoner synthesis** — scores 5.5 vs 4.7 for all-Flash (model matrix, 7 combos x 3 topics)
-- **Text quality: 8.2-8.5/10** across all briefing styles (style comparison, 3 styles x 3 topics)
-- **Divergence detection: 2.0/10** across all variants — known structural limitation
+The bigger forecast lab (6 engines, hindcast framework, benchmark suites) ships in-repo but is not part of the default setup or onboarding. See [ARCHITECTURE.md](ARCHITECTURE.md) for details.
 
 ## Development
 
 ```bash
 pip install -e ".[all,dev]"
-pytest -m "not e2e and not integration"  # Run the default local/CI test suite
-pytest -m e2e                   # Run E2E smoke tests (requires API keys)
-python -m nexus experiment      # Run internal benchmark suites (A-H)
-python -m nexus experiment --suite A,G --export-fixtures data/fixtures/local  # Export for cloud
+pytest -m "not e2e and not integration"    # Default test suite (1,558 unit tests)
+pytest -m e2e                              # E2E tests (67 tests, requires API keys)
+python -m nexus experiment                 # Internal benchmark suites
 ```
 
-## Project Structure
-
-```
-src/nexus/
-  engine/         Pipeline: sources, ingestion, filtering, knowledge, synthesis, audio, projection
-    projection/   Forward Look and forecast tooling, Kalshi integration, benchmark/hindcast experiments
-  agent/          Telegram bot, Q&A, breaking news, delivery, web search
-  scheduler/      APScheduler job definitions
-  web/            FastAPI dashboard, setup wizard, settings, chat widget
-  llm/            Multi-provider async LLM client (Gemini, OpenAI, Anthropic, DeepSeek, Ollama)
-  config/         Pydantic config models, presets, config writer
-  testing/        E2E smoke test runner
-  utils/          Feed health monitoring
-  runner.py       Unified runner (all services on one event loop)
-data/
-  sources/        Per-topic RSS source registries (pre-built for 4 topics)
-  config.yaml     Your personal configuration (gitignored — created by setup wizard)
-tests/            1,520 tests mirroring src structure (unit + e2e)
-```
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full module map, schema details, and contributor reference.
 
 ## License
 

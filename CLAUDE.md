@@ -37,7 +37,7 @@ data/               # Runtime data (gitignored except source registries)
   sources/          # Per-topic source registries (committed)
   config.yaml       # User config (gitignored, see data/config.example.yaml)
   cli/              # Setup wizard, demo seeder
-tests/              # Mirrors src structure, 1,520 tests (unit + 31 E2E)
+tests/              # Mirrors src structure, 1,625 tests (1,558 unit + 67 E2E)
 ```
 
 ## Key Concepts
@@ -66,7 +66,7 @@ When code changes affect any of the following, update the corresponding docs:
 | Test count crosses a milestone | README.md, ARCHITECTURE.md, CLAUDE.md |
 | New Python module | ARCHITECTURE.md (Module Map), CLAUDE.md (Project Structure) |
 | Config model changes | ARCHITECTURE.md (Configuration section) |
-| New LLM model preset | ARCHITECTURE.md (Model Presets table), SYSTEM_SPEC.md (AI Provider table) |
+| New LLM model preset | ARCHITECTURE.md (Model Presets table) |
 
 Verification commands:
 ```bash

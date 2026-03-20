@@ -818,8 +818,8 @@ strong { color: var(--nx-text-heading); }
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke-linecap="round"/></svg>
                     </div>
-                    <h3>Forward Look</h3>
-                    <p>The public forecast surface is actor-led: topic claims, thread developments, and optional Kalshi comparisons when market data is available. The bigger forecast lab still exists, but it does not lead the release story.</p>
+                    <h3>Forward Look <span style="font-size:0.6rem;padding:0.15rem 0.4rem;border:1px solid rgba(255,255,255,0.1);border-radius:4px;vertical-align:middle;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.04em;">Beta</span></h3>
+                    <p>Actor-based forward-looking intelligence: topic claims, thread developments, and optional Kalshi comparisons when market data is available. Generates calibrated probabilistic forecasts from your knowledge graph.</p>
                 </div>
             </div>
         </section>
@@ -900,27 +900,30 @@ strong { color: var(--nx-text-heading); }
                 <div class="qs-step anim-child">
                     <div class="qs-num">1</div>
                     <div class="qs-body">
-                        <h3>Clone &amp; install</h3>
+                        <h3>Clone</h3>
                         <div class="qs-code"><span class="cmd">git clone https://github.com/Tyan3001/NEXUS.git</span>
-<span class="cmd">cd NEXUS &amp;&amp; pip install -e &quot;.[all]&quot;</span></div>
+<span class="cmd">cd NEXUS</span></div>
                     </div>
                 </div>
 
                 <div class="qs-step anim-child">
                     <div class="qs-num">2</div>
                     <div class="qs-body">
-                        <h3>Start Nexus</h3>
-                        <div class="qs-code"><span class="cmd">python -m nexus run</span></div>
-                        <p style="margin-top:10px"><span class="qs-badge">recommended</span> This starts the local dashboard and the first-run flow in one shot.</p>
+                        <h3>Start</h3>
+                        <div class="qs-code"><span class="cmt"># Docker (recommended)</span>
+<span class="cmd">docker compose up</span>
+
+<span class="cmt"># or without Docker</span>
+<span class="cmd">pip install -e &quot;.[all]&quot; &amp;&amp; python -m nexus run</span></div>
                     </div>
                 </div>
 
                 <div class="qs-step anim-child">
                     <div class="qs-num">3</div>
                     <div class="qs-body">
-                        <h3>Finish setup in the browser</h3>
+                        <h3>Setup in the browser</h3>
                         <div class="qs-code"><span class="cmd">open http://localhost:8080</span></div>
-                        <p style="margin-top:10px">Pick a model preset, choose topics, save your keys, and let the wizard kick off the first pipeline run. Forward Look shows up once Nexus has enough history to say something non-trivial.</p>
+                        <p style="margin-top:10px">Pick a provider, choose topics, and let the wizard handle the rest &mdash; source discovery, first pipeline run, backfill, and Forward Look generation all happen automatically.</p>
                     </div>
                 </div>
 

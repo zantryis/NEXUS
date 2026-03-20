@@ -4398,3 +4398,19 @@ a.entity-tag:hover {
 .feed-row-dead { opacity: 0.5; }
 .feed-row-degraded { opacity: 0.75; }
 .feed-url { font-family: var(--nx-font-mono); font-size: 0.78rem; }
+
+/* Beta badge */
+.beta-badge {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--nx-text-dim);
+    background: var(--nx-glass);
+    border: 1px solid var(--nx-border);
+    border-radius: 4px;
+    vertical-align: middle;
+    margin-left: 0.3rem;
+}
