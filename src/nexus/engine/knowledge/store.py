@@ -243,10 +243,11 @@ class KnowledgeStore:
         canonical_name: str,
         entity_type: str = "unknown",
         aliases: list[str] | None = None,
+        observation_date: date | None = None,
     ) -> int:
         """Insert or update an entity. Returns the entity ID."""
         aliases_json = json.dumps(aliases or [])
-        today = date.today().isoformat()
+        ref_date = (observation_date or date.today()).isoformat()
 
         await self.db.execute(
             "INSERT INTO entities (canonical_name, entity_type, aliases, first_seen, last_seen) "
@@ -254,8 +255,9 @@ class KnowledgeStore:
             "ON CONFLICT(canonical_name) DO UPDATE SET "
             "entity_type = CASE WHEN excluded.entity_type != 'unknown' THEN excluded.entity_type ELSE entities.entity_type END, "
             "aliases = excluded.aliases, "
-            "last_seen = excluded.last_seen",
-            (canonical_name, entity_type, aliases_json, today, today),
+            "first_seen = MIN(entities.first_seen, excluded.first_seen), "
+            "last_seen = MAX(entities.last_seen, excluded.last_seen)",
+            (canonical_name, entity_type, aliases_json, ref_date, ref_date),
         )
         await self.db.commit()
 
@@ -650,9 +652,10 @@ class KnowledgeStore:
         questions_updated = await self._rewrite_thread_id_json(
             "forecast_questions", "evidence_thread_ids_json", keep_id, absorb_id,
         )
-        # Mark absorbed thread as resolved
+        # Mark absorbed thread as resolved and record merge target
         await self.db.execute(
-            "UPDATE threads SET status = 'resolved' WHERE id = ?", (absorb_id,),
+            "UPDATE threads SET status = 'resolved', merged_into_id = ? WHERE id = ?",
+            (keep_id, absorb_id),
         )
         await self.db.commit()
         return {"items_updated": items_updated, "questions_updated": questions_updated}

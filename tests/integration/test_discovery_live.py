@@ -41,7 +41,7 @@ def llm():
     """Real LLM client with Gemini keys from .env."""
     if not _gemini_key:
         pytest.skip("GEMINI_API_KEY not set")
-    models = ModelsConfig(discovery="gemini-2.0-flash")
+    models = ModelsConfig(discovery="gemini-3-flash-preview")
     return LLMClient(models_config=models, api_key=_gemini_key)
 
 

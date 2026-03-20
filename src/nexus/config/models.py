@@ -31,6 +31,7 @@ class TopicConfig(BaseModel):
     pairwise_filtering: bool = False  # opt-in hybrid funnel with pairwise comparison
     max_events: Optional[int] = None  # override auto-calculated event cap
     projection_eligible: bool = True  # set False to skip future-projection pipeline
+    emoji: Optional[str] = None  # Unicode emoji for topic; LLM-assigned if missing
 
 
 class ModelsConfig(BaseModel):

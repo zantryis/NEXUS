@@ -13,6 +13,7 @@ Agentic flow with budget-aware refinement:
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from hashlib import sha256
 from pathlib import Path
@@ -377,6 +378,18 @@ async def _find_rss_feeds(query: str) -> list[str]:
     return list(set(feed_urls))
 
 
+def _slugify(name: str, max_len: int = 40) -> str:
+    """Sanitize a feed name into a clean slug ID."""
+    slug = re.sub(r"[^a-z0-9-]", "-", name.lower())
+    slug = re.sub(r"-{2,}", "-", slug)  # collapse multiple hyphens
+    slug = slug.strip("-")
+    if len(slug) > max_len:
+        truncated = slug[:max_len]
+        last_hyphen = truncated.rfind("-")
+        slug = truncated[:last_hyphen] if last_hyphen > 10 else truncated
+    return slug
+
+
 async def _validate_feed(url: str, timeout: float = 10.0) -> dict | None:
     """Check if a URL is a valid RSS/Atom feed with entries."""
     try:
@@ -396,10 +409,9 @@ async def _validate_feed(url: str, timeout: float = 10.0) -> dict | None:
         # Normalize language code
         language = language.split("-")[0].lower()
 
-        # Generate a stable ID from URL
+        # Generate a clean ID from feed title
         url_hash = sha256(url.encode()).hexdigest()[:8]
-        slug = title.lower().replace(" ", "-")[:20] if title else url_hash
-        feed_id = f"discovered-{slug}-{url_hash}"
+        feed_id = _slugify(title) if title else f"feed-{url_hash}"
 
         return {
             "id": feed_id,
@@ -469,13 +481,20 @@ async def classify_feed_metadata(
 
 
 def _deduplicate(feeds: list[dict]) -> list[dict]:
-    """Remove duplicate feeds by URL."""
-    seen: set[str] = set()
+    """Remove duplicate feeds by URL and resolve ID collisions."""
+    seen_urls: set[str] = set()
+    seen_ids: set[str] = set()
     unique: list[dict] = []
     for f in feeds:
-        if f["url"] not in seen:
-            seen.add(f["url"])
-            unique.append(f)
+        if f["url"] in seen_urls:
+            continue
+        seen_urls.add(f["url"])
+        # Resolve ID collisions by appending URL hash
+        if f["id"] in seen_ids:
+            url_hash = sha256(f["url"].encode()).hexdigest()[:6]
+            f["id"] = f"{f['id']}-{url_hash}"
+        seen_ids.add(f["id"])
+        unique.append(f)
     return unique
 
 

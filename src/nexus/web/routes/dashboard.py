@@ -113,7 +113,9 @@ async def _enrich_cross_topic_signals(store, signals) -> list[dict]:
     return bridges[:4]  # cap for sidebar space
 
 
-def _topic_emoji(slug: str) -> str:
+def _topic_emoji(slug: str, config_emoji: str | None = None) -> str:
+    if config_emoji:
+        return config_emoji
     for key, emoji in TOPIC_EMOJI.items():
         if key in slug.lower():
             return emoji
@@ -232,7 +234,7 @@ def _load_runtime_config(config_path: Path):
         return None
 
 
-async def _build_topics_data(store, today: date, max_threads: int = 3, max_events: int = 1):
+async def _build_topics_data(store, today: date, max_threads: int = 3, max_events: int = 1, emoji_map: dict[str, str] | None = None):
     """Build structured topic data for the web briefing."""
     from nexus.web.routes.predictions import (
         PUBLIC_TARGET_VARIABLES,
@@ -320,7 +322,7 @@ async def _build_topics_data(store, today: date, max_threads: int = 3, max_event
 
         topics_data.append({
             "slug": slug,
-            "emoji": _topic_emoji(slug),
+            "emoji": _topic_emoji(slug, (emoji_map or {}).get(slug)),
             "event_count": ts["event_count"],
             "thread_count": ts.get("thread_count", len(threads_raw)),
             "threads": topic_threads,
@@ -340,7 +342,14 @@ async def homepage(request: Request):
     data_dir = getattr(request.app.state, "data_dir", Path("data"))
 
     # Build structured briefing from DB
-    topics_data = await _build_topics_data(store, today)
+    config = getattr(request.app.state, "config", None)
+    emoji_map = {}
+    if config:
+        for t in config.topics:
+            if t.emoji:
+                slug = t.name.lower().replace(" ", "-").replace("/", "-")
+                emoji_map[slug] = t.emoji
+    topics_data = await _build_topics_data(store, today, emoji_map=emoji_map)
 
     # Check if classic briefing exists
     result = _find_briefing(data_dir, today)
@@ -391,9 +400,13 @@ async def homepage(request: Request):
     # Kalshi sidebar markets
     kalshi_sidebar = await store.get_interesting_kalshi_markets(limit=5, engine="actor")
 
-    # Pipeline run info
+    # Pipeline run info — merge DB state with app.state (auto-launch sets app.state
+    # before a DB record exists, so trust app.state when DB says "not running")
     last_run = await store.get_last_pipeline_run()
     pipeline_running = await store.is_pipeline_running()
+    app_pipeline_status = getattr(request.app.state, "pipeline_status", None)
+    if not pipeline_running and app_pipeline_status and not app_pipeline_status.get("done", True):
+        pipeline_running = True
     cooldown_active = False
     cooldown_remaining = ""
     if last_run and last_run["status"] == "completed" and last_run["completed_at"]:

@@ -8,6 +8,8 @@ from nexus.engine.sources.discovery import (
     _validate_feed,
     _evaluate_feed_relevance,
     _generate_refined_queries,
+    _slugify,
+    _deduplicate,
     discover_sources,
 )
 
@@ -62,6 +64,80 @@ async def test_validate_feed_invalid(mock_fp):
 
     result = await _validate_feed("https://bad.com/rss")
     assert result is None
+
+
+# ── Slugify and ID tests ──
+
+
+def test_slugify_clean_name():
+    assert _slugify("Rugby World") == "rugby-world"
+
+
+def test_slugify_strips_special_chars():
+    assert _slugify('"Road Cycling" - Google') == "road-cycling-google"
+
+
+def test_slugify_colons_and_dots():
+    assert _slugify("World Rugby: Latest News") == "world-rugby-latest-news"
+    assert _slugify("A.B.C News") == "a-b-c-news"
+
+
+def test_slugify_collapses_hyphens():
+    assert _slugify("foo---bar") == "foo-bar"
+
+
+def test_slugify_strips_edges():
+    assert _slugify("--hello--") == "hello"
+
+
+def test_slugify_truncates_at_word_boundary():
+    long_name = "international-rugby-union-championship-series-extra"
+    result = _slugify(long_name, max_len=30)
+    assert len(result) <= 30
+    assert not result.endswith("-")
+
+
+def test_slugify_empty_string():
+    assert _slugify("") == ""
+
+
+@patch("nexus.engine.sources.discovery.feedparser")
+async def test_validate_feed_clean_id(mock_fp):
+    """Feed ID is a clean slug of the feed title."""
+    mock_fp.parse.return_value = MagicMock(
+        bozo=False,
+        feed=MagicMock(title="Google News: International Rugby Union", language="en"),
+        entries=[MagicMock()],
+    )
+    result = await _validate_feed("https://news.google.com/rss")
+    assert result["id"] == "google-news-international-rugby-union"
+
+
+@patch("nexus.engine.sources.discovery.feedparser")
+async def test_validate_feed_empty_title_uses_hash(mock_fp):
+    """Feed with no title gets hash-based ID."""
+    mock_fp.parse.return_value = MagicMock(
+        bozo=False,
+        feed=MagicMock(title="", language="en"),
+        entries=[MagicMock()],
+    )
+    result = await _validate_feed("https://example.com/rss")
+    assert result["id"].startswith("feed-")
+    assert len(result["id"]) == 13  # "feed-" + 8 hex chars
+
+
+def test_deduplicate_resolves_id_collision():
+    """Two feeds with same title but different URLs get unique IDs."""
+    feeds = [
+        {"id": "rugby-world", "url": "https://a.com/rss", "name": "Rugby World"},
+        {"id": "rugby-world", "url": "https://b.com/rss", "name": "Rugby World"},
+    ]
+    result = _deduplicate(feeds)
+    assert len(result) == 2
+    ids = [f["id"] for f in result]
+    assert ids[0] != ids[1]
+    assert ids[0] == "rugby-world"
+    assert ids[1].startswith("rugby-world-")
 
 
 @patch("nexus.engine.sources.discovery.classify_feed_metadata", new_callable=AsyncMock)

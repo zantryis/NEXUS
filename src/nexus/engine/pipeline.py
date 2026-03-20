@@ -285,9 +285,10 @@ async def run_topic_pipeline(
         known = await store.get_all_entities(slug)
         resolutions = await resolve_entities(llm, all_raw, known)
 
+        latest_event_date = max(e.date for e in new_events)
         for r in resolutions:
             aliases = [r.raw] if r.raw != r.canonical else []
-            eid = await store.upsert_entity(r.canonical, r.entity_type, aliases)
+            eid = await store.upsert_entity(r.canonical, r.entity_type, aliases, observation_date=latest_event_date)
             resolve_map[r.raw] = (eid, r.canonical)
 
         timings["entity_resolution"] = time.monotonic() - t0
@@ -552,6 +553,19 @@ async def run_pipeline(
     previous_llm_store = getattr(llm, "_store", None)
     await llm.set_store(store)
 
+    # Assign emojis to topics that don't have one yet
+    try:
+        from nexus.config.emoji import assign_topic_emojis
+        emoji_map = await assign_topic_emojis(llm, config.topics)
+        if emoji_map:
+            for topic in config.topics:
+                if topic.name in emoji_map:
+                    topic.emoji = emoji_map[topic.name]
+            # Persist so emojis are only assigned once
+            _persist_emojis(data_dir, config)
+    except Exception:
+        logger.debug("Emoji assignment skipped", exc_info=True)
+
     bg_tasks: list[asyncio.Task] = []
     try:
         for topic_i, topic in enumerate(config.topics):
@@ -800,6 +814,28 @@ def _topic_slug(name: str) -> str:
     return name.lower().replace(" ", "-").replace("/", "-")
 
 
+def _persist_emojis(data_dir: Path, config: NexusConfig) -> None:
+    """Write newly assigned emojis back to config.yaml."""
+    config_path = data_dir / "config.yaml"
+    if not config_path.exists():
+        return
+    try:
+        import yaml
+        raw = yaml.safe_load(config_path.read_text()) or {}
+        changed = False
+        for topic_cfg in config.topics:
+            if not topic_cfg.emoji:
+                continue
+            for raw_topic in raw.get("topics", []):
+                if raw_topic.get("name") == topic_cfg.name and not raw_topic.get("emoji"):
+                    raw_topic["emoji"] = topic_cfg.emoji
+                    changed = True
+        if changed:
+            config_path.write_text(yaml.dump(raw, default_flow_style=False, sort_keys=False))
+    except Exception:
+        logger.debug("Failed to persist emojis to config.yaml", exc_info=True)
+
+
 async def run_backtest(
     config: NexusConfig, llm: LLMClient, data_dir: Path,
     label: str | None = None, fixture_dir: Path | None = None,
@@ -932,9 +968,10 @@ async def run_backtest(
                     all_raw = list({e_name for ev in new_events for e_name in ev.entities})
                     known = await bt_store.get_all_entities(slug)
                     resolutions = await resolve_entities(llm, all_raw, known)
+                    bt_latest_date = max(e.date for e in new_events)
                     for r in resolutions:
                         aliases = [r.raw] if r.raw != r.canonical else []
-                        eid = await bt_store.upsert_entity(r.canonical, r.entity_type, aliases)
+                        eid = await bt_store.upsert_entity(r.canonical, r.entity_type, aliases, observation_date=bt_latest_date)
                         resolve_map[r.raw] = (eid, r.canonical)
                     for event in new_events:
                         event.raw_entities = event.raw_entities or list(event.entities)

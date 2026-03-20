@@ -6,7 +6,7 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 18
+CURRENT_VERSION = 19
 
 DDL = """
 -- Schema version tracking
@@ -68,7 +68,8 @@ CREATE TABLE IF NOT EXISTS threads (
         CHECK(status IN ('emerging','active','stale','resolved')),
     significance INTEGER NOT NULL DEFAULT 5,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    merged_into_id INTEGER REFERENCES threads(id)
 );
 
 -- Thread-event many-to-many
@@ -703,6 +704,11 @@ ALTER TABLE pipeline_runs ADD COLUMN skipped_topics TEXT NOT NULL DEFAULT '[]';
 """
 
 
+MIGRATION_V19 = """
+-- Thread merge audit trail (v19)
+ALTER TABLE threads ADD COLUMN merged_into_id INTEGER REFERENCES threads(id);
+"""
+
 MIGRATION_V18 = """
 -- Forecast repricing: probability history tracking (v18)
 ALTER TABLE forecast_questions ADD COLUMN updated_at TEXT;
@@ -807,6 +813,10 @@ async def initialize_schema(db: aiosqlite.Connection) -> None:
     if current < 18 and not await _has_column(db, "forecast_questions", "updated_at"):
         await db.executescript(MIGRATION_V18)
         logger.info("Applied migration v18: forecast probability history")
+
+    if current < 19 and not await _has_column(db, "threads", "merged_into_id"):
+        await db.executescript(MIGRATION_V19)
+        logger.info("Applied migration v19: thread merge audit trail")
 
     if current < CURRENT_VERSION:
         await db.execute(

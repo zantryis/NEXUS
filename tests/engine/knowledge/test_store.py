@@ -193,6 +193,42 @@ async def test_upsert_entity_preserves_known_type(store):
     assert entity["entity_type"] == "org"  # Preserved
 
 
+async def test_upsert_entity_with_observation_date(store):
+    """Observation date sets first_seen and last_seen instead of today."""
+    await store.upsert_entity("IAEA", "org", observation_date=date(2026, 3, 14))
+    entity = await store.find_entity("IAEA")
+    assert entity["first_seen"] == "2026-03-14"
+    assert entity["last_seen"] == "2026-03-14"
+
+
+async def test_upsert_entity_earlier_date_updates_first_seen(store):
+    """Re-upserting with an earlier date pulls first_seen back."""
+    await store.upsert_entity("IAEA", "org", observation_date=date(2026, 3, 16))
+    await store.upsert_entity("IAEA", "org", observation_date=date(2026, 3, 12))
+    entity = await store.find_entity("IAEA")
+    assert entity["first_seen"] == "2026-03-12"
+    assert entity["last_seen"] == "2026-03-16"
+
+
+async def test_upsert_entity_later_date_updates_last_seen(store):
+    """Re-upserting with a later date pushes last_seen forward."""
+    await store.upsert_entity("IAEA", "org", observation_date=date(2026, 3, 14))
+    await store.upsert_entity("IAEA", "org", observation_date=date(2026, 3, 18))
+    entity = await store.find_entity("IAEA")
+    assert entity["first_seen"] == "2026-03-14"
+    assert entity["last_seen"] == "2026-03-18"
+
+
+async def test_upsert_entity_backfill_order_independence(store):
+    """Processing events out of order still produces correct date range."""
+    await store.upsert_entity("IAEA", "org", observation_date=date(2026, 3, 16))
+    await store.upsert_entity("IAEA", "org", observation_date=date(2026, 3, 12))
+    await store.upsert_entity("IAEA", "org", observation_date=date(2026, 3, 14))
+    entity = await store.find_entity("IAEA")
+    assert entity["first_seen"] == "2026-03-12"
+    assert entity["last_seen"] == "2026-03-16"
+
+
 async def test_find_entity_by_alias(store):
     await store.upsert_entity("IAEA", "org", ["International Atomic Energy Agency"])
     entity = await store.find_entity("International Atomic Energy Agency")
@@ -1369,6 +1405,56 @@ async def test_merge_threads_idempotent(store):
         "SELECT status FROM threads WHERE id = ?", (absorb_id,)
     )
     assert (await cursor.fetchone())[0] == "resolved"
+
+
+async def test_merge_sets_merged_into_id(store):
+    """Absorbed thread records which thread it was merged into."""
+    keep_id, absorb_id, _ = await _setup_two_threads_with_events(store)
+    await store.merge_threads(keep_id, absorb_id)
+
+    cursor = await store.db.execute(
+        "SELECT merged_into_id FROM threads WHERE id = ?", (absorb_id,)
+    )
+    row = await cursor.fetchone()
+    assert row[0] == keep_id
+
+
+async def test_keep_thread_has_null_merged_into(store):
+    """The keeper thread should have no merged_into_id."""
+    keep_id, absorb_id, _ = await _setup_two_threads_with_events(store)
+    await store.merge_threads(keep_id, absorb_id)
+
+    cursor = await store.db.execute(
+        "SELECT merged_into_id FROM threads WHERE id = ?", (keep_id,)
+    )
+    row = await cursor.fetchone()
+    assert row[0] is None
+
+
+async def test_chained_merge_preserves_trail(store):
+    """A→B merge then B→C merge: A still points to B, B points to C."""
+    e = _make_event(summary="Test event", d="2026-03-01")
+    ids = await store.add_events([e], "iran-us")
+
+    a_id = await store.upsert_thread("thread-a", "Thread A", 5, "active")
+    b_id = await store.upsert_thread("thread-b", "Thread B", 7, "active")
+    c_id = await store.upsert_thread("thread-c", "Thread C", 9, "active")
+    await store.link_thread_events(a_id, ids)
+    await store.link_thread_events(b_id, ids)
+    await store.link_thread_events(c_id, ids)
+
+    await store.merge_threads(b_id, a_id)  # A absorbed into B
+    await store.merge_threads(c_id, b_id)  # B absorbed into C
+
+    cursor = await store.db.execute(
+        "SELECT merged_into_id FROM threads WHERE id = ?", (a_id,)
+    )
+    assert (await cursor.fetchone())[0] == b_id
+
+    cursor = await store.db.execute(
+        "SELECT merged_into_id FROM threads WHERE id = ?", (b_id,)
+    )
+    assert (await cursor.fetchone())[0] == c_id
 
 
 async def test_merge_threads_duplicate_events_deduplicated(store):

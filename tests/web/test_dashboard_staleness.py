@@ -107,12 +107,21 @@ async def test_dashboard_shows_staleness_badge_stale(stale_app):
 
 
 async def test_dashboard_onboarding_shown_on_first_visit(empty_app):
-    """Dashboard with setup=complete shows onboarding hints."""
+    """Dashboard with setup=complete but no data shows pipeline empty state, not onboarding."""
     transport = ASGITransport(app=empty_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/?setup=complete")
     assert resp.status_code == 200
-    # The onboarding card should appear
+    # Onboarding card only shows when data exists; empty state shows welcome
+    assert "Welcome to Nexus" in resp.text
+
+
+async def test_dashboard_onboarding_shown_when_data_exists(seeded_app):
+    """Dashboard with setup=complete AND data shows onboarding card."""
+    transport = ASGITransport(app=seeded_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/?setup=complete")
+    assert resp.status_code == 200
     assert "onboarding-card" in resp.text
 
 

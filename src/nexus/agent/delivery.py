@@ -29,8 +29,10 @@ _TOPIC_EMOJIS = {
 }
 
 
-def _get_topic_emoji(header: str) -> str:
+def _get_topic_emoji(header: str, config_emoji: str | None = None) -> str:
     """Match a topic header to an emoji."""
+    if config_emoji:
+        return config_emoji
     header_lower = header.lower()
     for keyword, emoji in _TOPIC_EMOJIS.items():
         if keyword in header_lower:

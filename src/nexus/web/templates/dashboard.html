@@ -3,11 +3,9 @@
 {% block nav_briefing %}active{% endblock %}
 {% block content %}
 
-{% if setup_complete %}
-<div class="flash-banner flash-success">
-    Setup complete! Your first intelligence briefing is being prepared now.
-</div>
-{% endif %}
+{% set has_data = topics_data or has_classic_briefing %}
+{% if has_data %}
+{# ── Normal briefing view (has data) ── #}
 
 {% if show_onboarding %}
 <div class="onboarding-card" id="onboarding-card">
@@ -16,7 +14,7 @@
         <button class="btn-sm btn-dismiss" hx-post="/api/dismiss-onboarding" hx-swap="none"
                 onclick="document.getElementById('onboarding-card').remove()">&times;</button>
     </div>
-    <p>Your first briefing is on the way. Once it arrives, here's what to explore:</p>
+    <p>Your first briefing is ready. Here's what to explore:</p>
     <div class="onboarding-highlights">
         <a href="/threads/" class="onboarding-item">
             <strong>Narrative Threads</strong>
@@ -107,7 +105,6 @@
         {% endif %}
     </div>
 </div>
-
 {% if topics_data %}
 {# ── Stats Bar ── #}
 <div class="briefing-stats-bar">
@@ -350,12 +347,14 @@
 <div class="briefing-footer">
     {{ total_events }} events tracked &middot; {{ total_sources }} sources
 </div>
+{% endif %}{# end topics_data #}
 
 {% else %}
+{# ── Empty state (first run / no data yet) ── #}
 <div class="empty-state">
     <h3>Welcome to Nexus</h3>
     <div style="margin-top: 1rem;">
-        {% if pipeline_status and not pipeline_status.get("done", True) %}
+        {% if pipeline_running or (pipeline_status and not pipeline_status.get("done", True)) %}
         {# Pipeline is currently running — show live status via HTMX #}
         <p>Building your first intelligence briefing...</p>
         <div class="pipeline-status pipeline-running" id="pipeline-bar"
@@ -402,10 +401,8 @@
             Retry Pipeline
         </button>
         {% elif pipeline_status and pipeline_status.get("done") %}
-        {# Pipeline completed — show success #}
-        <div class="pipeline-status pipeline-done" id="pipeline-bar">
-            Pipeline complete! <a href="/" onclick="location.reload()">View your first briefing</a>
-        </div>
+        {# Pipeline completed — auto-reload to show briefing #}
+        <script>location.replace("/");</script>
         {% else %}
         {# No pipeline run yet — show button #}
         <p>No intelligence data yet. Run the pipeline to get your first briefing.</p>

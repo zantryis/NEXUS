@@ -133,10 +133,12 @@ async def test_dashboard_sets_security_headers(client):
     assert "frame-ancestors 'none'" in resp.headers["content-security-policy"]
 
 
-async def test_dashboard_setup_complete_banner(client):
+async def test_dashboard_setup_complete_empty_state(client):
+    """After setup with no data, show welcome/pipeline view (not flash banner)."""
     resp = await client.get("/?setup=complete")
     assert resp.status_code == 200
-    assert "Setup complete" in resp.text
+    # Empty state shows welcome — flash banner only appears when topics_data exists
+    assert "Welcome to Nexus" in resp.text
 
 
 async def test_dashboard_shows_topics(client):
