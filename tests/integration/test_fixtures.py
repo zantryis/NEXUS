@@ -1,6 +1,6 @@
 """Tests for fixture capture and replay."""
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from nexus.testing.fixtures import FixtureCapture, FixtureReplay, list_captured_days, partition_by_date
 from nexus.engine.sources.polling import ContentItem
 from nexus.engine.knowledge.events import Event
@@ -92,22 +92,26 @@ def test_replay_missing_files(tmp_path):
 
 def test_partition_by_date():
     """Items are grouped by published date, sorted chronologically."""
+    today = date.today()
+    day1 = today - timedelta(days=3)
+    day2 = today - timedelta(days=2)
+    day3 = today - timedelta(days=1)
     items = [
         ContentItem(title="A", url="https://a.com", source_id="s1",
-                    published=datetime(2026, 3, 5, 10, 0)),
+                    published=datetime(day1.year, day1.month, day1.day, 10, 0)),
         ContentItem(title="B", url="https://b.com", source_id="s2",
-                    published=datetime(2026, 3, 7, 14, 30)),
+                    published=datetime(day3.year, day3.month, day3.day, 14, 30)),
         ContentItem(title="C", url="https://c.com", source_id="s3",
-                    published=datetime(2026, 3, 5, 18, 0)),
+                    published=datetime(day1.year, day1.month, day1.day, 18, 0)),
         ContentItem(title="D", url="https://d.com", source_id="s4",
-                    published=datetime(2026, 3, 6, 9, 0)),
+                    published=datetime(day2.year, day2.month, day2.day, 9, 0)),
     ]
     groups = partition_by_date(items)
     days = list(groups.keys())
-    assert days == [date(2026, 3, 5), date(2026, 3, 6), date(2026, 3, 7)]
-    assert len(groups[date(2026, 3, 5)]) == 2
-    assert len(groups[date(2026, 3, 6)]) == 1
-    assert len(groups[date(2026, 3, 7)]) == 1
+    assert days == [day1, day2, day3]
+    assert len(groups[day1]) == 2
+    assert len(groups[day2]) == 1
+    assert len(groups[day3]) == 1
 
 
 def test_partition_by_date_no_published():
