@@ -314,10 +314,10 @@ Each pipeline stage has a `config_key` mapping to a model:
 | `cheap` | deepseek-chat | deepseek-chat | ~$0.01 |
 | `balanced` | gemini-3-flash-preview | gemini-3.1-pro-preview | ~$0.05 |
 | `quality` | gemini-3-flash-preview | gemini-3.1-pro-preview | ~$0.15 |
-| `openai-cheap` | gpt-4.1-nano | gpt-5-mini | ~$0.03 |
-| `openai-balanced` | gpt-4.1-mini | gpt-5.4 | ~$0.10 |
-| `openai-quality` | gpt-5-mini | gpt-5.4 | ~$0.25 |
-| `anthropic` | claude-haiku-4-5-20251001 | claude-sonnet-4-6 | ~$0.10 |
+| `openai-cheap` | gpt-5.4-mini | gpt-5.4-mini | ~$0.05 |
+| `openai-balanced` | gpt-5.4-mini | gpt-5.4 | ~$0.15 |
+| `openai-quality` | gpt-5.4-mini | gpt-5.4 | ~$0.30 |
+| `anthropic` | claude-sonnet-4-6 | claude-sonnet-4-6 | ~$0.15 |
 | `cloud-balanced` | litellm/claude-sonnet-4-6 | litellm/gpt-5.4 | ~$0.50 |
 | `cloud-quality` | litellm/claude-sonnet-4-6 | litellm/claude-opus-4-6 | ~$2.00 |
 

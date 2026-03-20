@@ -1,0 +1,28 @@
+# QA release testing — OpenAI + Gemini, 6 topics (4 custom + 2 preset), Telegram.
+# Usage: docker compose -f docker-compose.qa.yml up --build -d
+# Tests: .venv/bin/pytest tests/playwright/test_qa_release.py -m "e2e and integration" -v --timeout=1800
+
+x-common: &common
+  build: .
+  env_file: .env
+  environment: &common-env
+    NEXUS_SMOKE_MODE: "20"
+    NEXUS_TRUST_DOCKER_GATEWAY: "1"
+    NEXUS_DEMO_MODE: ""
+    TELEGRAM_BOT_TOKEN: ""
+  restart: "no"
+
+services:
+  qa-openai:
+    <<: *common
+    container_name: nexus-qa-openai
+    ports: ["8097:8080"]
+    volumes:
+      - ./data-qa-openai:/app/data
+
+  qa-gemini:
+    <<: *common
+    container_name: nexus-qa-gemini
+    ports: ["8098:8080"]
+    volumes:
+      - ./data-qa-gemini:/app/data

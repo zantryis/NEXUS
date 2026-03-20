@@ -20,6 +20,7 @@ htmlcov/
 tests/fixtures/*/
 data-test-*/
 data-e2e-*/
+data-qa-*/
 
 # Runtime data (user-specific)
 data/config.yaml

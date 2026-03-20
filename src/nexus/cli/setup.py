@@ -9,10 +9,10 @@ PRESET_INFO = [
     ("cheap", "Cheap (DeepSeek)", "~$0.01/day — needs DEEPSEEK_API_KEY", "DEEPSEEK_API_KEY"),
     ("balanced", "Balanced (Gemini)", "~$0.05/day — needs GEMINI_API_KEY", "GEMINI_API_KEY"),
     ("quality", "Quality (Gemini Pro)", "~$0.15/day — needs GEMINI_API_KEY", "GEMINI_API_KEY"),
-    ("openai-cheap", "OpenAI Cheap", "~$0.03/day — needs OPENAI_API_KEY", "OPENAI_API_KEY"),
-    ("openai-balanced", "OpenAI Balanced", "~$0.10/day — needs OPENAI_API_KEY", "OPENAI_API_KEY"),
-    ("openai-quality", "OpenAI Quality", "~$0.25/day — needs OPENAI_API_KEY", "OPENAI_API_KEY"),
-    ("anthropic", "Anthropic (Claude)", "~$0.10/day — needs ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"),
+    ("openai-cheap", "OpenAI Cheap", "~$0.05/day — needs OPENAI_API_KEY", "OPENAI_API_KEY"),
+    ("openai-balanced", "OpenAI Balanced", "~$0.15/day — needs OPENAI_API_KEY", "OPENAI_API_KEY"),
+    ("openai-quality", "OpenAI Quality", "~$0.30/day — needs OPENAI_API_KEY", "OPENAI_API_KEY"),
+    ("anthropic", "Anthropic (Claude)", "~$0.15/day — needs ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"),
 ]
 
 # Provider-centric info for the web setup wizard
@@ -30,11 +30,11 @@ PROVIDER_TIERS = {
     "ollama": [("free", "Free", "$0/day")],
     "gemini": [("balanced", "Balanced", "~$0.05/day"), ("quality", "Quality", "~$0.15/day")],
     "openai": [
-        ("openai-cheap", "Cheap", "~$0.03/day"),
-        ("openai-balanced", "Balanced", "~$0.10/day"),
-        ("openai-quality", "Quality", "~$0.25/day"),
+        ("openai-cheap", "Cheap", "~$0.05/day"),
+        ("openai-balanced", "Balanced", "~$0.15/day"),
+        ("openai-quality", "Quality", "~$0.30/day"),
     ],
-    "anthropic": [("anthropic", "Standard", "~$0.10/day")],
+    "anthropic": [("anthropic", "Standard", "~$0.15/day")],
     "deepseek": [("cheap", "Standard", "~$0.01/day")],
 }
 

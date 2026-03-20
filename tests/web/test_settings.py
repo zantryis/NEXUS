@@ -190,19 +190,19 @@ async def test_settings_custom_models(settings_app):
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/settings/preset", data={
             "preset": "custom",
-            "model_filtering": "gpt-5-mini",
+            "model_filtering": "gpt-5.4-mini",
             "model_synthesis": "claude-sonnet-4-6",
             "model_agent": "deepseek-chat",
             "model_dialogue_script": "gemini-3.1-pro-preview",
-            "model_knowledge_summary": "gpt-4.1-nano",
-            "model_breaking_news": "gpt-4.1-nano",
-            "model_discovery": "gpt-4.1-nano",
+            "model_knowledge_summary": "gpt-5.4-mini",
+            "model_breaking_news": "gpt-5.4-mini",
+            "model_discovery": "gpt-5.4-mini",
         }, follow_redirects=False)
         assert resp.status_code == 303
 
     raw = yaml.safe_load((data_dir / "config.yaml").read_text())
     assert raw["preset"] == "custom"
-    assert raw["models"]["filtering"] == "gpt-5-mini"
+    assert raw["models"]["filtering"] == "gpt-5.4-mini"
     assert raw["models"]["synthesis"] == "claude-sonnet-4-6"
     assert raw["models"]["agent"] == "deepseek-chat"
 
@@ -216,13 +216,13 @@ async def test_settings_preset_clears_custom_models(settings_app):
         # First set custom models
         await client.post("/settings/preset", data={
             "preset": "custom",
-            "model_filtering": "gpt-5-mini",
+            "model_filtering": "gpt-5.4-mini",
             "model_synthesis": "claude-sonnet-4-6",
             "model_agent": "deepseek-chat",
             "model_dialogue_script": "gemini-3.1-pro-preview",
-            "model_knowledge_summary": "gpt-4.1-nano",
-            "model_breaking_news": "gpt-4.1-nano",
-            "model_discovery": "gpt-4.1-nano",
+            "model_knowledge_summary": "gpt-5.4-mini",
+            "model_breaking_news": "gpt-5.4-mini",
+            "model_discovery": "gpt-5.4-mini",
         })
         # Then switch back to a named preset
         await client.post("/settings/preset", data={"preset": "balanced"})

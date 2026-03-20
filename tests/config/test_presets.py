@@ -59,9 +59,9 @@ def test_model_choices_has_all_providers():
 def test_model_choices_has_latest_models():
     """Latest models are included in choices."""
     assert "gpt-5.4" in MODEL_CHOICES["openai"]
-    assert "gpt-5-mini" in MODEL_CHOICES["openai"]
+    assert "gpt-5.4-mini" in MODEL_CHOICES["openai"]
     assert "claude-sonnet-4-6" in MODEL_CHOICES["anthropic"]
-    assert "claude-haiku-4-5-20251001" in MODEL_CHOICES["anthropic"]
+    assert "claude-opus-4-6" in MODEL_CHOICES["anthropic"]
     assert "litellm/gpt" in MODEL_CHOICES["litellm"]
     assert "litellm/opus" in MODEL_CHOICES["litellm"]
 

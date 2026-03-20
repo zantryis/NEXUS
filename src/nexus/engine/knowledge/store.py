@@ -3235,6 +3235,8 @@ class KnowledgeStore:
         input_tokens: int, output_tokens: int, cost_usd: float,
     ) -> int:
         """Insert a usage log record. Returns the row ID."""
+        if self.db is None:
+            return 0  # store already closed — silently drop the record
         cursor = await self.db.execute(
             "INSERT INTO usage_log (date, provider, model, config_key, "
             "input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?)",

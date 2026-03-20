@@ -9,14 +9,10 @@ MODEL_CHOICES = {
         "gemini-3.1-pro-preview",
     ],
     "openai": [
-        "gpt-4.1-nano",
-        "gpt-4.1-mini",
-        "gpt-4.1",
-        "gpt-5-mini",
+        "gpt-5.4-mini",
         "gpt-5.4",
     ],
     "anthropic": [
-        "claude-haiku-4-5-20251001",
         "claude-sonnet-4-6",
         "claude-opus-4-6",
     ],
@@ -80,27 +76,27 @@ PRESETS = {
     ),
     # ── OpenAI (cheap) ──
     "openai-cheap": ModelsConfig(
-        discovery="gpt-4.1-nano", filtering="gpt-4.1-nano", synthesis="gpt-5-mini",
-        dialogue_script="gpt-5-mini", knowledge_summary="gpt-4.1-nano",
-        breaking_news="gpt-4.1-nano", agent="gpt-5-mini",
+        discovery="gpt-5.4-mini", filtering="gpt-5.4-mini", synthesis="gpt-5.4-mini",
+        dialogue_script="gpt-5.4-mini", knowledge_summary="gpt-5.4-mini",
+        breaking_news="gpt-5.4-mini", agent="gpt-5.4-mini",
     ),
     # ── OpenAI (balanced) ──
     "openai-balanced": ModelsConfig(
-        discovery="gpt-4.1-mini", filtering="gpt-4.1-mini", synthesis="gpt-5.4",
-        dialogue_script="gpt-5.4", knowledge_summary="gpt-4.1-mini",
-        breaking_news="gpt-4.1-mini", agent="gpt-5-mini",
+        discovery="gpt-5.4-mini", filtering="gpt-5.4-mini", synthesis="gpt-5.4",
+        dialogue_script="gpt-5.4", knowledge_summary="gpt-5.4-mini",
+        breaking_news="gpt-5.4-mini", agent="gpt-5.4-mini",
     ),
     # ── OpenAI (quality) ──
     "openai-quality": ModelsConfig(
-        discovery="gpt-5-mini", filtering="gpt-5-mini", synthesis="gpt-5.4",
-        dialogue_script="gpt-5.4", knowledge_summary="gpt-5-mini",
-        breaking_news="gpt-5-mini", agent="gpt-5.4",
+        discovery="gpt-5.4-mini", filtering="gpt-5.4-mini", synthesis="gpt-5.4",
+        dialogue_script="gpt-5.4", knowledge_summary="gpt-5.4-mini",
+        breaking_news="gpt-5.4-mini", agent="gpt-5.4",
     ),
     # ── Anthropic ──
     "anthropic": ModelsConfig(
-        discovery="claude-haiku-4-5-20251001", filtering="claude-haiku-4-5-20251001",
+        discovery="claude-sonnet-4-6", filtering="claude-sonnet-4-6",
         synthesis="claude-sonnet-4-6", dialogue_script="claude-sonnet-4-6",
-        knowledge_summary="claude-haiku-4-5-20251001", breaking_news="claude-haiku-4-5-20251001",
+        knowledge_summary="claude-sonnet-4-6", breaking_news="claude-sonnet-4-6",
         agent="claude-sonnet-4-6",
     ),
     # ── Cloud (via LiteLLM proxy) ──
@@ -124,10 +120,10 @@ PRESET_INFO = {
     "cheap": {"label": "Cheap (DeepSeek)", "cost": "~$0.01/day", "provider": "deepseek"},
     "balanced": {"label": "Balanced (Gemini)", "cost": "~$0.05/day", "provider": "gemini"},
     "quality": {"label": "Quality (Gemini Pro)", "cost": "~$0.15/day", "provider": "gemini"},
-    "openai-cheap": {"label": "OpenAI Cheap", "cost": "~$0.03/day", "provider": "openai"},
-    "openai-balanced": {"label": "OpenAI Balanced", "cost": "~$0.10/day", "provider": "openai"},
-    "openai-quality": {"label": "OpenAI Quality", "cost": "~$0.25/day", "provider": "openai"},
-    "anthropic": {"label": "Anthropic (Claude)", "cost": "~$0.10/day", "provider": "anthropic"},
+    "openai-cheap": {"label": "OpenAI Cheap", "cost": "~$0.05/day", "provider": "openai"},
+    "openai-balanced": {"label": "OpenAI Balanced", "cost": "~$0.15/day", "provider": "openai"},
+    "openai-quality": {"label": "OpenAI Quality", "cost": "~$0.30/day", "provider": "openai"},
+    "anthropic": {"label": "Anthropic (Claude)", "cost": "~$0.15/day", "provider": "anthropic"},
     "cloud-balanced": {"label": "Cloud Balanced (LiteLLM)", "cost": "~$0.50/day", "provider": "litellm"},
     "cloud-quality": {"label": "Cloud Quality (LiteLLM)", "cost": "~$2.00/day", "provider": "litellm"},
 }
