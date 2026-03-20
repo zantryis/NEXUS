@@ -589,3 +589,74 @@ async def test_complete_with_telegram_token_writes_env(app_no_config, tmp_path):
     assert env_path.exists()
     env_text = env_path.read_text()
     assert "TELEGRAM_BOT_TOKEN=123:ABCDEF" in env_text
+
+
+# ── Auto-restart after setup pipeline ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_status_shows_restarting_enrichment(app_no_config):
+    """GET /setup/status should show restart message when enrichment is 'restarting'."""
+    import time
+    app_no_config.state.pipeline_status = {
+        "stage": "complete",
+        "done": True,
+        "started_at": time.time() - 120,
+        "enrichment": "restarting",
+    }
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/setup/status")
+        assert resp.status_code == 200
+        text = resp.text.lower()
+        assert "restart" in text
+        assert "schedul" in text  # "scheduled" or "scheduler"
+
+
+@pytest.mark.asyncio
+async def test_schedule_auto_restart_creates_task(app_no_config, tmp_path):
+    """_schedule_auto_restart should schedule an os.execve via background task."""
+    from unittest.mock import MagicMock
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(exist_ok=True)
+
+    # Create a mock request that delegates to the real app
+    mock_request = MagicMock()
+    mock_request.app = app_no_config
+
+    from nexus.web.routes.setup import _schedule_auto_restart
+
+    with patch("os.execve"):
+        _schedule_auto_restart(mock_request, data_dir)
+
+        # Verify a background task was created
+        tasks = getattr(app_no_config.state, "background_tasks", set())
+        assert len(tasks) == 1
+
+        # Let the task run (it has a 3s sleep, so we cancel it before execve)
+        task = next(iter(tasks))
+        task.cancel()
+        import asyncio
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+@pytest.mark.asyncio
+async def test_auto_restart_skipped_in_test_mode(app_no_config, tmp_path, monkeypatch):
+    """Auto-restart should not fire when NEXUS_SKIP_AUTO_PIPELINE is set."""
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("NEXUS_SKIP_AUTO_PIPELINE", "1")
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(exist_ok=True)
+
+    mock_request = MagicMock()
+    mock_request.app = app_no_config
+
+    with patch("nexus.web.routes.setup._schedule_auto_restart") as mock_restart:
+        from nexus.web.routes.setup import _auto_launch_pipeline
+        _auto_launch_pipeline(mock_request, data_dir)
+
+        # In test mode, pipeline is skipped entirely — no restart
+        mock_restart.assert_not_called()

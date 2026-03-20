@@ -324,19 +324,21 @@
             </div>
             {% endif %}
 
-            {# System health — only show if issues #}
-            {% if health and health.issues %}
+            {# System health — always show #}
+            {% if health %}
             <div class="sidebar-section health-section">
                 <div class="sidebar-title">System Health</div>
                 <div class="health-overview health-{{ health.status }}">
                     <span class="health-dot"></span>
                     <span class="health-label">{{ health.status | upper }}</span>
                 </div>
+                {% if health.issues %}
                 <div class="health-issues">
                     {% for issue in health.issues[:3] %}
                     <div class="health-issue health-issue-{{ issue.severity }}">{{ issue.message }}</div>
                     {% endfor %}
                 </div>
+                {% endif %}
             </div>
             {% endif %}
         </div>

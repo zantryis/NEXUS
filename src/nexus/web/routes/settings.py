@@ -124,6 +124,23 @@ async def settings_page(request: Request):
 
     validation_fields = request.query_params.get("fields", "").split(",") if error == "validation" else []
 
+    # Timezone list for select dropdown
+    from zoneinfo import available_timezones
+    timezones = sorted(available_timezones())
+
+    # Build set of available provider prefixes for preset gating
+    provider_env_keys = {
+        "gemini": "GEMINI_API_KEY", "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY", "deepseek": "DEEPSEEK_API_KEY",
+        "litellm": "LITELLM_BASE_URL",
+    }
+    available_providers = {
+        prefix for prefix, env_key in provider_env_keys.items()
+        if os.getenv(env_key)
+    }
+    # Ollama (free) is always available
+    available_providers.add("ollama")
+
     return templates.TemplateResponse(request, "settings.html", {
         "providers": _provider_status(),
         "config": config,
@@ -141,6 +158,8 @@ async def settings_page(request: Request):
         "tts_voices_json": json.dumps(TTS_VOICES),
         "pipeline_running": pipeline_running,
         "podcast_styles": PODCAST_STYLES,
+        "available_providers": available_providers,
+        "timezones": timezones,
     })
 
 
@@ -296,7 +315,7 @@ def _trigger_topic_discovery(request: Request, topic_name: str, data_dir: Path):
             from nexus.config.loader import load_config
             import yaml as _yaml
 
-            config = load_config(data_dir / "config.yaml")
+            load_config(data_dir / "config.yaml")  # validate config exists
             llm_obj = getattr(request.app.state, "llm", None)
             if not llm_obj:
                 logger.warning(f"No LLM available for source discovery of {topic_name}")

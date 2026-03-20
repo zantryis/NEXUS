@@ -237,12 +237,16 @@ async def setup_step3_get(request: Request):
             tier_label = f"{tier_lbl} ({tier_cost})"
             break
 
+    from zoneinfo import available_timezones
+    timezones = sorted(available_timezones())
+
     response = templates.TemplateResponse(request, "setup/step3_review.html", {
         "session": session,
         "provider_label": provider_label,
         "tier_label": tier_label,
         "step": 3,
         "total_steps": TOTAL_STEPS,
+        "timezones": timezones,
     })
     return _set_cookie(response, session_id)
 
@@ -299,6 +303,29 @@ async def setup_complete(request: Request):
     response = RedirectResponse(url="/?setup=complete", status_code=303)
     response.delete_cookie("nexus_setup")
     return response
+
+
+def _schedule_auto_restart(request: Request, data_dir: Path):
+    """Restart the process so the scheduler + Telegram bot initialize.
+
+    After setup, the server runs in dashboard-only mode (no scheduler).
+    Restarting re-enters via run_all() which starts the scheduler, bot, etc.
+    Uses the same os.execve pattern as the settings restart.
+    """
+    import os
+    import sys
+
+    env_path = runtime_env_path(data_dir)
+
+    async def _do_restart():
+        # Brief delay so the status endpoint can serve the "restarting" message
+        await asyncio.sleep(3)
+        logger.info("Auto-restarting to enable scheduler and background services")
+        from nexus.utils.runtime_env import build_runtime_env
+        argv = [sys.executable, "-m", "nexus"] + sys.argv[1:]
+        os.execve(sys.executable, argv, build_runtime_env(env_path))
+
+    _track_background_task(request, asyncio.create_task(_do_restart()))
 
 
 def _auto_launch_pipeline(request: Request, data_dir: Path):
@@ -445,22 +472,37 @@ def _auto_launch_pipeline(request: Request, data_dir: Path):
             except Exception as bf_err:
                 logger.warning(f"Post-setup backfill failed (non-blocking): {bf_err}")
 
-            # Phase 3: Initial predictions (if enabled)
+            # Phase 3: Predictions + projections (if enabled)
+            # After backfill we have ~7 days of events, so history_days passes.
+            # But only 1 thread snapshot exists (from Phase 1 synthesis).
+            # Use min_thread_snapshots_override=1 to generate real projections
+            # for the Forward Look dashboard on day 1.
             status["enrichment"] = "predictions"
             if config.future_projection.enabled:
                 try:
-                    from nexus.engine.projection.service import generate_kg_native_predictions
+                    from nexus.engine.projection.service import (
+                        generate_kg_native_predictions,
+                        generate_projections_from_store,
+                    )
                     from nexus.engine.knowledge.store import KnowledgeStore as _KS
                     from datetime import date as _d
                     pred_store = _KS(data_dir / "knowledge.db")
                     await pred_store.initialize()
                     try:
+                        # KG-native forecast questions (structural engine)
                         await generate_kg_native_predictions(
                             pred_store, llm, config=config,
                             run_date=_d.today(),
                             max_per_topic=config.future_projection.max_kg_questions_per_topic,
                         )
-                        logger.info("Post-setup predictions complete")
+                        # Real projections for Forward Look dashboard
+                        # Override snapshot requirement since we only have 1
+                        results = await generate_projections_from_store(
+                            pred_store, llm, config,
+                            min_thread_snapshots_override=1,
+                        )
+                        statuses = [r.get("status", "?") for r in results]
+                        logger.info(f"Post-setup projections: {statuses}")
                     finally:
                         await pred_store.close()
                 except Exception as pred_err:
@@ -483,7 +525,10 @@ def _auto_launch_pipeline(request: Request, data_dir: Path):
                     logger.warning(f"Post-setup breaking news failed: {bn_err}")
 
             status["stage"] = "complete"
-            status["enrichment"] = "complete"
+            status["enrichment"] = "restarting"
+
+            # Auto-restart to enable scheduler + Telegram bot
+            _schedule_auto_restart(request, data_dir)
         except Exception as e:
             logger.error(f"Background pipeline failed: {e}", exc_info=True)
             request.app.state.pipeline_status = {
@@ -625,6 +670,7 @@ async def setup_status(request: Request):
                 "backfill": "Loading 7 days of historical context...",
                 "predictions": "Generating initial predictions...",
                 "breaking_news": "Checking for breaking news...",
+                "restarting": "Restarting to enable scheduled jobs...",
             }
             enrichment_label = enrichment_labels.get(enrichment, "Enriching...")
             enrichment_html = (

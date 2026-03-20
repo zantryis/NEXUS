@@ -24,9 +24,14 @@
     <div class="review-card" style="margin-top:1rem;">
         <div class="review-section">
             <span class="review-label">Timezone</span>
-            <span class="review-value">
-                <input type="text" name="timezone" id="tz-input" class="form-input"
-                       placeholder="e.g. America/New_York" style="max-width:280px;">
+            <span class="review-value" style="flex:1;">
+                <input type="text" name="timezone" id="tz-input" list="tz-list" class="form-input"
+                       placeholder="Start typing..." style="max-width:320px;">
+                <datalist id="tz-list">
+                    {% for tz in timezones %}
+                    <option value="{{ tz }}">
+                    {% endfor %}
+                </datalist>
             </span>
         </div>
         <div class="review-section">
@@ -66,7 +71,7 @@
 </form>
 
 <script>
-// Auto-detect browser timezone
+// Auto-detect browser timezone and pre-fill
 try {
     var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (tz) document.getElementById('tz-input').value = tz;

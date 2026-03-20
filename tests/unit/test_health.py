@@ -51,7 +51,8 @@ async def test_build_health_snapshot_flags_missing_audio_and_topic_coverage(stor
         (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
     )
 
-    run_id = await store.start_pipeline_run(["AI"], trigger="manual")
+    # Pipeline stores slugs, not display names
+    run_id = await store.start_pipeline_run(["ai"], trigger="manual")
     await store.complete_pipeline_run(run_id, article_count=1, event_count=2, cost_usd=0.01)
 
     snapshot = await build_health_snapshot(config, tmp_path, store)
@@ -93,7 +94,8 @@ async def test_build_health_snapshot_ok_when_outputs_and_aliases_present(store, 
         (datetime.now(timezone.utc) + timedelta(minutes=45)).isoformat(),
     )
 
-    run_id = await store.start_pipeline_run(["AI"], trigger="manual")
+    # Pipeline stores slugs, not display names
+    run_id = await store.start_pipeline_run(["ai"], trigger="manual")
     await store.complete_pipeline_run(run_id, article_count=4, event_count=5, cost_usd=0.02)
 
     snapshot = await build_health_snapshot(config, tmp_path, store)
@@ -106,3 +108,60 @@ async def test_build_health_snapshot_ok_when_outputs_and_aliases_present(store, 
     lines = health_summary_lines(snapshot)
     assert any("System health" in line for line in lines)
     assert any("Last run: completed" in line for line in lines)
+
+
+@pytest.mark.asyncio
+async def test_health_matches_slugs_to_topic_names(store, tmp_path, monkeypatch):
+    """Pipeline stores slugs like 'iran-us-relations'; health should match to config names."""
+    config = NexusConfig(
+        user=UserConfig(name="Tester"),
+        topics=[
+            TopicConfig(name="Iran-US Relations"),
+            TopicConfig(name="AI/ML Research"),
+            TopicConfig(name="Formula 1"),
+        ],
+    )
+    monkeypatch.delenv("LITELLM_BASE_URL", raising=False)
+    monkeypatch.delenv("LITELLM_PROXY_URL", raising=False)
+
+    # Pipeline stores slugs
+    run_id = await store.start_pipeline_run(
+        ["iran-us-relations", "ai-ml-research", "formula-1"], trigger="auto_run",
+    )
+    await store.complete_pipeline_run(run_id)
+
+    snapshot = await build_health_snapshot(config, tmp_path, store)
+
+    assert snapshot["pipeline"]["missing_topics"] == []
+    assert snapshot["pipeline"]["configured_topic_count"] == 3
+    assert snapshot["pipeline"]["last_run_topic_count"] == 3
+    # No false "missing topics" warning
+    assert not any("missing" in i["message"] for i in snapshot["issues"])
+
+
+@pytest.mark.asyncio
+async def test_health_includes_prediction_freshness(store, tmp_path, monkeypatch):
+    """Health snapshot includes last prediction date from forecast_runs."""
+    from datetime import date
+
+    config = NexusConfig(
+        user=UserConfig(name="Tester"),
+        topics=[TopicConfig(name="AI")],
+    )
+    monkeypatch.delenv("LITELLM_BASE_URL", raising=False)
+    monkeypatch.delenv("LITELLM_PROXY_URL", raising=False)
+
+    # No predictions yet
+    snapshot = await build_health_snapshot(config, tmp_path, store)
+    assert snapshot["predictions"]["last_generated_for"] is None
+
+    # Add a forecast run
+    await store.db.execute(
+        "INSERT INTO forecast_runs (topic_slug, topic_name, engine, generated_for, summary, metadata_json) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        ("ai", "AI", "structural", date.today().isoformat(), "test", "{}"),
+    )
+    await store.db.commit()
+
+    snapshot = await build_health_snapshot(config, tmp_path, store)
+    assert snapshot["predictions"]["last_generated_for"] == date.today().isoformat()

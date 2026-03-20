@@ -14,7 +14,9 @@
 </div>
 {% elif saved and restart %}
 <div class="restart-banner" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
-    <span>Settings saved. Restart Nexus for changes to take effect.</span>
+    <div>
+        <strong>Settings saved.</strong> You changed the model preset or TTS backend &mdash; restart Nexus to load the new models.
+    </div>
     <form method="post" action="/settings/restart" style="margin:0;">
         {% if pipeline_running %}
         <span style="font-size:0.78rem;color:var(--nx-text-dim);margin-right:0.5rem;">Pipeline is running — you can wait for it to finish first.</span>
@@ -24,7 +26,7 @@
 </div>
 {% elif saved %}
 <div class="save-banner" style="background:var(--nx-success-bg, #003d00);border:1px solid var(--nx-success, #00e600);border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem;color:var(--nx-text);">
-    Settings saved.
+    Settings saved &mdash; changes take effect on the next pipeline run.
 </div>
 {% endif %}
 
@@ -70,14 +72,16 @@
 <!-- Model Preset -->
 <div class="settings-section open">
     <div class="settings-section-header" onclick="this.parentElement.classList.toggle('open')">
-        Models <span class="restart-required" title="Requires restart to take effect">restart required</span> <span class="toggle-icon">+</span>
+        Models <span class="restart-required" title="Changing preset requires a restart to load new models">restart to apply</span> <span class="toggle-icon">+</span>
     </div>
     <div class="settings-section-body">
         <div class="form-group">
             <label for="preset">Preset</label>
             <select name="preset" id="preset" class="form-select" onchange="toggleCustomModels(this.value)">
                 {% for pkey, pinfo in preset_info.items() %}
-                <option value="{{ pkey }}" {% if preset == pkey %}selected{% endif %}>{{ pinfo.label }} ({{ pinfo.cost }})</option>
+                {% set has_key = pinfo.provider in available_providers %}
+                <option value="{{ pkey }}" {% if preset == pkey %}selected{% endif %}
+                    {% if not has_key %}disabled style="color:var(--nx-text-dim,#666);"{% endif %}>{{ pinfo.label }} ({{ pinfo.cost }}){% if not has_key %} — no API key{% endif %}</option>
                 {% endfor %}
                 <option value="custom" {% if preset == 'custom' %}selected{% endif %}>Custom (pick your own models)</option>
             </select>
@@ -93,9 +97,11 @@
                 <select name="model_{{ stage_key }}" id="model_{{ stage_key }}" class="form-select">
                     {% set current_model = models_raw.get(stage_key, '') %}
                     {% for provider, models in model_choices.items() %}
-                    <optgroup label="{{ provider | capitalize }}">
+                    {% set has_key = provider in available_providers %}
+                    <optgroup label="{{ provider | capitalize }}{% if not has_key %} (no API key){% endif %}">
                         {% for model in models %}
-                        <option value="{{ model }}" {% if current_model == model %}selected{% endif %}>{{ model }}</option>
+                        <option value="{{ model }}" {% if current_model == model %}selected{% endif %}
+                            {% if not has_key %}disabled style="color:var(--nx-text-dim,#666);"{% endif %}>{{ model }}</option>
                         {% endfor %}
                     </optgroup>
                     {% endfor %}
@@ -120,9 +126,21 @@
         </div>
         <div class="form-group">
             <label for="timezone">Timezone {% if "timezone" in validation_fields %}<span class="field-error">Invalid timezone</span>{% endif %}</label>
-            <input type="text" name="timezone" id="timezone" class="form-input {{ 'input-error' if 'timezone' in validation_fields }}"
-                   value="{{ config.user.timezone if config else raw.get('user', {}).get('timezone', 'UTC') }}"
-                   placeholder="e.g. America/New_York">
+            {% set current_tz = config.user.timezone if config else raw.get('user', {}).get('timezone', 'UTC') %}
+            <div class="tz-autocomplete" style="position:relative;max-width:320px;">
+                <input type="text" name="timezone" id="timezone" autocomplete="off"
+                       class="form-input {{ 'input-error' if 'timezone' in validation_fields }}"
+                       value="{{ current_tz }}" placeholder="Start typing...">
+                <div class="tz-dropdown" id="tz-dropdown"
+                     style="display:none;position:absolute;z-index:10;max-height:200px;overflow-y:auto;
+                            background:var(--nx-card-bg,#1a1a2e);border:1px solid var(--nx-border,#333);
+                            border-radius:6px;width:100%;margin-top:2px;">
+                    {% for tz in timezones %}
+                    <div class="tz-opt" data-v="{{ tz }}"
+                         style="padding:0.35rem 0.75rem;cursor:pointer;font-size:0.85rem;">{{ tz }}</div>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
         <div class="form-group">
             <label for="output_language">Output Language</label>
@@ -182,7 +200,7 @@
             </label>
         </div>
         <div class="form-group">
-            <label for="tts_backend">TTS Backend <span class="restart-required" title="Requires restart to take effect">restart required</span></label>
+            <label for="tts_backend">TTS Backend <span class="restart-required" title="Changing TTS backend requires a restart">restart to apply</span></label>
             <select name="tts_backend" id="tts_backend" class="form-select" onchange="updateVoiceOptions()">
                 {% set current_backend = config.audio.tts_backend if config else raw.get('audio', {}).get('tts_backend', 'gemini') %}
                 <option value="gemini" {% if current_backend == 'gemini' %}selected{% endif %}>Gemini</option>
@@ -266,7 +284,7 @@
 <!-- Telegram -->
 <div class="settings-section">
     <div class="settings-section-header" onclick="this.parentElement.classList.toggle('open')">
-        Telegram <span class="toggle-icon">+</span>
+        Telegram <span class="restart-required" title="Enabling/disabling Telegram requires a restart to start/stop the bot">restart to apply</span> <span class="toggle-icon">+</span>
     </div>
     <div class="settings-section-body">
         <div class="form-group">
@@ -524,6 +542,34 @@ document.querySelectorAll('.settings-section').forEach(section => {
     }
 })();
 {% endif %}
+
+// Timezone autocomplete
+(function() {
+    var inp = document.getElementById('timezone');
+    var dd = document.getElementById('tz-dropdown');
+    if (!inp || !dd) return;
+    var opts = dd.querySelectorAll('.tz-opt');
+
+    function filter() {
+        var v = inp.value.toLowerCase();
+        opts.forEach(function(o) {
+            o.style.display = o.dataset.v.toLowerCase().indexOf(v) !== -1 ? '' : 'none';
+        });
+    }
+    inp.addEventListener('focus', function() { filter(); dd.style.display = 'block'; });
+    inp.addEventListener('input', filter);
+    opts.forEach(function(o) {
+        o.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            inp.value = o.dataset.v;
+            dd.style.display = 'none';
+        });
+        o.addEventListener('mouseenter', function() { o.style.background = 'var(--nx-hover-bg, #252545)'; });
+        o.addEventListener('mouseleave', function() { o.style.background = ''; });
+    });
+    inp.addEventListener('blur', function() { setTimeout(function() { dd.style.display = 'none'; }, 150); });
+})();
+
 </script>
 
 {% endblock %}

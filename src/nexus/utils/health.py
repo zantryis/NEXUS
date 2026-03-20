@@ -138,9 +138,13 @@ async def build_health_snapshot(
         pipeline_running = await store.is_pipeline_running()
         last_run = await store.get_last_pipeline_run()
 
-    configured_topics = [t.name for t in config.topics]
-    last_topics = last_run["topics"] if last_run else []
-    missing_topics = [topic for topic in configured_topics if topic not in last_topics]
+    # Pipeline stores slugs (e.g. "iran-us-relations"), config has names ("Iran-US Relations")
+    configured_slugs = {
+        t.name.lower().replace(" ", "-").replace("/", "-"): t.name
+        for t in config.topics
+    }
+    last_topic_set = set(last_run["topics"]) if last_run else set()
+    missing_names = [name for slug, name in configured_slugs.items() if slug not in last_topic_set]
 
     issues: list[dict[str, str]] = []
 
@@ -179,12 +183,13 @@ async def build_health_snapshot(
             "message": f"The last pipeline run failed: {last_run.get('error') or 'unknown error'}",
         })
 
-    if last_run and last_run["status"] == "completed" and missing_topics:
+    if last_run and last_run["status"] == "completed" and missing_names:
+        covered = len(configured_slugs) - len(missing_names)
         issues.append({
             "severity": "warning",
             "message": (
-                f"The last completed run covered {len(last_topics)}/{len(configured_topics)} topics; "
-                f"missing: {', '.join(missing_topics[:4])}"
+                f"The last completed run covered {covered}/{len(configured_slugs)} topics; "
+                f"missing: {', '.join(missing_names[:4])}"
             ),
         })
 
@@ -193,6 +198,18 @@ async def build_health_snapshot(
             "severity": "warning",
             "message": "Today's briefing exists, but today's podcast audio is missing.",
         })
+
+    # Prediction freshness
+    last_prediction_date = None
+    if store is not None:
+        try:
+            cursor = await store.db.execute(
+                "SELECT MAX(generated_for) FROM forecast_runs"
+            )
+            row = await cursor.fetchone()
+            last_prediction_date = row[0] if row else None
+        except Exception:
+            pass
 
     overall = "ok"
     if any(i["severity"] == "critical" for i in issues):
@@ -206,10 +223,13 @@ async def build_health_snapshot(
         "pipeline": {
             "running": pipeline_running,
             "last_run": last_run,
-            "configured_topics": configured_topics,
-            "configured_topic_count": len(configured_topics),
-            "last_run_topic_count": len(last_topics),
-            "missing_topics": missing_topics,
+            "configured_topics": list(configured_slugs.values()),
+            "configured_topic_count": len(configured_slugs),
+            "last_run_topic_count": len(last_topic_set),
+            "missing_topics": missing_names,
+        },
+        "predictions": {
+            "last_generated_for": last_prediction_date,
         },
         "deliverables": {
             "briefing_today": briefing_path.exists(),

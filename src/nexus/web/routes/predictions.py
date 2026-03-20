@@ -530,6 +530,13 @@ async def forward_look_page(request: Request):
         except Exception:
             logger.debug("Eligibility info computation failed", exc_info=True)
 
+    # Most recent prediction generation date
+    last_updated = None
+    if live_forecasts:
+        dates = [q.get("generated_for") for q in live_forecasts if q.get("generated_for")]
+        if dates:
+            last_updated = max(dates)
+
     return templates.TemplateResponse(request, "predictions.html", {
         "featured_markets": featured_markets,
         "all_active_events": all_active_events,
@@ -537,4 +544,5 @@ async def forward_look_page(request: Request):
         "resolved_by_source": resolved_by_source,
         "summary": summary,
         "eligibility_info": eligibility_info,
+        "last_updated": last_updated,
     })
