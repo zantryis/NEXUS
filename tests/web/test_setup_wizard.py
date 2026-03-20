@@ -214,7 +214,7 @@ async def test_setup_complete_uses_sensible_defaults(app_no_config, tmp_path):
     config_path = data_dir / "config.yaml"
     raw = yaml.safe_load(config_path.read_text())
     assert raw["user"]["timezone"] == "UTC"
-    assert raw["briefing"]["schedule"] == "04:00"
+    assert raw["briefing"]["schedule"] == "06:00"  # form default (was 04:00 before timezone UI)
     assert raw["briefing"]["style"] == "analytical"
     assert raw["telegram"]["enabled"] is True
 
@@ -439,3 +439,153 @@ async def test_setup_shows_3_steps(app_no_config):
         assert resp.status_code == 200
         # Count step dots — should be exactly 3
         assert resp.text.count("setup-step-dot") == 3
+
+
+# ── Fix 3: Timezone in setup ─────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_setup_step3_has_timezone_input(app_no_config):
+    """Step 3 review page should have a timezone input field."""
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post("/setup/step/1", data={"provider": "ollama", "preset": "free"})
+        await client.post("/setup/step/2", data={"topics": "ai-ml-research"})
+        resp = await client.get("/setup/step/3")
+        assert resp.status_code == 200
+        assert 'name="timezone"' in resp.text
+        assert 'name="schedule"' in resp.text
+
+
+@pytest.mark.asyncio
+async def test_setup_complete_saves_timezone(app_no_config, tmp_path):
+    """POST /setup/complete with timezone should write it to config.yaml."""
+    import yaml
+    data_dir = tmp_path / "data"
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post("/setup/step/1", data={"provider": "ollama", "preset": "free"})
+        await client.post("/setup/step/2", data={"topics": "ai-ml-research"})
+
+        with patch("nexus.web.routes.setup._auto_launch_pipeline"):
+            await client.post("/setup/complete", data={
+                "timezone": "America/Denver",
+                "schedule": "07:30",
+            }, follow_redirects=False)
+
+    raw = yaml.safe_load((data_dir / "config.yaml").read_text())
+    assert raw["user"]["timezone"] == "America/Denver"
+    assert raw["briefing"]["schedule"] == "07:30"
+
+
+@pytest.mark.asyncio
+async def test_setup_complete_invalid_timezone_defaults_utc(app_no_config, tmp_path):
+    """Invalid timezone should fall back to UTC."""
+    import yaml
+    data_dir = tmp_path / "data"
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post("/setup/step/1", data={"provider": "ollama", "preset": "free"})
+        await client.post("/setup/step/2", data={"topics": "ai-ml-research"})
+
+        with patch("nexus.web.routes.setup._auto_launch_pipeline"):
+            await client.post("/setup/complete", data={
+                "timezone": "Mars/Olympus",
+                "schedule": "06:00",
+            }, follow_redirects=False)
+
+    raw = yaml.safe_load((data_dir / "config.yaml").read_text())
+    assert raw["user"]["timezone"] == "UTC"
+
+
+# ── Fix 4: Backfill UX ──────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_status_shows_enrichment_during_backfill(app_no_config):
+    """GET /setup/status should show enrichment note when done but backfilling."""
+    import time
+    app_no_config.state.pipeline_status = {
+        "stage": "complete",
+        "done": True,
+        "started_at": time.time() - 60,
+        "enrichment": "backfill",
+    }
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/setup/status")
+        assert resp.status_code == 200
+        assert "historical" in resp.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_status_no_enrichment_after_complete(app_no_config):
+    """No enrichment indicator when all phases are complete."""
+    import time
+    app_no_config.state.pipeline_status = {
+        "stage": "complete",
+        "done": True,
+        "started_at": time.time() - 120,
+        "enrichment": "complete",
+    }
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/setup/status")
+        assert resp.status_code == 200
+        assert "enrichment" not in resp.text.lower() or "complete" in resp.text.lower()
+        assert "Pipeline complete" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_status_backward_compat_no_enrichment_field(app_no_config):
+    """Status without enrichment field works normally (backward compat)."""
+    import time
+    app_no_config.state.pipeline_status = {
+        "stage": "complete",
+        "done": True,
+        "started_at": time.time() - 30,
+    }
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/setup/status")
+        assert resp.status_code == 200
+        assert "Pipeline complete" in resp.text
+
+
+# ── Fix 5: Telegram in setup ────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_step3_has_telegram_section(app_no_config):
+    """Step 3 should have an optional Telegram section."""
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post("/setup/step/1", data={"provider": "ollama", "preset": "free"})
+        await client.post("/setup/step/2", data={"topics": "ai-ml-research"})
+        resp = await client.get("/setup/step/3")
+        assert resp.status_code == 200
+        assert "Telegram" in resp.text
+        assert "telegram_token" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_complete_with_telegram_token_writes_env(app_no_config, tmp_path):
+    """POST /setup/complete with telegram_token should write it to .env."""
+    transport = ASGITransport(app=app_no_config)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post("/setup/step/1", data={
+            "provider": "gemini", "preset": "balanced", "api_key": "test-key",
+        })
+        await client.post("/setup/step/2", data={"topics": "ai-ml-research"})
+
+        with patch("nexus.web.routes.setup._auto_launch_pipeline"):
+            await client.post("/setup/complete", data={
+                "timezone": "UTC",
+                "schedule": "06:00",
+                "telegram_token": "123:ABCDEF",
+            }, follow_redirects=False)
+
+    env_path = tmp_path / ".env"
+    assert env_path.exists()
+    env_text = env_path.read_text()
+    assert "TELEGRAM_BOT_TOKEN=123:ABCDEF" in env_text

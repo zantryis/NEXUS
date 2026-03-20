@@ -153,6 +153,13 @@ async def settings_save_all(request: Request):
     data_dir = _data_dir(request)
     raw = _get_config_dict(request)
 
+    # Snapshot restart-required field values before any updates
+    old_restart_vals = {
+        "preset": raw.get("preset"),
+        "tts_backend": raw.get("audio", {}).get("tts_backend"),
+        "telegram_enabled": raw.get("telegram", {}).get("enabled"),
+    }
+
     # ─ Validate before writing ─
     tz = (form.get("timezone") or "").strip()
     sched = (form.get("schedule") or "").strip()
@@ -240,7 +247,23 @@ async def settings_save_all(request: Request):
             raw.pop("models", None)
 
     write_config(data_dir, raw)
-    return RedirectResponse(url="/settings?saved=all", status_code=303)
+
+    # Hot-reload config into app.state so template reflects changes immediately
+    try:
+        from nexus.config.loader import load_config
+        request.app.state.config = load_config(data_dir / "config.yaml")
+    except Exception:
+        pass
+
+    # Check if any restart-required field actually changed
+    new_restart_vals = {
+        "preset": raw.get("preset"),
+        "tts_backend": raw.get("audio", {}).get("tts_backend"),
+        "telegram_enabled": raw.get("telegram", {}).get("enabled"),
+    }
+    needs_restart = old_restart_vals != new_restart_vals
+    redirect_url = "/settings?saved=all&restart=1" if needs_restart else "/settings?saved=all"
+    return RedirectResponse(url=redirect_url, status_code=303)
 
 
 # ── Restart ───────────────────────────────────────────────
@@ -263,6 +286,48 @@ async def settings_restart(request: Request):
 
 # ── Topics (stay as independent interactions) ─────────────
 
+def _trigger_topic_discovery(request: Request, topic_name: str, data_dir: Path):
+    """Kick off background source discovery for a new topic."""
+    import asyncio
+
+    async def _discover():
+        try:
+            from nexus.engine.sources.discovery import discover_sources
+            from nexus.config.loader import load_config
+            import yaml as _yaml
+
+            config = load_config(data_dir / "config.yaml")
+            llm_obj = getattr(request.app.state, "llm", None)
+            if not llm_obj:
+                logger.warning(f"No LLM available for source discovery of {topic_name}")
+                return
+
+            slug = topic_name.lower().replace(" ", "-").replace("/", "-")
+            registry_path = data_dir / "sources" / slug / "registry.yaml"
+            if registry_path.exists():
+                return
+
+            result = await discover_sources(
+                llm_obj, topic_name, data_dir=data_dir,
+            )
+            if result.feeds:
+                registry_path.parent.mkdir(parents=True, exist_ok=True)
+                registry_path.write_text(
+                    _yaml.dump({"sources": result.feeds}, default_flow_style=False)
+                )
+                logger.info(f"Discovered {len(result.feeds)} sources for new topic {topic_name}")
+        except Exception as e:
+            logger.warning(f"Background discovery for {topic_name} failed: {e}")
+
+    tasks = getattr(request.app.state, "background_tasks", None)
+    if tasks is None:
+        request.app.state.background_tasks = set()
+        tasks = request.app.state.background_tasks
+    task = asyncio.create_task(_discover())
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
+
+
 @router.post("/settings/topics")
 async def settings_update_topics(request: Request):
     """Add a new topic."""
@@ -275,6 +340,12 @@ async def settings_update_topics(request: Request):
         raw.setdefault("topics", [])
         raw["topics"].append({"name": new_topic, "priority": "medium"})
         write_config(data_dir, raw)
+
+        # Trigger source discovery for new topic if no registry exists
+        slug = new_topic.lower().replace(" ", "-").replace("/", "-")
+        registry_path = data_dir / "sources" / slug / "registry.yaml"
+        if not registry_path.exists():
+            _trigger_topic_discovery(request, new_topic, data_dir)
 
     return RedirectResponse(url="/settings?saved=topics", status_code=303)
 

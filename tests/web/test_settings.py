@@ -87,17 +87,28 @@ async def test_settings_post_user_updates_config(settings_app):
 
 
 @pytest.mark.asyncio
-async def test_settings_post_shows_restart_banner(settings_app):
+async def test_settings_post_shows_saved_banner(settings_app):
+    """Non-restart settings changes show 'saved' banner (not restart banner)."""
     app, _ = settings_app
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # First save something
+        # Save user settings (no restart required)
         await client.post("/settings/user", data={
             "name": "Test", "timezone": "UTC", "output_language": "en",
         })
-        # Then follow redirect to settings?saved=user
         resp = await client.get("/settings?saved=user")
+        assert "Settings saved" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_settings_restart_banner_only_when_needed(settings_app):
+    """Restart banner only appears when restart=1 is in query params."""
+    app, _ = settings_app
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/settings?saved=all&restart=1")
         assert "Restart" in resp.text
+        assert "Restart Now" in resp.text
 
 
 @pytest.mark.asyncio
@@ -293,3 +304,161 @@ async def test_remote_settings_token_unlocks_session(settings_app):
 
     raw = yaml.safe_load((data_dir / "config.yaml").read_text())
     assert raw["user"]["name"] == "RemoteAdmin"
+
+
+# ── Fix 1: Checkbox fallback to raw dict when config is None ──────
+
+
+@pytest.fixture
+async def settings_app_no_config_obj(tmp_path):
+    """App with config.yaml on disk but NO app.state.config (simulates pre-restart)."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    config_dict = {
+        "preset": "balanced",
+        "user": {"name": "User", "timezone": "UTC", "output_language": "en"},
+        "topics": [{"name": "Test", "priority": "high"}],
+        "briefing": {"schedule": "06:00", "style": "analytical"},
+        "audio": {"enabled": True, "tts_backend": "gemini"},
+        "telegram": {"enabled": True},
+    }
+    (data_dir / "config.yaml").write_text(yaml.dump(config_dict, sort_keys=False))
+
+    db_path = data_dir / "knowledge.db"
+    app = create_app(db_path, data_dir=data_dir)
+    store = KnowledgeStore(db_path)
+    await store.initialize()
+    app.state.store = store
+    app.state.audio_dir = data_dir / "artifacts" / "audio"
+    # Intentionally do NOT set app.state.config — simulates serve-only mode
+    return app, data_dir
+
+
+@pytest.mark.asyncio
+async def test_audio_checkbox_reflects_yaml_when_config_none(settings_app_no_config_obj):
+    """Audio checkbox should be checked when yaml says enabled, even without app.state.config."""
+    app, _ = settings_app_no_config_obj
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/settings")
+        assert resp.status_code == 200
+        assert 'name="audio_enabled"' in resp.text
+        idx = resp.text.index('name="audio_enabled"')
+        snippet = resp.text[max(0, idx - 100):idx + 100]
+        assert "checked" in snippet
+
+
+@pytest.mark.asyncio
+async def test_telegram_checkbox_reflects_yaml_when_config_none(settings_app_no_config_obj):
+    """Telegram checkbox should be checked when yaml says enabled, even without app.state.config."""
+    app, _ = settings_app_no_config_obj
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/settings")
+        assert resp.status_code == 200
+        idx = resp.text.index('name="telegram_enabled"')
+        snippet = resp.text[max(0, idx - 100):idx + 100]
+        assert "checked" in snippet
+
+
+# ── Fix 2: Smart restart banner ──────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_save_timezone_no_restart_banner(settings_app):
+    """Saving only non-restart fields should NOT show restart banner."""
+    app, _ = settings_app
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/settings/save", data={
+            "name": "Tristan",
+            "timezone": "Europe/London",
+            "output_language": "en",
+            "schedule": "07:00",
+            "style": "analytical",
+            "depth": "detailed",
+            "preset": "balanced",
+            "tts_backend": "gemini",
+            "voice_host_a": "Kore",
+            "voice_host_b": "Puck",
+            "daily_limit_usd": "1.00",
+            "warning_threshold_usd": "0.50",
+            "degradation_strategy": "skip_expensive",
+        }, follow_redirects=False)
+        assert resp.status_code == 303
+        location = resp.headers["location"]
+        assert "saved=" in location
+        assert "restart=1" not in location
+
+
+@pytest.mark.asyncio
+async def test_save_preset_change_shows_restart(settings_app):
+    """Changing preset should trigger restart banner."""
+    app, _ = settings_app
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/settings/save", data={
+            "name": "Tristan",
+            "timezone": "America/Denver",
+            "output_language": "en",
+            "schedule": "06:00",
+            "style": "analytical",
+            "depth": "detailed",
+            "preset": "quality",  # Changed from "balanced"
+            "tts_backend": "gemini",
+            "voice_host_a": "Kore",
+            "voice_host_b": "Puck",
+            "daily_limit_usd": "1.00",
+            "warning_threshold_usd": "0.50",
+            "degradation_strategy": "skip_expensive",
+        }, follow_redirects=False)
+        assert resp.status_code == 303
+        assert "restart=1" in resp.headers["location"]
+
+
+@pytest.mark.asyncio
+async def test_config_hot_reloaded_after_save(settings_app):
+    """After saving, app.state.config should reflect new values without restart."""
+    app, _ = settings_app
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post("/settings/save", data={
+            "name": "NewName",
+            "timezone": "Europe/London",
+            "output_language": "fr",
+            "schedule": "08:00",
+            "style": "conversational",
+            "depth": "brief",
+            "preset": "balanced",
+            "tts_backend": "gemini",
+            "voice_host_a": "Kore",
+            "voice_host_b": "Puck",
+            "daily_limit_usd": "2.00",
+            "warning_threshold_usd": "1.00",
+            "degradation_strategy": "stop_all",
+        }, follow_redirects=False)
+
+    assert app.state.config is not None
+    assert app.state.config.user.name == "NewName"
+    assert app.state.config.user.timezone == "Europe/London"
+
+
+# ── Fix 6: Topic source discovery trigger ────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_add_topic_triggers_discovery_if_no_registry(settings_app):
+    """Adding a topic should trigger source discovery when no registry exists."""
+    app, data_dir = settings_app
+    transport = ASGITransport(app=app)
+
+    with patch("nexus.web.routes.settings._trigger_topic_discovery") as mock_discover:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/settings/topics", data={
+                "new_topic": "Cryptocurrency",
+            }, follow_redirects=False)
+            assert resp.status_code == 303
+
+        mock_discover.assert_called_once()
+        call_args = mock_discover.call_args
+        assert "Cryptocurrency" in str(call_args)

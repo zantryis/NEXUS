@@ -6,12 +6,13 @@
     <h2>Settings</h2>
 </div>
 
+{% set restart = request.query_params.get('restart') %}
 {% if saved == "restarting" %}
 <div class="restart-banner">
     Nexus is restarting&hellip; this page will reload shortly.
     <script>setTimeout(() => location.replace('/settings'), 4000);</script>
 </div>
-{% elif saved %}
+{% elif saved and restart %}
 <div class="restart-banner" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
     <span>Settings saved. Restart Nexus for changes to take effect.</span>
     <form method="post" action="/settings/restart" style="margin:0;">
@@ -20,6 +21,10 @@
         {% endif %}
         <button type="submit" class="btn-primary" style="font-size:0.78rem;padding:0.35rem 0.75rem;">Restart Now</button>
     </form>
+</div>
+{% elif saved %}
+<div class="save-banner" style="background:var(--nx-success-bg, #003d00);border:1px solid var(--nx-success, #00e600);border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem;color:var(--nx-text);">
+    Settings saved.
 </div>
 {% endif %}
 
@@ -172,7 +177,7 @@
         <div class="form-group">
             <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
                 <input type="checkbox" name="audio_enabled"
-                       {% if config and config.audio.enabled %}checked{% endif %}>
+                       {% if (config and config.audio.enabled) or (not config and raw.get('audio', {}).get('enabled')) %}checked{% endif %}>
                 Enable podcast audio generation
             </label>
         </div>
@@ -267,7 +272,7 @@
         <div class="form-group">
             <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
                 <input type="checkbox" name="telegram_enabled"
-                       {% if config and config.telegram.enabled %}checked{% endif %}>
+                       {% if (config and config.telegram.enabled) or (not config and raw.get('telegram', {}).get('enabled')) %}checked{% endif %}>
                 Enable Telegram delivery
             </label>
         </div>

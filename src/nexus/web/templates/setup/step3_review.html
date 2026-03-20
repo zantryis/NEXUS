@@ -20,14 +20,58 @@
     </div>
 </div>
 
-<div class="setup-note">
-    <p>Preferences like timezone, briefing schedule, Telegram delivery, and audio can be configured in <strong>Settings</strong> after your first briefing is ready.</p>
-</div>
-
 <form method="post" action="/setup/complete">
+    <div class="review-card" style="margin-top:1rem;">
+        <div class="review-section">
+            <span class="review-label">Timezone</span>
+            <span class="review-value">
+                <input type="text" name="timezone" id="tz-input" class="form-input"
+                       placeholder="e.g. America/New_York" style="max-width:280px;">
+            </span>
+        </div>
+        <div class="review-section">
+            <span class="review-label">Briefing time</span>
+            <span class="review-value" style="display:flex;align-items:center;gap:0.5rem;">
+                <input type="time" name="schedule" value="06:00" class="form-input" style="max-width:140px;">
+                <span class="form-hint">When your daily briefing should be ready</span>
+            </span>
+        </div>
+    </div>
+
+    <details class="review-optional" style="margin-top:1rem;">
+        <summary style="cursor:pointer;font-weight:600;color:var(--nx-text-dim);font-size:0.9rem;">
+            Optional: Telegram Delivery
+        </summary>
+        <div style="padding:0.75rem 0;">
+            <div class="form-group" style="margin-bottom:0.5rem;">
+                <label style="font-size:0.85rem;">Bot Token <span class="form-hint">(from @BotFather on Telegram)</span></label>
+                <input type="password" name="telegram_token" id="telegram_token" class="form-input"
+                       placeholder="Paste token here" autocomplete="off">
+            </div>
+            <button type="button" class="btn-secondary" style="font-size:0.8rem;"
+                    hx-post="/setup/telegram/validate" hx-include="#telegram_token"
+                    hx-target="#tg-status" hx-swap="innerHTML">Test Connection</button>
+            <div id="tg-status" style="margin-top:0.5rem;"></div>
+        </div>
+    </details>
+
+    <div class="setup-note" style="margin-top:1rem;">
+        <p>Audio, model presets, and other preferences can be configured in <strong>Settings</strong> after your first briefing.</p>
+    </div>
+
     <div class="setup-actions">
         <a href="/setup/step/2" class="btn-secondary">Back</a>
         <button type="submit" class="btn-primary btn-lg">Start Nexus</button>
     </div>
 </form>
+
+<script>
+// Auto-detect browser timezone
+try {
+    var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz) document.getElementById('tz-input').value = tz;
+} catch(e) {
+    document.getElementById('tz-input').value = 'UTC';
+}
+</script>
 {% endblock %}

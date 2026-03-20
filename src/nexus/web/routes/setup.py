@@ -252,6 +252,7 @@ async def setup_complete(request: Request):
     """Write config + .env, auto-launch pipeline, redirect to dashboard."""
     session_id, session = _get_session(request)
     data_dir = _data_dir(request)
+    form = await request.form()
 
     preset = session.get("preset", "balanced")
     is_free = preset == "free"
@@ -265,10 +266,25 @@ async def setup_complete(request: Request):
     )
     config_dict["audio"] = audio_config
 
+    # Apply timezone and schedule from form (step 3 fields)
+    timezone = (form.get("timezone") or "UTC").strip()
+    schedule = (form.get("schedule") or "06:00").strip()
+
+    # Validate timezone, fall back to UTC if invalid
+    from zoneinfo import available_timezones
+    if timezone not in available_timezones():
+        timezone = "UTC"
+
+    config_dict["user"]["timezone"] = timezone
+    config_dict["briefing"]["schedule"] = schedule
+
     write_config(data_dir, config_dict)
 
-    # Write API keys to .env
-    keys = session.get("keys", {})
+    # Write API keys to .env (session keys + any form-provided tokens)
+    keys = dict(session.get("keys", {}))
+    telegram_token = (form.get("telegram_token") or "").strip()
+    if telegram_token:
+        keys["TELEGRAM_BOT_TOKEN"] = telegram_token
     if keys:
         env_path = write_env(runtime_env_path(data_dir).parent, keys)
         load_runtime_env(env_path)
@@ -378,6 +394,7 @@ def _auto_launch_pipeline(request: Request, data_dir: Path):
             )
             status["stage"] = "complete"
             status["done"] = True
+            status["enrichment"] = "starting"
             request.app.state.has_data = True
 
             # Deliver via Telegram if configured
@@ -416,6 +433,7 @@ def _auto_launch_pipeline(request: Request, data_dir: Path):
             # The user already has their quick briefing — now silently enrich
             # the knowledge store so subsequent runs have richer context.
             status["stage"] = "backfill"
+            status["enrichment"] = "backfill"
             try:
                 backfill_count = await run_backfill(
                     config, llm, data_dir,
@@ -428,6 +446,7 @@ def _auto_launch_pipeline(request: Request, data_dir: Path):
                 logger.warning(f"Post-setup backfill failed (non-blocking): {bf_err}")
 
             # Phase 3: Initial predictions (if enabled)
+            status["enrichment"] = "predictions"
             if config.future_projection.enabled:
                 try:
                     from nexus.engine.projection.service import generate_kg_native_predictions
@@ -448,6 +467,7 @@ def _auto_launch_pipeline(request: Request, data_dir: Path):
                     logger.warning(f"Post-setup predictions failed: {pred_err}")
 
             # Phase 4: Initial breaking news check
+            status["enrichment"] = "breaking_news"
             if config.breaking_news.enabled:
                 try:
                     from nexus.agent.breaking import check_breaking_news
@@ -463,6 +483,7 @@ def _auto_launch_pipeline(request: Request, data_dir: Path):
                     logger.warning(f"Post-setup breaking news failed: {bn_err}")
 
             status["stage"] = "complete"
+            status["enrichment"] = "complete"
         except Exception as e:
             logger.error(f"Background pipeline failed: {e}", exc_info=True)
             request.app.state.pipeline_status = {
@@ -594,10 +615,32 @@ async def setup_status(request: Request):
         elif "telegram_error" in status:
             from html import escape as _esc
             tg_note = f' <span style="color:var(--warning)">Telegram: {_esc(status["telegram_error"])}</span>'
+
+        # Show enrichment progress if post-briefing phases are still running
+        enrichment = status.get("enrichment")
+        enrichment_html = ""
+        if enrichment and enrichment not in ("complete", None):
+            enrichment_labels = {
+                "starting": "Setting up background enrichment...",
+                "backfill": "Loading 7 days of historical context...",
+                "predictions": "Generating initial predictions...",
+                "breaking_news": "Checking for breaking news...",
+            }
+            enrichment_label = enrichment_labels.get(enrichment, "Enriching...")
+            enrichment_html = (
+                f'<div style="margin-top:0.3rem;font-size:0.8rem;color:var(--nx-text-dim);">'
+                f'{enrichment_label} This happens in the background.</div>'
+            )
+            # Keep polling while enrichment is active
+            poll_attr = ' hx-get="/setup/status" hx-trigger="every 3s" hx-swap="outerHTML"'
+        else:
+            poll_attr = ""
+
         return HTMLResponse(
-            f'<div class="pipeline-status pipeline-done" id="pipeline-bar">'
+            f'<div class="pipeline-status pipeline-done" id="pipeline-bar"{poll_attr}>'
             f'Pipeline complete!{tg_note}{elapsed_html} '
             f'<a href="/" onclick="location.reload()">View your first briefing</a>'
+            f'{enrichment_html}'
             f'</div>'
         )
 
