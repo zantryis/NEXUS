@@ -16,7 +16,7 @@ The forecast benchmark, hindcast, and other research-heavy material are still in
 ## Development Setup
 
 ```bash
-git clone https://github.com/Tyan3001/NEXUS.git
+git clone https://github.com/zantryis/NEXUS.git
 cd NEXUS
 python -m venv .venv
 source .venv/bin/activate
