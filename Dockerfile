@@ -15,9 +15,6 @@ COPY data/config.example.yaml data/config.example.yaml
 
 RUN pip install --no-cache-dir ".[all]"
 
-RUN useradd -r -m nexus && chown -R nexus:nexus /app
-USER nexus
-
 EXPOSE 8080
 
 CMD ["python", "-m", "nexus", "run", "--host", "0.0.0.0"]
