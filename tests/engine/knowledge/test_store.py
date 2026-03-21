@@ -1517,12 +1517,14 @@ async def _insert_kalshi_question(
 
 async def test_get_interesting_kalshi_markets_ranked(store):
     """Markets should be ranked by interestingness (gap + proximity)."""
+    far_date = (date.today() + timedelta(days=90)).isoformat()
+    close_date = (date.today() + timedelta(days=7)).isoformat()
     # Moderate gap, far out
-    await _insert_kalshi_question(store, "Mod gap far", 0.60, 0.40, "2026-06-15", "MOD-FAR")
+    await _insert_kalshi_question(store, "Mod gap far", 0.60, 0.40, far_date, "MOD-FAR")
     # Small gap, close
-    await _insert_kalshi_question(store, "Small gap close", 0.55, 0.50, "2026-03-20", "SMALL-CLOSE")
+    await _insert_kalshi_question(store, "Small gap close", 0.55, 0.50, close_date, "SMALL-CLOSE")
     # High gap, close — should rank highest
-    await _insert_kalshi_question(store, "High gap close", 0.80, 0.30, "2026-03-20", "HIGH-CLOSE")
+    await _insert_kalshi_question(store, "High gap close", 0.80, 0.30, close_date, "HIGH-CLOSE")
 
     results = await store.get_interesting_kalshi_markets(limit=5)
 
