@@ -53,7 +53,7 @@ async def fetch_wikipedia_info(name: str, size: int = 100) -> dict:
     try:
         async with httpx.AsyncClient(
             timeout=10,
-            headers={"User-Agent": "nexus-claude/1.0 (news intelligence tool)"},
+            headers={"User-Agent": "nexus/1.0 (news intelligence tool)"},
         ) as client:
             resp = await client.get(WIKIPEDIA_API, params=params)
             resp.raise_for_status()

@@ -169,7 +169,7 @@ def test_telegram_token():
 
 async def main():
     print("\n" + "=" * 60)
-    print("  NEXUS-CLAUDE SMOKE TEST")
+    print("  NEXUS SMOKE TEST")
     print("=" * 60)
 
     # Load env

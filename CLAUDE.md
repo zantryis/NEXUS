@@ -1,4 +1,4 @@
-# nexus-claude
+# nexus
 
 Agentic news intelligence compiler. Self-hosted, model-agnostic, always-on.
 
