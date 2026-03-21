@@ -4,8 +4,12 @@
 
 <p align="center">
   <strong>Your personal intelligence desk.</strong><br>
-  Monitors the news, builds the knowledge graph, writes the briefing, records the podcast. Every morning, before you wake up.<br><br>
-  <a href="https://zantryis.github.io/NEXUS/">Docs</a> · <a href="https://zantryis.github.io/NEXUS/pipeline.html">System Map</a> · <a href="#quick-start">Quick Start</a>
+  Monitors the news. Builds the knowledge graph. Writes the briefing. Records the podcast.<br>
+  Every morning, before you wake up.
+</p>
+
+<p align="center">
+  <a href="https://github.com/zantryis/NEXUS">GitHub</a> · <a href="https://zantryis.github.io/NEXUS/">Docs</a> · <a href="https://zantryis.github.io/NEXUS/demo-page.html">Live Demo</a> · <a href="https://zantryis.github.io/NEXUS/pipeline.html">System Map</a> · <a href="#quick-start">Quick Start</a>
 </p>
 
 <p align="center">
