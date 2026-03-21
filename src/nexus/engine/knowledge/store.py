@@ -50,6 +50,7 @@ class KnowledgeStore:
         self._db.row_factory = aiosqlite.Row
         if not self._read_only:
             await self._db.execute("PRAGMA journal_mode=WAL")
+        await self._db.execute("PRAGMA busy_timeout=5000")
         await self._db.execute("PRAGMA foreign_keys=ON")
         if not self._read_only:
             await initialize_schema(self._db)

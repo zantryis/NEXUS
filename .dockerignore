@@ -16,3 +16,9 @@ state.md
 CLAUDE.md
 .claude/
 .vscode/
+.secrets/
+demo-assets/
+ARCHITECTURE.md
+CONTRIBUTING.md
+design.md
+docker-compose*.yml

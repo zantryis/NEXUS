@@ -99,7 +99,7 @@ def _is_demo_enabled(app) -> bool:
 class AdminProtectionMiddleware:
     """Protect writable admin routes from non-local access."""
 
-    PROTECTED_PREFIXES = ("/settings", "/setup")
+    PROTECTED_PREFIXES = ("/settings", "/setup", "/api/pipeline/run")
     COOKIE_NAME = "nexus_admin"
 
     def __init__(self, app: ASGIApp, data_dir: Path) -> None:
@@ -178,6 +178,25 @@ class AdminProtectionMiddleware:
                 return
 
         if _is_local_request(request):
+            # CSRF: for state-changing requests, reject cross-origin browser POSTs.
+            # Browsers always send Origin on cross-origin form submissions.
+            # If Origin is present but not localhost, it's a CSRF attempt.
+            # If neither Origin nor Referer is present, it's a non-browser client (OK).
+            if request.method in {"POST", "PUT", "DELETE", "PATCH"}:
+                origin = request.headers.get("origin", "")
+                referer = request.headers.get("referer", "")
+                if origin or referer:
+                    _LOCAL = ("http://localhost", "http://127.0.0.1",
+                              "https://localhost", "https://127.0.0.1")
+                    origin_ok = any(origin.startswith(o) for o in _LOCAL) if origin else True
+                    referer_ok = any(referer.startswith(o) for o in _LOCAL) if referer else True
+                    if not (origin_ok or referer_ok):
+                        response = JSONResponse(
+                            {"error": "CSRF check failed: request must originate from localhost"},
+                            status_code=403,
+                        )
+                        await response(scope, receive, send)
+                        return
             await self.app(scope, receive, send)
             return
 

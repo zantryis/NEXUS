@@ -32,20 +32,20 @@ src/nexus/
   web/              # FastAPI dashboard + podcast RSS
   llm/              # Multi-provider async LLM client
   testing/          # Fixture capture/replay for backtesting
+  cli/              # Setup wizard, demo seeder
   runner.py         # Unified runner (dashboard + scheduler + Telegram bot)
 data/               # Runtime data (gitignored except source registries)
   sources/          # Per-topic source registries (committed)
   config.yaml       # User config (gitignored, see data/config.example.yaml)
-  cli/              # Setup wizard, demo seeder
-tests/              # Mirrors src structure, 1,625 tests (1,558 unit + 67 E2E)
+tests/              # Mirrors src structure, 1,647 tests (1,548 unit + 99 E2E)
 ```
 
 ## Key Concepts
 - TopicSynthesis (X): intermediate knowledge object with NarrativeThread, convergence/divergence
 - Artifacts render FROM X (briefings, audio scripts, etc.)
-- CLI: `python -m nexus run` | `engine` | `serve` | `forecast` | `projection` | `benchmark`
+- CLI: `python -m nexus run` | `engine` | `serve` | `setup` | `forecast` | `projection` | `benchmark`
        | `sources` | `evaluate` | `experiment` | `test` | `audit-sources` | `enrich-entities`
-       | `demo seed [--from-scratch]` | `demo serve`
+       | `purge-empty-threads` | `demo seed [--from-scratch]` | `demo serve`
 - Experiment CLI: `python -m nexus experiment --suite A,G --export-fixtures PATH --env cloud`
 - Prediction pipeline: 6 engines (actor/structural/graphrag/debate/perspective/naked),
   calibrated with gamma=0.8, optional Kalshi market benchmarking

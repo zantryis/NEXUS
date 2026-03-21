@@ -165,8 +165,8 @@ The bigger forecast lab (6 engines, hindcast framework, benchmark suites) ships 
 
 ```bash
 pip install -e ".[all,dev]"
-pytest -m "not e2e and not integration"    # Default test suite (1,558 unit tests)
-pytest -m e2e                              # E2E tests (67 tests, requires API keys)
+pytest -m "not e2e and not integration"    # Default test suite (1,548 unit tests)
+pytest -m e2e                              # E2E tests (99 tests, requires API keys)
 python -m nexus experiment                 # Internal benchmark suites
 ```
 

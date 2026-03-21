@@ -5,7 +5,7 @@
 # Available: free | cheap | balanced | quality | openai-cheap | openai-balanced | openai-quality | anthropic | cloud-balanced | cloud-quality | custom
 # "free" uses Ollama (local, no API key), "cheap" uses DeepSeek (~$0.01/day),
 # "balanced" uses Gemini Flash+Pro (~$0.05/day), "quality" uses Gemini Pro (~$0.15/day)
-# "openai-cheap" uses GPT-4.1 Nano/Mini (~$0.03/day), "anthropic" uses Claude Haiku/Sonnet (~$0.10/day)
+# "openai-cheap" uses GPT-5.4 Mini (~$0.05/day), "anthropic" uses Claude Sonnet (~$0.15/day)
 # "cloud-*" uses a LiteLLM proxy, and "custom" uses the per-stage model assignments below
 preset: balanced
 

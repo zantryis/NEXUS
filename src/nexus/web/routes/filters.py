@@ -48,7 +48,10 @@ async def filter_log(request: Request, topic_slug: str, run_date: str):
     store = get_store(request)
     templates = get_templates(request)
 
-    d = date.fromisoformat(run_date)
+    try:
+        d = date.fromisoformat(run_date)
+    except ValueError:
+        return templates.TemplateResponse(request, "404.html", {"message": "Invalid date format"}, status_code=404)
     log = await store.get_filter_log(topic_slug, d)
     stats = await store.get_filter_stats(topic_slug, d)
 

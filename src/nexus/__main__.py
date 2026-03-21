@@ -1933,8 +1933,7 @@ def main():
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
 
-    if len(sys.argv) < 2:
-        print("Usage: python -m nexus <command>\n\n"
+    _USAGE = ("Usage: python -m nexus <command>\n\n"
               "Commands:\n"
               "  setup      Interactive setup wizard (start here)\n"
               "  run        Start all services (dashboard + scheduler + Telegram)\n"
@@ -1942,6 +1941,8 @@ def main():
               "  serve      Start dashboard only\n"
               "  sources    Manage feeds (check | list | build | discover)\n"
               "  evaluate   Judge synthesis quality\n"
+              "  benchmark  Run Kalshi benchmark suite\n"
+              "  experiment Run experiment suites (--suite A,G --env cloud)\n"
               "  projection Projection generate/backfill/evaluation/compare utilities\n"
               "  forecast   Forward Look generation/resolution with optional Kalshi tools\n"
               "  test       Run E2E smoke test with real APIs\n"
@@ -1949,9 +1950,16 @@ def main():
               "  enrich-entities  Backfill Wikipedia thumbnails + URLs for entities\n"
               "  purge-empty-threads  Remove 0-event threads (--execute to confirm)\n"
               "  demo       Demo seed/serve (seed [--from-scratch] | serve [--port N])\n")
+
+    if len(sys.argv) < 2:
+        print(_USAGE)
         sys.exit(1)
 
     command = sys.argv[1]
+
+    if command in ("--help", "-h", "help"):
+        print(_USAGE)
+        sys.exit(0)
 
     if command == "engine":
         run_engine()

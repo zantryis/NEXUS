@@ -7,7 +7,7 @@ An agentic news intelligence compiler that polls 52+ RSS feeds across 8 language
 | Metric | Value |
 |--------|-------|
 | Source files | 133 Python modules |
-| Tests passing | 1,625 (1,558 unit + 67 E2E) |
+| Tests passing | 1,647 (1,548 unit + 99 E2E) |
 | Source feeds | 52 global + per-topic registries, 8 languages |
 | LLM providers | Gemini, OpenAI, Anthropic, DeepSeek, Ollama |
 | TTS backends | Gemini native, OpenAI, ElevenLabs |
@@ -716,7 +716,7 @@ Source auto-discovery: `python -m nexus sources discover <slug>` uses LLM to fin
 
 **App factory:** `src/nexus/web/app.py:23` — FastAPI + Jinja2 + HTMX, Pico CSS dark theme
 
-### Routes (21 route modules)
+### Routes (19 route modules)
 
 | Route | File | Purpose |
 |-------|------|---------|
@@ -744,7 +744,7 @@ Source auto-discovery: `python -m nexus sources discover <slug>` uses LLM to fin
 | `GET /predictions` | predictions.py | Prediction dashboard with engine outputs and calibration |
 | `GET /benchmark` | benchmark.py | Kalshi benchmark results and scoring |
 | `GET /changes/` | changes.py | Recent pipeline changes and diffs |
-| `POST /chat` | chat.py | Web chat Q&A widget (rate-limited) |
+| `POST /api/chat` | chat.py | Web chat Q&A widget (rate-limited) |
 | `GET /oauth/...` | oauth.py | OpenAI OAuth flow for token management |
 
 ---
@@ -888,7 +888,7 @@ src/nexus/
 │   ├── clustering.py        Event clustering for explore view
 │   ├── filters.py           Jinja2 template filters
 │   ├── thumbnails.py        Favicon/thumbnail helpers
-│   ├── routes/              21 route modules
+│   ├── routes/              19 route modules
 │   ├── templates/           Jinja2 templates (Pico CSS + HTMX)
 │   └── static/              CSS + JS assets
 ├── testing/

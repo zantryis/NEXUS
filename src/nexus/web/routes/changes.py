@@ -19,7 +19,10 @@ async def changes_index(request: Request):
 
     target = request.query_params.get("date")
     today = date.today()
-    target_date = date.fromisoformat(target) if target else today
+    try:
+        target_date = date.fromisoformat(target) if target else today
+    except ValueError:
+        target_date = today
 
     # Get all topic slugs that have syntheses
     all_dates = await store.get_all_synthesis_dates()
