@@ -309,6 +309,7 @@ def test_coerce_hypotheses_tolerates_scalar_list_fields():
         ],
         {"E001", "E002"},
         ["Seed A", "Seed B", "Seed C"],
+        [],
     )
     assert hypotheses[0].evidence_for == ["E001"]
     assert hypotheses[0].unresolved_gaps == ["Ballistics still disputed"]
