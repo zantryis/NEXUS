@@ -1,0 +1,39 @@
+{% macro thread_card(t, link_prefix="/threads/", show_index=false, index=0, show_case_stats=false) %}
+<a href="{{ link_prefix }}{{ t.slug }}" class="thread-card {{ 'thread-card-stale' if t.status == 'stale' }}">
+    <div class="thread-card-header">
+        {% if show_index %}
+        <span class="thread-index">T{{ index }}</span>
+        {% endif %}
+        <span class="thread-headline">{{ t.headline }}</span>
+        <span class="sig-indicator sig-{{ 'high' if t.significance >= 7 else ('med' if t.significance >= 4 else 'low') }}">
+            {{ t.significance }}
+        </span>
+    </div>
+    <div class="thread-card-meta">
+        <span class="status-dot {{ t.status }}"></span>
+        <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
+        {% if t.trajectory_label %}
+        <span class="badge" style="background: var(--nx-blue-soft); color: var(--nx-blue);">{{ t.trajectory_label | replace('_', ' ') }}</span>
+        {% endif %}
+        {% if show_case_stats %}
+        <span class="thread-stat">{{ t.event_count }} events</span>
+        <span class="thread-stat">{{ t.convergence_count }} conv</span>
+        <span class="thread-stat">{{ t.divergence_count }} div</span>
+        {% endif %}
+        {% if t.snapshot_count %}
+        <span class="thread-stat">{{ t.snapshot_count }} snapshots</span>
+        {% endif %}
+        {% if t.key_entities %}
+        {% for e in t.key_entities[:4] %}
+        <span class="entity-tag">{{ e }}</span>
+        {% endfor %}
+        {% if t.key_entities | length > 4 %}
+        <span class="entity-tag" style="opacity: 0.5;">+{{ t.key_entities | length - 4 }}</span>
+        {% endif %}
+        {% endif %}
+    </div>
+    {% if t.updated_at %}
+    <div class="thread-card-time">Updated {{ t.updated_at | timeago }}{% if t.created_at %} &middot; Created {{ t.created_at | timeago }}{% endif %}</div>
+    {% endif %}
+</a>
+{% endmacro %}

@@ -4,8 +4,9 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from nexus.utils.runtime_env import load_runtime_env as load_dotenv
@@ -1927,6 +1928,130 @@ def run_purge_empty_threads():
     asyncio.run(_run())
 
 
+def run_consolidate_threads():
+    """Consolidate duplicate threads using composite similarity scoring."""
+    from nexus.engine.knowledge.store import KnowledgeStore
+    from nexus.engine.synthesis.threads import find_merge_candidates
+    from nexus.llm.client import LLMClient
+    from nexus.config.loader import load_config
+
+    data_dir = Path("data")
+    execute = "--execute" in sys.argv
+    topic_slug = None
+    for i, arg in enumerate(sys.argv):
+        if arg == "--topic" and i + 1 < len(sys.argv):
+            topic_slug = sys.argv[i + 1]
+
+    async def _run():
+        store = KnowledgeStore(data_dir / "knowledge.db")
+        await store.initialize()
+        config = load_config(data_dir / "config.yaml")
+        from dotenv import dotenv_values
+        env = dotenv_values(".env")
+        llm = LLMClient(
+            config.models,
+            api_key=env.get("GEMINI_API_KEY", ""),
+            deepseek_api_key=env.get("DEEPSEEK_API_KEY", ""),
+        )
+        try:
+            threads = await store.get_active_threads(topic_slug)
+            scope = f"topic '{topic_slug}'" if topic_slug else "all topics"
+            print(f"Found {len(threads)} active/emerging threads ({scope})")
+
+            if len(threads) < 2:
+                print("Not enough threads to consolidate.")
+                return
+
+            candidates = await find_merge_candidates(
+                threads, llm, verbose=True,
+            )
+
+            if not candidates:
+                print("No merge candidates found.")
+                return
+
+            print(f"\n{'EXECUTING' if execute else 'DRY RUN'}: {len(candidates)} merge(s)\n")
+            for c in candidates:
+                print(f"  score={c['score']:.3f}")
+                print(f"    KEEP:   [{c['keep_id']:3}] {c['keep_headline'][:70]}")
+                print(f"    ABSORB: [{c['absorb_id']:3}] {c['absorb_headline'][:70]}")
+                print()
+
+            if execute:
+                for c in candidates:
+                    await store.merge_threads(c["keep_id"], c["absorb_id"])
+                print(f"Merged {len(candidates)} thread pair(s).")
+            else:
+                print("Run with --execute to actually merge.")
+        finally:
+            await store.close()
+
+    asyncio.run(_run())
+
+
+def run_repair_threads():
+    """Repair thread identity/history and rebuild thread-dependent artifacts."""
+    from nexus.config.loader import load_config
+    from nexus.engine.knowledge.store import KnowledgeStore
+    from nexus.engine.synthesis.repair import repair_thread_hygiene
+    from nexus.llm.client import LLMClient
+
+    data_dir = Path("data")
+    db_path = data_dir / "knowledge.db"
+    config_path = data_dir / "config.yaml"
+    execute = "--execute" in sys.argv
+
+    async def _run():
+        if not execute:
+            print("This command mutates the knowledge store. Re-run with --execute.")
+            return
+
+        store = KnowledgeStore(db_path)
+        await store.initialize()
+        try:
+            if await store.is_pipeline_running():
+                raise SystemExit("Pipeline appears to be running. Stop it before repairing threads.")
+
+            backup_path = db_path.with_suffix(f".db.bak-{datetime.now().strftime('%Y%m%d%H%M%S')}")
+            shutil.copy2(db_path, backup_path)
+
+            llm = None
+            if config_path.exists():
+                load_dotenv()
+                config = load_config(config_path)
+                api_key = os.getenv("GEMINI_API_KEY")
+                anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+                deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("deepseek")
+                openai_api_key = os.getenv("OPENAI_API_KEY")
+                ollama_base_url = os.getenv("OLLAMA_BASE_URL")
+                litellm_base_url = os.getenv("LITELLM_BASE_URL") or os.getenv("LITELLM_PROXY_URL")
+                litellm_api_key = os.getenv("LITELLM_API_KEY") or os.getenv("LITELLM_PROXY_API_KEY")
+                has_provider = any([
+                    api_key, anthropic_api_key, deepseek_api_key, openai_api_key,
+                    ollama_base_url, litellm_base_url and litellm_api_key,
+                ])
+                if has_provider or config.preset == "free":
+                    llm = LLMClient(
+                        config.models,
+                        api_key=api_key,
+                        anthropic_api_key=anthropic_api_key,
+                        deepseek_api_key=deepseek_api_key,
+                        openai_api_key=openai_api_key,
+                        ollama_base_url=ollama_base_url,
+                        budget_config=config.budget,
+                        litellm_base_url=litellm_base_url,
+                        litellm_api_key=litellm_api_key,
+                    )
+
+            result = await repair_thread_hygiene(store, llm)
+            result["backup_path"] = str(backup_path)
+            print(json.dumps(result, indent=2, default=str))
+        finally:
+            await store.close()
+
+    asyncio.run(_run())
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -1949,6 +2074,8 @@ def main():
               "  audit-sources  Score each feed's relevance to a topic\n"
               "  enrich-entities  Backfill Wikipedia thumbnails + URLs for entities\n"
               "  purge-empty-threads  Remove 0-event threads (--execute to confirm)\n"
+              "  consolidate-threads  Merge duplicate threads (--topic X --execute)\n"
+              "  repair-threads  Repair thread identity/history (--execute)\n"
               "  demo       Demo seed/serve (seed [--from-scratch] | serve [--port N])\n")
 
     if len(sys.argv) < 2:
@@ -1990,6 +2117,10 @@ def main():
         run_enrich_entities()
     elif command == "purge-empty-threads":
         run_purge_empty_threads()
+    elif command == "consolidate-threads":
+        run_consolidate_threads()
+    elif command == "repair-threads":
+        run_repair_threads()
     elif command == "demo":
         from nexus.cli.demo import run_demo_seed, run_demo_serve
         sub = sys.argv[2] if len(sys.argv) > 2 else "seed"

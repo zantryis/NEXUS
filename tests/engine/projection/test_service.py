@@ -12,7 +12,9 @@ from nexus.engine.projection.service import (
     backfill_signal_rich_profile,
     backfill_syntheses,
     backfill_thread_snapshots,
+    capture_status_transition_snapshots,
     generate_projections_from_store,
+    hydrate_synthesis_threads,
     projection_eligibility,
     render_projection_markdown,
     run_projection_pass,
@@ -44,6 +46,58 @@ async def test_backfill_thread_snapshots(store):
 
     snapshots = await store.get_thread_snapshots(thread_id)
     assert len(snapshots) >= 2
+
+
+async def test_hydrate_synthesis_threads_prefers_event_identity(store):
+    event = Event(date=date(2026, 3, 10), summary="A", entities=["Iran"])
+    event_id = (await store.add_events([event], "iran-us"))[0]
+    thread_id = await store.upsert_thread("iran-thread", "Iran Thread", 8, "active")
+    await store.link_thread_topic(thread_id, "iran-us")
+    await store.link_thread_events(thread_id, [event_id])
+    await store.upsert_thread_snapshot(
+        ThreadSnapshot(
+            thread_id=thread_id,
+            snapshot_date=date(2026, 3, 10),
+            status="active",
+            significance=8,
+            event_count=1,
+            latest_event_date=date(2026, 3, 10),
+        )
+    )
+
+    synthesis = TopicSynthesis(
+        topic_name="Iran-US",
+        threads=[NarrativeThread(
+            headline="Renamed Iran Thread",
+            events=[Event(date=date(2026, 3, 10), summary="A", entities=["Iran"])],
+            significance=8,
+        )],
+    )
+
+    hydrated = await hydrate_synthesis_threads(
+        store,
+        synthesis,
+        topic_slug="iran-us",
+        as_of=date(2026, 3, 10),
+    )
+
+    assert hydrated.threads[0].thread_id == thread_id
+    assert hydrated.threads[0].slug == "iran-thread"
+
+
+async def test_capture_status_transition_snapshots_persists_merged_threads(store):
+    thread_id = await store.upsert_thread("merged-thread", "Merged Thread", 5, "merged")
+    await store.db.execute(
+        "UPDATE threads SET updated_at = '2026-03-10T12:00:00' WHERE id = ?",
+        (thread_id,),
+    )
+    await store.db.commit()
+
+    captured = await capture_status_transition_snapshots(store, date(2026, 3, 10))
+    snapshots = await store.get_thread_snapshots(thread_id)
+
+    assert captured == 1
+    assert snapshots[-1].status == "merged"
 
 
 async def test_projection_eligibility(store):

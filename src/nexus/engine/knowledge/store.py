@@ -69,7 +69,13 @@ class KnowledgeStore:
 
     # ── Events ────────────────────────────────────────────────────────
 
-    async def add_events(self, events: list[Event], topic_slug: str) -> list[int]:
+    async def add_events(
+        self,
+        events: list[Event],
+        topic_slug: str,
+        *,
+        case_id: int | None = None,
+    ) -> list[int]:
         """Insert events and their sources. Returns list of new event row IDs.
 
         All inserts are wrapped in a transaction — if any insert fails,
@@ -81,8 +87,8 @@ class KnowledgeStore:
             for event in events:
                 raw_entities = event.raw_entities or event.entities
                 cursor = await self.db.execute(
-                    "INSERT INTO events (date, summary, significance, relation_to_prior, raw_entities, topic_slug) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO events (date, summary, significance, relation_to_prior, raw_entities, topic_slug, case_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
                         event.date.isoformat(),
                         event.summary,
@@ -90,6 +96,7 @@ class KnowledgeStore:
                         event.relation_to_prior,
                         json.dumps(raw_entities),
                         topic_slug,
+                        case_id,
                     ),
                 )
                 event_id = cursor.lastrowid
@@ -141,17 +148,28 @@ class KnowledgeStore:
 
     async def get_events(
         self,
-        topic_slug: str,
+        topic_slug: str | None = None,
         since: date | None = None,
         until: date | None = None,
         limit: int | None = None,
+        *,
+        case_id: int | None = None,
     ) -> list[Event]:
         """Load events for a topic, optionally filtered by date range."""
         query = (
             "SELECT id, date, summary, significance, relation_to_prior, raw_entities "
-            "FROM events WHERE topic_slug = ?"
+            "FROM events WHERE 1=1"
         )
-        params: list = [topic_slug]
+        params: list = []
+
+        if topic_slug is not None:
+            query += " AND topic_slug = ?"
+            params.append(topic_slug)
+        elif case_id is None:
+            query += " AND case_id IS NULL"
+        if case_id is not None:
+            query += " AND case_id = ?"
+            params.append(case_id)
 
         if since:
             query += " AND date >= ?"
@@ -214,22 +232,31 @@ class KnowledgeStore:
         return events
 
     async def get_recent_events(
-        self, topic_slug: str, days: int = 7, limit: int = 30,
+        self, topic_slug: str | None = None, days: int = 7, limit: int = 30,
         reference_date: date | None = None,
+        *,
+        case_id: int | None = None,
     ) -> list[Event]:
         """Get events from the last N days."""
         ref = reference_date or date.today()
         since = ref - timedelta(days=days)
-        events = await self.get_events(topic_slug, since=since, until=ref)
+        events = await self.get_events(topic_slug, since=since, until=ref, case_id=case_id)
         return events[-limit:] if len(events) > limit else events
 
-    async def get_all_events(self, topic_slug: str | None = None) -> list[Event]:
+    async def get_all_events(
+        self,
+        topic_slug: str | None = None,
+        *,
+        case_id: int | None = None,
+    ) -> list[Event]:
         """Get all events, optionally filtered by topic."""
+        if case_id is not None:
+            return await self.get_events(None, case_id=case_id)
         if topic_slug:
             return await self.get_events(topic_slug)
         # Cross-topic: get all
         cursor = await self.db.execute(
-            "SELECT DISTINCT topic_slug FROM events ORDER BY topic_slug"
+            "SELECT DISTINCT topic_slug FROM events WHERE case_id IS NULL ORDER BY topic_slug"
         )
         slugs = [row[0] for row in await cursor.fetchall()]
         all_events = []
@@ -293,9 +320,25 @@ class KnowledgeStore:
 
         return None
 
-    async def get_all_entities(self, topic_slug: str | None = None) -> list[dict]:
+    async def get_all_entities(
+        self,
+        topic_slug: str | None = None,
+        *,
+        case_id: int | None = None,
+    ) -> list[dict]:
         """Get all entities, optionally scoped to a topic."""
-        if topic_slug:
+        if case_id is not None:
+            cursor = await self.db.execute(
+                "SELECT DISTINCT e.id, e.canonical_name, e.entity_type, e.aliases, "
+                "e.first_seen, e.last_seen, e.thumbnail_url, e.wikipedia_url "
+                "FROM entities e "
+                "JOIN event_entities ee ON e.id = ee.entity_id "
+                "JOIN events ev ON ee.event_id = ev.id "
+                "WHERE ev.case_id = ? "
+                "ORDER BY e.canonical_name",
+                (case_id,),
+            )
+        elif topic_slug:
             cursor = await self.db.execute(
                 "SELECT DISTINCT e.id, e.canonical_name, e.entity_type, e.aliases, "
                 "e.first_seen, e.last_seen, e.thumbnail_url, e.wikipedia_url "
@@ -425,7 +468,13 @@ class KnowledgeStore:
             "headline = excluded.headline, "
             "significance = excluded.significance, "
             "status = excluded.status, "
-            "updated_at = excluded.updated_at",
+            "updated_at = CASE "
+            "  WHEN threads.headline != excluded.headline "
+            "    OR threads.significance != excluded.significance "
+            "    OR threads.status != excluded.status "
+            "  THEN excluded.updated_at "
+            "  ELSE threads.updated_at "
+            "END",
             (slug, headline, significance, status, now, now),
         )
         await self.db.commit()
@@ -435,9 +484,24 @@ class KnowledgeStore:
         row = await cursor.fetchone()
         return row[0]
 
-    async def get_active_threads(self, topic_slug: str | None = None) -> list[dict]:
+    async def get_active_threads(
+        self,
+        topic_slug: str | None = None,
+        *,
+        case_id: int | None = None,
+    ) -> list[dict]:
         """Get threads with status 'emerging' or 'active'."""
-        if topic_slug:
+        if case_id is not None:
+            cursor = await self.db.execute(
+                "SELECT DISTINCT t.id, t.slug, t.headline, t.status, t.significance, "
+                "t.created_at, t.updated_at "
+                "FROM threads t "
+                "JOIN thread_cases tc ON t.id = tc.thread_id "
+                "WHERE tc.case_id = ? AND t.status IN ('emerging', 'active') "
+                "ORDER BY t.updated_at DESC",
+                (case_id,),
+            )
+        elif topic_slug:
             cursor = await self.db.execute(
                 "SELECT DISTINCT t.id, t.slug, t.headline, t.status, t.significance, "
                 "t.created_at, t.updated_at "
@@ -451,6 +515,7 @@ class KnowledgeStore:
             cursor = await self.db.execute(
                 "SELECT id, slug, headline, status, significance, created_at, updated_at "
                 "FROM threads WHERE status IN ('emerging', 'active') "
+                "AND id NOT IN (SELECT thread_id FROM thread_cases) "
                 "ORDER BY updated_at DESC"
             )
         rows = await cursor.fetchall()
@@ -467,6 +532,11 @@ class KnowledgeStore:
                 (thread_id,),
             )
             key_entities = [e[0] for e in await ent_cursor.fetchall()]
+            count_cursor = await self.db.execute(
+                "SELECT COUNT(*) FROM thread_events WHERE thread_id = ?",
+                (thread_id,),
+            )
+            event_count = (await count_cursor.fetchone())[0]
 
             threads.append({
                 "id": thread_id,
@@ -477,29 +547,58 @@ class KnowledgeStore:
                 "created_at": r[5],
                 "updated_at": r[6],
                 "key_entities": key_entities,
+                "event_count": event_count,
             })
         enriched = []
         for thread in threads:
             enriched.append(await self._attach_latest_snapshot_fields(thread))
         return enriched
 
-    async def link_thread_events(self, thread_id: int, event_ids: list[int]) -> None:
-        """Link events to a thread."""
+    async def get_matchable_threads(
+        self,
+        topic_slug: str | None = None,
+        *,
+        case_id: int | None = None,
+    ) -> list[dict]:
+        """Get non-terminal threads eligible for event matching."""
+        threads = await self.get_all_threads(topic_slug=topic_slug, case_id=case_id)
+        return [thread for thread in threads if thread["status"] in ("emerging", "active", "stale")]
+
+    async def link_thread_events(self, thread_id: int, event_ids: list[int]) -> int:
+        """Link events to a thread. Returns number of new links inserted."""
+        inserted = 0
         for eid in event_ids:
-            await self.db.execute(
+            cursor = await self.db.execute(
                 "INSERT OR IGNORE INTO thread_events (thread_id, event_id) VALUES (?, ?)",
                 (thread_id, eid),
             )
+            inserted += cursor.rowcount or 0
+        if inserted:
+            await self.db.execute(
+                "UPDATE threads SET updated_at = ? WHERE id = ?",
+                (datetime.now().isoformat(), thread_id),
+            )
         await self.db.commit()
+        return inserted
 
     async def find_event_id(
-        self, summary: str, date: str, topic_slug: str,
+        self,
+        summary: str,
+        date: str,
+        topic_slug: str | None = None,
+        *,
+        case_id: int | None = None,
     ) -> int | None:
-        """Find an event's DB id by its natural key (summary + date + topic)."""
-        cursor = await self.db.execute(
-            "SELECT id FROM events WHERE summary = ? AND date = ? AND topic_slug = ?",
-            (summary, date, topic_slug),
-        )
+        """Find an event's DB id by its natural key."""
+        query = "SELECT id FROM events WHERE summary = ? AND date = ?"
+        params: list = [summary, date]
+        if topic_slug is not None:
+            query += " AND topic_slug = ?"
+            params.append(topic_slug)
+        if case_id is not None:
+            query += " AND case_id = ?"
+            params.append(case_id)
+        cursor = await self.db.execute(query, params)
         row = await cursor.fetchone()
         return row[0] if row else None
 
@@ -522,6 +621,17 @@ class KnowledgeStore:
         """Get topic slugs associated with a thread."""
         cursor = await self.db.execute(
             "SELECT topic_slug FROM thread_topics WHERE thread_id = ?",
+            (thread_id,),
+        )
+        return [r[0] for r in await cursor.fetchall()]
+
+    async def get_cases_for_thread(self, thread_id: int) -> list[str]:
+        """Get case slugs associated with a thread."""
+        cursor = await self.db.execute(
+            "SELECT c.slug FROM cases c "
+            "JOIN thread_cases tc ON c.id = tc.case_id "
+            "WHERE tc.thread_id = ? "
+            "ORDER BY c.slug",
             (thread_id,),
         )
         return [r[0] for r in await cursor.fetchall()]
@@ -610,8 +720,76 @@ class KnowledgeStore:
 
         return {"nodes": nodes, "links": links}
 
+    async def get_case_graph_data(
+        self,
+        case_id: int,
+        *,
+        min_events: int = 1,
+        min_co: int = 1,
+    ) -> dict:
+        """Return graph data scoped to one case."""
+        cursor = await self.db.execute(
+            "SELECT ee.entity_id, COUNT(DISTINCT ee.event_id) as evt_count "
+            "FROM event_entities ee "
+            "JOIN events ev ON ee.event_id = ev.id "
+            "WHERE ev.case_id = ? "
+            "GROUP BY ee.entity_id HAVING evt_count >= ?",
+            (case_id, min_events),
+        )
+        entity_counts = {r[0]: r[1] for r in await cursor.fetchall()}
+        if not entity_counts:
+            return {"nodes": [], "links": []}
+
+        entity_ids = list(entity_counts.keys())
+        placeholders = ",".join("?" * len(entity_ids))
+        cursor = await self.db.execute(
+            f"SELECT id, canonical_name, entity_type, thumbnail_url "
+            f"FROM entities WHERE id IN ({placeholders})",
+            entity_ids,
+        )
+        nodes = [
+            {
+                "id": r[0],
+                "name": r[1],
+                "type": r[2],
+                "thumbnail_url": r[3] or "",
+                "event_count": entity_counts[r[0]],
+            }
+            for r in await cursor.fetchall()
+        ]
+
+        cursor = await self.db.execute(
+            f"SELECT ee1.entity_id, ee2.entity_id, COUNT(*) as co "
+            f"FROM event_entities ee1 "
+            f"JOIN event_entities ee2 ON ee1.event_id = ee2.event_id "
+            f"  AND ee1.entity_id < ee2.entity_id "
+            f"JOIN events ev ON ee1.event_id = ev.id "
+            f"WHERE ev.case_id = ? "
+            f"  AND ee1.entity_id IN ({placeholders}) "
+            f"  AND ee2.entity_id IN ({placeholders}) "
+            f"GROUP BY ee1.entity_id, ee2.entity_id "
+            f"HAVING co >= ?",
+            [case_id, *entity_ids, *entity_ids, min_co],
+        )
+        links = [{"source": r[0], "target": r[1], "weight": r[2]} for r in await cursor.fetchall()]
+        return {"nodes": nodes, "links": links}
+
     async def merge_threads(self, keep_id: int, absorb_id: int) -> dict:
         """Merge absorb_id thread into keep_id. Reassign events, topics, analysis, snapshots, evidence refs."""
+        touched_at = datetime.now().isoformat()
+        keep_cursor = await self.db.execute(
+            "SELECT significance, created_at FROM threads WHERE id = ?",
+            (keep_id,),
+        )
+        keep_row = await keep_cursor.fetchone()
+        absorb_cursor = await self.db.execute(
+            "SELECT significance, created_at FROM threads WHERE id = ?",
+            (absorb_id,),
+        )
+        absorb_row = await absorb_cursor.fetchone()
+        if not keep_row or not absorb_row:
+            return {"items_updated": 0, "questions_updated": 0}
+
         # Reassign thread_events (ignore duplicates)
         await self.db.execute(
             "UPDATE OR IGNORE thread_events SET thread_id = ? WHERE thread_id = ?",
@@ -627,6 +805,14 @@ class KnowledgeStore:
         )
         await self.db.execute(
             "DELETE FROM thread_topics WHERE thread_id = ?", (absorb_id,),
+        )
+        # Reassign thread_cases
+        await self.db.execute(
+            "UPDATE OR IGNORE thread_cases SET thread_id = ? WHERE thread_id = ?",
+            (keep_id, absorb_id),
+        )
+        await self.db.execute(
+            "DELETE FROM thread_cases WHERE thread_id = ?", (absorb_id,),
         )
         # Move convergence + divergence
         await self.db.execute(
@@ -653,10 +839,19 @@ class KnowledgeStore:
         questions_updated = await self._rewrite_thread_id_json(
             "forecast_questions", "evidence_thread_ids_json", keep_id, absorb_id,
         )
-        # Mark absorbed thread as resolved and record merge target
         await self.db.execute(
-            "UPDATE threads SET status = 'resolved', merged_into_id = ? WHERE id = ?",
-            (keep_id, absorb_id),
+            "UPDATE threads SET significance = ?, created_at = ?, updated_at = ? WHERE id = ?",
+            (
+                max(keep_row[0], absorb_row[0]),
+                min(keep_row[1], absorb_row[1]),
+                touched_at,
+                keep_id,
+            ),
+        )
+        # Mark absorbed thread as merged and record merge target
+        await self.db.execute(
+            "UPDATE threads SET status = 'merged', merged_into_id = ?, updated_at = ? WHERE id = ?",
+            (keep_id, touched_at, absorb_id),
         )
         await self.db.commit()
         return {"items_updated": items_updated, "questions_updated": questions_updated}
@@ -690,6 +885,21 @@ class KnowledgeStore:
         await self.db.execute(
             "INSERT OR IGNORE INTO thread_topics (thread_id, topic_slug) VALUES (?, ?)",
             (thread_id, topic_slug),
+        )
+        await self.db.commit()
+
+    async def link_thread_case(
+        self,
+        thread_id: int,
+        case_id: int,
+        *,
+        relevance: float = 0.5,
+        role: str = "",
+    ) -> None:
+        """Link a thread to a case."""
+        await self.db.execute(
+            "INSERT OR REPLACE INTO thread_cases (thread_id, case_id, relevance, role) VALUES (?, ?, ?, ?)",
+            (thread_id, case_id, relevance, role),
         )
         await self.db.commit()
 
@@ -757,6 +967,17 @@ class KnowledgeStore:
         )
         await self.db.commit()
         return cursor.lastrowid
+
+    async def replace_synthesis(
+        self, synthesis_data: dict, topic_slug: str, run_date: date,
+    ) -> int:
+        """Replace all synthesis rows for a topic/date with one refreshed snapshot."""
+        await self.db.execute(
+            "DELETE FROM syntheses WHERE topic_slug = ? AND date = ?",
+            (topic_slug, run_date.isoformat()),
+        )
+        await self.db.commit()
+        return await self.save_synthesis(synthesis_data, topic_slug, run_date)
 
     async def get_synthesis(self, topic_slug: str, run_date: date) -> dict | None:
         """Load a TopicSynthesis snapshot by topic and date."""
@@ -878,7 +1099,13 @@ class KnowledgeStore:
         snapshots = await self.get_thread_snapshots(thread_id, until=cutoff)
         return snapshots[-1] if snapshots else None
 
-    async def _attach_snapshot_fields(self, payload: dict, *, as_of: date | None = None) -> dict:
+    async def _attach_snapshot_fields(
+        self,
+        payload: dict,
+        *,
+        as_of: date | None = None,
+        override_canonical: bool = True,
+    ) -> dict:
         """Attach trajectory metrics to a thread-like dict."""
         snapshot = await (
             self.get_thread_snapshot_as_of(payload["id"], as_of)
@@ -899,13 +1126,14 @@ class KnowledgeStore:
         payload["acceleration_7d"] = snapshot.acceleration_7d
         payload["significance_trend_7d"] = snapshot.significance_trend_7d
         payload["snapshot_count"] = len(await self.get_thread_snapshots(payload["id"], until=as_of))
-        payload["status"] = snapshot.status
-        payload["significance"] = snapshot.significance
+        if override_canonical:
+            payload["status"] = snapshot.status
+            payload["significance"] = snapshot.significance
         return payload
 
     async def _attach_latest_snapshot_fields(self, payload: dict) -> dict:
         """Attach latest trajectory metrics to a thread-like dict."""
-        return await self._attach_snapshot_fields(payload)
+        return await self._attach_snapshot_fields(payload, override_canonical=False)
 
     async def add_causal_link(self, causal_link: CausalLink) -> int:
         """Persist a structured causal link."""
@@ -2451,10 +2679,29 @@ class KnowledgeStore:
         return await self._attach_snapshot_fields(payload, as_of=cutoff)
 
     async def get_all_threads(
-        self, topic_slug: str | None = None, status: str | None = None,
+        self,
+        topic_slug: str | None = None,
+        status: str | None = None,
+        *,
+        case_id: int | None = None,
     ) -> list[dict]:
         """Get threads with optional topic and status filters."""
-        if topic_slug:
+        if case_id is not None:
+            query = (
+                "SELECT DISTINCT t.id, t.slug, t.headline, t.status, t.significance, "
+                "t.created_at, t.updated_at "
+                "FROM threads t "
+                "JOIN thread_cases tc ON t.id = tc.thread_id "
+                "WHERE tc.case_id = ?"
+            )
+            params: list = [case_id]
+            if status:
+                query += " AND t.status = ?"
+                params.append(status)
+            else:
+                query += " AND t.status != 'merged'"
+            query += " ORDER BY t.updated_at DESC"
+        elif topic_slug:
             query = (
                 "SELECT DISTINCT t.id, t.slug, t.headline, t.status, t.significance, "
                 "t.created_at, t.updated_at "
@@ -2466,6 +2713,8 @@ class KnowledgeStore:
             if status:
                 query += " AND t.status = ?"
                 params.append(status)
+            else:
+                query += " AND t.status != 'merged'"
             query += " ORDER BY t.updated_at DESC"
         else:
             query = (
@@ -2474,8 +2723,10 @@ class KnowledgeStore:
             )
             params = []
             if status:
-                query += " WHERE status = ?"
+                query += " WHERE status = ? AND id NOT IN (SELECT thread_id FROM thread_cases)"
                 params.append(status)
+            else:
+                query += " WHERE status != 'merged' AND id NOT IN (SELECT thread_id FROM thread_cases)"
             query += " ORDER BY updated_at DESC"
 
         cursor = await self.db.execute(query, params)
@@ -2492,11 +2743,17 @@ class KnowledgeStore:
                 (thread_id,),
             )
             key_entities = [e[0] for e in await ent_cursor.fetchall()]
+            count_cursor = await self.db.execute(
+                "SELECT COUNT(*) FROM thread_events WHERE thread_id = ?",
+                (thread_id,),
+            )
+            event_count = (await count_cursor.fetchone())[0]
             threads.append({
                 "id": thread_id, "slug": r[1], "headline": r[2],
                 "status": r[3], "significance": r[4],
                 "created_at": r[5], "updated_at": r[6],
                 "key_entities": key_entities,
+                "event_count": event_count,
             })
         enriched = []
         for thread in threads:
@@ -2504,13 +2761,32 @@ class KnowledgeStore:
         return enriched
 
     async def get_all_threads_as_of(
-        self, topic_slug: str | None = None, cutoff: date | None = None, status: str | None = None,
+        self,
+        topic_slug: str | None = None,
+        cutoff: date | None = None,
+        status: str | None = None,
+        *,
+        case_id: int | None = None,
     ) -> list[dict]:
         """Get threads with snapshot state and entity context pinned to a cutoff."""
         if cutoff is None:
-            return await self.get_all_threads(topic_slug=topic_slug, status=status)
+            return await self.get_all_threads(topic_slug=topic_slug, status=status, case_id=case_id)
 
-        if topic_slug:
+        if case_id is not None:
+            query = (
+                "SELECT DISTINCT t.id, t.slug, t.headline, t.status, t.significance, "
+                "t.created_at, t.updated_at "
+                "FROM threads t "
+                "JOIN thread_cases tc ON t.id = tc.thread_id "
+                "WHERE tc.case_id = ?"
+            )
+            params: list = [case_id]
+            if status:
+                query += " AND t.status = ?"
+                params.append(status)
+            else:
+                query += " AND t.status != 'merged'"
+        elif topic_slug:
             query = (
                 "SELECT DISTINCT t.id, t.slug, t.headline, t.status, t.significance, "
                 "t.created_at, t.updated_at "
@@ -2519,12 +2795,22 @@ class KnowledgeStore:
                 "WHERE tt.topic_slug = ?"
             )
             params: list = [topic_slug]
+            if status:
+                query += " AND t.status = ?"
+                params.append(status)
+            else:
+                query += " AND t.status != 'merged'"
         else:
             query = (
                 "SELECT id, slug, headline, status, significance, created_at, updated_at "
                 "FROM threads"
             )
             params = []
+            if status:
+                query += " WHERE status = ? AND id NOT IN (SELECT thread_id FROM thread_cases)"
+                params.append(status)
+            else:
+                query += " WHERE status != 'merged' AND id NOT IN (SELECT thread_id FROM thread_cases)"
 
         cursor = await self.db.execute(query, params)
         rows = await cursor.fetchall()
@@ -2533,9 +2819,9 @@ class KnowledgeStore:
         for r in rows:
             thread_id = r[0]
             snapshot = await self.get_thread_snapshot_as_of(thread_id, cutoff)
-            if not snapshot:
+            if not snapshot and status != "merged":
                 continue
-            if status and snapshot.status != status:
+            if snapshot and status and snapshot.status != status:
                 continue
             ent_cursor = await self.db.execute(
                 "SELECT DISTINCT e.canonical_name FROM entities e "
@@ -2546,11 +2832,20 @@ class KnowledgeStore:
                 (thread_id, cutoff.isoformat()),
             )
             key_entities = [e[0] for e in await ent_cursor.fetchall()]
+            count_cursor = await self.db.execute(
+                "SELECT COUNT(*) FROM thread_events te "
+                "JOIN events ev ON te.event_id = ev.id "
+                "WHERE te.thread_id = ? AND ev.date <= ?",
+                (thread_id, cutoff.isoformat()),
+            )
+            event_count = (await count_cursor.fetchone())[0]
             payload = {
                 "id": thread_id, "slug": r[1], "headline": r[2],
-                "status": snapshot.status, "significance": snapshot.significance,
+                "status": snapshot.status if snapshot else r[3],
+                "significance": snapshot.significance if snapshot else r[4],
                 "created_at": r[5], "updated_at": r[6],
                 "key_entities": key_entities,
+                "event_count": event_count,
             }
             threads.append(await self._attach_snapshot_fields(payload, as_of=cutoff))
         threads.sort(key=lambda thread: (thread.get("momentum_score") or 0.0, thread["headline"]), reverse=True)
@@ -2564,7 +2859,7 @@ class KnowledgeStore:
             "FROM threads t "
             "JOIN thread_events te ON t.id = te.thread_id "
             "JOIN event_entities ee ON te.event_id = ee.event_id "
-            "WHERE ee.entity_id = ? "
+            "WHERE ee.entity_id = ? AND t.status != 'merged' "
             "ORDER BY t.updated_at DESC",
             (entity_id,),
         )
@@ -2578,9 +2873,24 @@ class KnowledgeStore:
             for r in rows
         ]
 
-    async def get_source_stats(self, topic_slug: str | None = None) -> list[dict]:
+    async def get_source_stats(
+        self,
+        topic_slug: str | None = None,
+        *,
+        case_id: int | None = None,
+    ) -> list[dict]:
         """Aggregate event sources by outlet/affiliation/country."""
-        if topic_slug:
+        if case_id is not None:
+            cursor = await self.db.execute(
+                "SELECT es.outlet, es.affiliation, es.country, es.language, COUNT(*) as cnt "
+                "FROM event_sources es "
+                "JOIN events ev ON es.event_id = ev.id "
+                "WHERE ev.case_id = ? "
+                "GROUP BY es.outlet, es.affiliation, es.country, es.language "
+                "ORDER BY cnt DESC",
+                (case_id,),
+            )
+        elif topic_slug:
             cursor = await self.db.execute(
                 "SELECT es.outlet, es.affiliation, es.country, es.language, COUNT(*) as cnt "
                 "FROM event_sources es "
@@ -2592,8 +2902,10 @@ class KnowledgeStore:
             )
         else:
             cursor = await self.db.execute(
-                "SELECT outlet, affiliation, country, language, COUNT(*) as cnt "
-                "FROM event_sources "
+                "SELECT es.outlet, es.affiliation, es.country, es.language, COUNT(*) as cnt "
+                "FROM event_sources es "
+                "JOIN events ev ON es.event_id = ev.id "
+                "WHERE ev.case_id IS NULL "
                 "GROUP BY outlet, affiliation, country, language "
                 "ORDER BY cnt DESC"
             )
@@ -2603,6 +2915,459 @@ class KnowledgeStore:
                 "language": r[3], "event_count": r[4],
             }
             for r in await cursor.fetchall()
+        ]
+
+    # ── Cases ───────────────────────────────────────────────────────
+
+    async def upsert_case(
+        self,
+        slug: str,
+        title: str,
+        question: str,
+        *,
+        status: str = "active",
+        time_bounds: dict | None = None,
+        build_defaults: dict | None = None,
+        monitoring_enabled: bool = True,
+    ) -> int:
+        """Insert or update a case registry record."""
+        now = datetime.now().isoformat()
+        await self.db.execute(
+            "INSERT INTO cases (slug, title, question, status, time_bounds_json, build_defaults_json, monitoring_enabled, generated_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(slug) DO UPDATE SET "
+            "title = excluded.title, question = excluded.question, status = excluded.status, "
+            "time_bounds_json = excluded.time_bounds_json, build_defaults_json = excluded.build_defaults_json, "
+            "monitoring_enabled = excluded.monitoring_enabled, updated_at = excluded.updated_at",
+            (
+                slug,
+                title,
+                question,
+                status,
+                json.dumps(time_bounds or {}),
+                json.dumps(build_defaults or {}),
+                1 if monitoring_enabled else 0,
+                now,
+                now,
+            ),
+        )
+        await self.db.commit()
+        cursor = await self.db.execute("SELECT id FROM cases WHERE slug = ?", (slug,))
+        row = await cursor.fetchone()
+        return row[0]
+
+    async def get_case(self, slug: str) -> dict | None:
+        """Load a case registry row by slug."""
+        cursor = await self.db.execute(
+            "SELECT id, slug, title, question, status, time_bounds_json, build_defaults_json, "
+            "monitoring_enabled, generated_at, updated_at "
+            "FROM cases WHERE slug = ?",
+            (slug,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "slug": row[1],
+            "title": row[2],
+            "question": row[3],
+            "status": row[4],
+            "time_bounds": json.loads(row[5] or "{}"),
+            "build_defaults": json.loads(row[6] or "{}"),
+            "monitoring_enabled": bool(row[7]),
+            "generated_at": row[8],
+            "updated_at": row[9],
+        }
+
+    async def get_all_cases(self) -> list[dict]:
+        """List stored cases."""
+        cursor = await self.db.execute(
+            "SELECT slug FROM cases ORDER BY updated_at DESC, slug ASC"
+        )
+        slugs = [row[0] for row in await cursor.fetchall()]
+        cases = []
+        for slug in slugs:
+            case = await self.get_case(slug)
+            if case is not None:
+                cases.append(case)
+        return cases
+
+    async def clear_case_threads(self, case_id: int) -> None:
+        """Remove thread links for one case before relinking."""
+        await self.db.execute("DELETE FROM thread_cases WHERE case_id = ?", (case_id,))
+        await self.db.commit()
+
+    async def reset_case_scope(self, case_id: int) -> None:
+        """Clear case-linked operational state before a full rebuild."""
+        thread_cursor = await self.db.execute(
+            "SELECT thread_id FROM thread_cases WHERE case_id = ?",
+            (case_id,),
+        )
+        thread_ids = [row[0] for row in await thread_cursor.fetchall()]
+        event_cursor = await self.db.execute(
+            "SELECT id FROM events WHERE case_id = ?",
+            (case_id,),
+        )
+        event_ids = [row[0] for row in await event_cursor.fetchall()]
+
+        if thread_ids:
+            thread_placeholders = ",".join("?" for _ in thread_ids)
+            await self.db.execute(
+                f"DELETE FROM convergence WHERE thread_id IN ({thread_placeholders})",
+                thread_ids,
+            )
+            await self.db.execute(
+                f"DELETE FROM divergence WHERE thread_id IN ({thread_placeholders})",
+                thread_ids,
+            )
+            await self.db.execute(
+                f"DELETE FROM thread_snapshots WHERE thread_id IN ({thread_placeholders})",
+                thread_ids,
+            )
+            await self.db.execute(
+                f"DELETE FROM thread_events WHERE thread_id IN ({thread_placeholders})",
+                thread_ids,
+            )
+
+        if event_ids:
+            event_placeholders = ",".join("?" for _ in event_ids)
+            await self.db.execute(
+                f"DELETE FROM event_sources WHERE event_id IN ({event_placeholders})",
+                event_ids,
+            )
+            await self.db.execute(
+                f"DELETE FROM event_entities WHERE event_id IN ({event_placeholders})",
+                event_ids,
+            )
+            await self.db.execute(
+                f"DELETE FROM causal_links WHERE source_event_id IN ({event_placeholders}) "
+                f"OR target_event_id IN ({event_placeholders})",
+                event_ids + event_ids,
+            )
+            await self.db.execute(
+                f"DELETE FROM entity_relationships WHERE source_event_id IN ({event_placeholders})",
+                event_ids,
+            )
+            await self.db.execute(
+                f"DELETE FROM thread_events WHERE event_id IN ({event_placeholders})",
+                event_ids,
+            )
+            await self.db.execute(
+                f"DELETE FROM events WHERE id IN ({event_placeholders})",
+                event_ids,
+            )
+
+        await self.db.execute("DELETE FROM thread_cases WHERE case_id = ?", (case_id,))
+        await self.db.execute("DELETE FROM case_documents WHERE case_id = ?", (case_id,))
+        await self.db.execute("DELETE FROM case_evidence WHERE case_id = ?", (case_id,))
+        await self.db.execute("DELETE FROM case_hypotheses WHERE case_id = ?", (case_id,))
+        await self.db.execute("DELETE FROM case_assessments WHERE case_id = ?", (case_id,))
+        await self.db.execute("DELETE FROM case_open_questions WHERE case_id = ?", (case_id,))
+
+        if thread_ids:
+            thread_placeholders = ",".join("?" for _ in thread_ids)
+            await self.db.execute(
+                f"UPDATE threads SET merged_into_id = NULL WHERE merged_into_id IN ({thread_placeholders})",
+                thread_ids,
+            )
+            await self.db.execute(
+                f"DELETE FROM threads "
+                f"WHERE id IN ({thread_placeholders}) "
+                f"AND id NOT IN (SELECT thread_id FROM thread_topics) "
+                f"AND id NOT IN (SELECT thread_id FROM thread_cases) "
+                f"AND id NOT IN (SELECT thread_id FROM thread_events)",
+                thread_ids,
+            )
+
+        await self.db.commit()
+
+    async def replace_case_documents(self, case_id: int, documents: list[dict]) -> None:
+        """Replace stored case documents."""
+        await self.db.execute("DELETE FROM case_documents WHERE case_id = ?", (case_id,))
+        for document in documents:
+            await self.db.execute(
+                "INSERT INTO case_documents "
+                "(case_id, document_key, title, url, canonical_url, kind, role, source_class, source_label, "
+                "priority, notes, discovered_via, published_at, quality_label, summary, time_anchors_json, excerpt, "
+                "ingestion_status, ingestion_error) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    case_id,
+                    document["id"],
+                    document["title"],
+                    document["url"],
+                    document["canonical_url"],
+                    document["kind"],
+                    document["role"],
+                    document["source_class"],
+                    document.get("source_label", ""),
+                    document.get("priority", 5),
+                    document.get("notes"),
+                    document.get("discovered_via"),
+                    document.get("published_at"),
+                    document.get("quality_label", "medium"),
+                    document.get("summary", ""),
+                    json.dumps(document.get("time_anchors", [])),
+                    document.get("excerpt"),
+                    document.get("ingestion_status", "ok"),
+                    document.get("ingestion_error"),
+                ),
+            )
+        await self.db.commit()
+
+    async def get_case_documents(self, case_id: int) -> list[dict]:
+        """Load stored case documents."""
+        cursor = await self.db.execute(
+            "SELECT document_key, title, url, canonical_url, kind, role, source_class, source_label, priority, "
+            "notes, discovered_via, published_at, quality_label, summary, time_anchors_json, excerpt, "
+            "ingestion_status, ingestion_error "
+            "FROM case_documents WHERE case_id = ? ORDER BY priority DESC, id ASC",
+            (case_id,),
+        )
+        return [
+            {
+                "id": row[0],
+                "title": row[1],
+                "url": row[2],
+                "canonical_url": row[3],
+                "kind": row[4],
+                "role": row[5],
+                "source_class": row[6],
+                "source_label": row[7],
+                "priority": row[8],
+                "notes": row[9],
+                "discovered_via": row[10],
+                "published_at": row[11],
+                "quality_label": row[12],
+                "summary": row[13],
+                "time_anchors": json.loads(row[14] or "[]"),
+                "excerpt": row[15],
+                "ingestion_status": row[16],
+                "ingestion_error": row[17],
+            }
+            for row in await cursor.fetchall()
+        ]
+
+    async def replace_case_evidence(self, case_id: int, evidence_items: list[dict]) -> None:
+        """Replace stored case evidence."""
+        await self.db.execute("DELETE FROM case_evidence WHERE case_id = ?", (case_id,))
+        for item in evidence_items:
+            await self.db.execute(
+                "INSERT INTO case_evidence "
+                "(case_id, evidence_key, claim, stance, quality_label, summary, document_key, document_title, "
+                "document_url, source_label, source_class, related_hypotheses_json, excerpt, time_anchors_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    case_id,
+                    item["id"],
+                    item["claim"],
+                    item["stance"],
+                    item["quality_label"],
+                    item["summary"],
+                    item["document_id"],
+                    item["document_title"],
+                    item["document_url"],
+                    item.get("source_label", ""),
+                    item.get("source_class", "analysis"),
+                    json.dumps(item.get("related_hypotheses", [])),
+                    item.get("excerpt"),
+                    json.dumps(item.get("time_anchors", [])),
+                ),
+            )
+        await self.db.commit()
+
+    async def get_case_evidence(self, case_id: int) -> list[dict]:
+        """Load stored case evidence."""
+        cursor = await self.db.execute(
+            "SELECT evidence_key, claim, stance, quality_label, summary, document_key, document_title, document_url, "
+            "source_label, source_class, related_hypotheses_json, excerpt, time_anchors_json "
+            "FROM case_evidence WHERE case_id = ? ORDER BY evidence_key ASC",
+            (case_id,),
+        )
+        return [
+            {
+                "id": row[0],
+                "claim": row[1],
+                "stance": row[2],
+                "quality_label": row[3],
+                "summary": row[4],
+                "document_id": row[5],
+                "document_title": row[6],
+                "document_url": row[7],
+                "source_label": row[8],
+                "source_class": row[9],
+                "related_hypotheses": json.loads(row[10] or "[]"),
+                "excerpt": row[11],
+                "time_anchors": json.loads(row[12] or "[]"),
+            }
+            for row in await cursor.fetchall()
+        ]
+
+    async def replace_case_hypotheses(self, case_id: int, hypotheses: list[dict]) -> None:
+        """Replace stored case hypotheses."""
+        await self.db.execute("DELETE FROM case_hypotheses WHERE case_id = ?", (case_id,))
+        for item in hypotheses:
+            await self.db.execute(
+                "INSERT INTO case_hypotheses "
+                "(case_id, hypothesis_key, title, summary, confidence_label, evidence_for_json, evidence_against_json, "
+                "unresolved_gaps_json, what_would_change_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    case_id,
+                    item["id"],
+                    item["title"],
+                    item.get("summary", ""),
+                    item.get("confidence_label", "Contested"),
+                    json.dumps(item.get("evidence_for", [])),
+                    json.dumps(item.get("evidence_against", [])),
+                    json.dumps(item.get("unresolved_gaps", [])),
+                    json.dumps(item.get("what_would_change_my_mind", [])),
+                ),
+            )
+        await self.db.commit()
+
+    async def get_case_hypotheses(self, case_id: int) -> list[dict]:
+        """Load stored case hypotheses."""
+        cursor = await self.db.execute(
+            "SELECT hypothesis_key, title, summary, confidence_label, evidence_for_json, evidence_against_json, "
+            "unresolved_gaps_json, what_would_change_json "
+            "FROM case_hypotheses WHERE case_id = ? ORDER BY id ASC",
+            (case_id,),
+        )
+        return [
+            {
+                "id": row[0],
+                "title": row[1],
+                "summary": row[2],
+                "confidence_label": row[3],
+                "evidence_for": json.loads(row[4] or "[]"),
+                "evidence_against": json.loads(row[5] or "[]"),
+                "unresolved_gaps": json.loads(row[6] or "[]"),
+                "what_would_change_my_mind": json.loads(row[7] or "[]"),
+            }
+            for row in await cursor.fetchall()
+        ]
+
+    async def replace_case_open_questions(self, case_id: int, questions: list[str]) -> None:
+        """Replace stored case open questions."""
+        await self.db.execute("DELETE FROM case_open_questions WHERE case_id = ?", (case_id,))
+        for index, question in enumerate(questions):
+            await self.db.execute(
+                "INSERT INTO case_open_questions (case_id, ordinal, question) VALUES (?, ?, ?)",
+                (case_id, index, question),
+            )
+        await self.db.commit()
+
+    async def get_case_open_questions(self, case_id: int) -> list[str]:
+        """Load stored case open questions."""
+        cursor = await self.db.execute(
+            "SELECT question FROM case_open_questions WHERE case_id = ? ORDER BY ordinal ASC, id ASC",
+            (case_id,),
+        )
+        return [row[0] for row in await cursor.fetchall()]
+
+    async def replace_case_assessments(self, case_id: int, assessments: list[dict]) -> None:
+        """Replace stored case assessments."""
+        await self.db.execute("DELETE FROM case_assessments WHERE case_id = ?", (case_id,))
+        for item in assessments:
+            await self.db.execute(
+                "INSERT INTO case_assessments "
+                "(case_id, assessment_key, target_hypothesis_key, mode, question, probability, confidence, rationale, "
+                "counterarguments_json, evidence_ids_json, evidence_thread_ids_json, signposts_json, metadata_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    case_id,
+                    item["id"],
+                    item["target_hypothesis_id"],
+                    item.get("mode", "posterior"),
+                    item["question"],
+                    item.get("probability", 0.5),
+                    item.get("confidence", "medium"),
+                    item.get("rationale", ""),
+                    json.dumps(item.get("counterarguments", [])),
+                    json.dumps(item.get("evidence_ids", [])),
+                    json.dumps(item.get("evidence_thread_ids", [])),
+                    json.dumps(item.get("signposts", [])),
+                    json.dumps(item.get("metadata", {})),
+                ),
+            )
+        await self.db.commit()
+
+    async def get_case_assessments(self, case_id: int) -> list[dict]:
+        """Load stored case assessments."""
+        cursor = await self.db.execute(
+            "SELECT assessment_key, target_hypothesis_key, mode, question, probability, confidence, rationale, "
+            "counterarguments_json, evidence_ids_json, evidence_thread_ids_json, signposts_json "
+            "FROM case_assessments WHERE case_id = ? ORDER BY id ASC",
+            (case_id,),
+        )
+        return [
+            {
+                "id": row[0],
+                "target_hypothesis_id": row[1],
+                "mode": row[2],
+                "question": row[3],
+                "probability": row[4],
+                "confidence": row[5],
+                "rationale": row[6],
+                "counterarguments": json.loads(row[7] or "[]"),
+                "evidence_ids": json.loads(row[8] or "[]"),
+                "evidence_thread_ids": json.loads(row[9] or "[]"),
+                "signposts": json.loads(row[10] or "[]"),
+            }
+            for row in await cursor.fetchall()
+        ]
+
+    async def get_threads_for_case(self, case_id: int) -> list[dict]:
+        """Return threads linked to a case."""
+        return await self.get_all_threads(case_id=case_id)
+
+    async def get_case_divergence(self, case_id: int) -> list[dict]:
+        """Return divergence rows across all threads in a case."""
+        cursor = await self.db.execute(
+            "SELECT d.thread_id, t.slug, t.headline, d.shared_event, d.source_a, d.framing_a, d.source_b, d.framing_b "
+            "FROM divergence d "
+            "JOIN thread_cases tc ON d.thread_id = tc.thread_id "
+            "JOIN threads t ON d.thread_id = t.id "
+            "WHERE tc.case_id = ? "
+            "ORDER BY t.updated_at DESC, d.id ASC",
+            (case_id,),
+        )
+        return [
+            {
+                "thread_id": row[0],
+                "thread_slug": row[1],
+                "thread_headline": row[2],
+                "shared_event": row[3],
+                "source_a": row[4],
+                "framing_a": row[5],
+                "source_b": row[6],
+                "framing_b": row[7],
+            }
+            for row in await cursor.fetchall()
+        ]
+
+    async def get_case_convergence(self, case_id: int) -> list[dict]:
+        """Return convergence rows across all threads in a case."""
+        cursor = await self.db.execute(
+            "SELECT c.thread_id, t.slug, t.headline, c.fact_text, c.confirmed_by "
+            "FROM convergence c "
+            "JOIN thread_cases tc ON c.thread_id = tc.thread_id "
+            "JOIN threads t ON c.thread_id = t.id "
+            "WHERE tc.case_id = ? "
+            "ORDER BY t.updated_at DESC, c.id ASC",
+            (case_id,),
+        )
+        return [
+            {
+                "thread_id": row[0],
+                "thread_slug": row[1],
+                "thread_headline": row[2],
+                "fact_text": row[3],
+                "confirmed_by": json.loads(row[4] or "[]"),
+            }
+            for row in await cursor.fetchall()
         ]
 
     async def find_entity_by_id(self, entity_id: int) -> dict | None:
@@ -2660,7 +3425,7 @@ class KnowledgeStore:
         """Per-topic aggregate stats for dashboard landing page."""
         cursor = await self.db.execute(
             "SELECT topic_slug, COUNT(*) as event_count, MAX(date) as latest_date "
-            "FROM events GROUP BY topic_slug ORDER BY topic_slug"
+            "FROM events WHERE case_id IS NULL GROUP BY topic_slug ORDER BY topic_slug"
         )
         rows = await cursor.fetchall()
         stats = []
@@ -2676,7 +3441,8 @@ class KnowledgeStore:
             # Count threads for this topic
             thread_cursor = await self.db.execute(
                 "SELECT COUNT(DISTINCT tt.thread_id) FROM thread_topics tt "
-                "WHERE tt.topic_slug = ?",
+                "JOIN threads t ON tt.thread_id = t.id "
+                "WHERE tt.topic_slug = ? AND t.status != 'merged'",
                 (slug,),
             )
             thread_count = (await thread_cursor.fetchone())[0]
@@ -3305,7 +4071,11 @@ class KnowledgeStore:
         cursor = await self.db.execute(
             "SELECT t.id FROM threads t "
             "LEFT JOIN thread_events te ON te.thread_id = t.id "
-            "GROUP BY t.id HAVING COUNT(te.id) = 0"
+            "LEFT JOIN threads merged_children ON merged_children.merged_into_id = t.id "
+            "WHERE t.status != 'merged' "
+            "GROUP BY t.id "
+            "HAVING COUNT(DISTINCT te.event_id) = 0 "
+            "AND COUNT(DISTINCT merged_children.id) = 0"
         )
         rows = await cursor.fetchall()
         thread_ids = [r[0] for r in rows]
@@ -3314,9 +4084,21 @@ class KnowledgeStore:
             return {"purged": len(thread_ids), "thread_ids": thread_ids, "dry_run": dry_run}
 
         placeholders = ",".join("?" for _ in thread_ids)
-        # FK-ordered delete: snapshots first, then threads
+        # FK-ordered delete: child tables first, then threads
         await self.db.execute(
             f"DELETE FROM thread_snapshots WHERE thread_id IN ({placeholders})",
+            thread_ids,
+        )
+        await self.db.execute(
+            f"DELETE FROM convergence WHERE thread_id IN ({placeholders})",
+            thread_ids,
+        )
+        await self.db.execute(
+            f"DELETE FROM divergence WHERE thread_id IN ({placeholders})",
+            thread_ids,
+        )
+        await self.db.execute(
+            f"DELETE FROM thread_topics WHERE thread_id IN ({placeholders})",
             thread_ids,
         )
         await self.db.execute(

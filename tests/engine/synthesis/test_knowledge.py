@@ -8,8 +8,9 @@ from nexus.config.models import TopicConfig
 from nexus.engine.knowledge.events import Event
 from nexus.engine.sources.polling import ContentItem
 from nexus.engine.synthesis.knowledge import (
-    TopicSynthesis, NarrativeThread, synthesize_topic,
+    TopicSynthesis, NarrativeThread, _persist_threads, synthesize_topic,
 )
+from nexus.engine.synthesis.threads import ThreadMatch
 
 
 @pytest.fixture
@@ -106,6 +107,30 @@ async def test_synthesize_topic_fallback_on_bad_json(topic, events, articles):
     # Fallback: one thread per event
     assert len(result.threads) == 2
     assert result.metadata.get("fallback") is True
+
+
+@pytest.mark.asyncio
+async def test_synthesize_topic_tolerates_missing_thread_headline(topic, events, articles):
+    mock_llm = AsyncMock()
+    mock_llm.complete.return_value = json.dumps(
+        {
+            "threads": [
+                {
+                    "event_indices": [0, 1],
+                    "convergence": [],
+                    "divergence": [],
+                    "key_entities": ["US", "Iran"],
+                    "significance": 8,
+                }
+            ]
+        }
+    )
+
+    result = await synthesize_topic(mock_llm, topic, events, articles, [], [])
+
+    assert len(result.threads) == 1
+    assert result.metadata.get("fallback") is None
+    assert result.threads[0].headline == "US and Iran developments"
 
 
 def test_topic_synthesis_model():
@@ -532,8 +557,58 @@ async def test_consolidate_threads_merges_overlapping(tmp_path):
     assert tid_a in keep_ids
     assert tid_b in absorb_ids
 
-    # Verify absorbed thread is resolved
+    # Verify absorbed thread is marked merged
     cursor = await store.db.execute("SELECT status FROM threads WHERE id = ?", (tid_b,))
-    assert (await cursor.fetchone())[0] == "resolved"
+    assert (await cursor.fetchone())[0] == "merged"
+
+    await store.close()
+
+
+async def test_persist_threads_reuses_existing_slug_when_headline_changes(tmp_path):
+    """Event matches should map synthesis threads back to existing slugs."""
+    from nexus.engine.knowledge.store import KnowledgeStore
+    import nexus.engine.synthesis.knowledge as knowledge_module
+
+    store = KnowledgeStore(tmp_path / "test.db")
+    await store.initialize()
+
+    event = Event(
+        date=date(2026, 3, 10),
+        summary="Sanctions announced",
+        entities=["US", "Iran"],
+        sources=[],
+        significance=8,
+    )
+    event_id = (await store.add_events([event], "iran-us"))[0]
+    existing_id = await store.upsert_thread("sanctions-escalation", "Sanctions Escalation", 8, "active")
+    await store.link_thread_topic(existing_id, "iran-us")
+    await store.link_thread_events(existing_id, [event_id])
+
+    synthesis = TopicSynthesis(
+        topic_name="Iran-US Relations",
+        threads=[
+            NarrativeThread(
+                headline="US expands sanctions pressure",
+                events=[event],
+                key_entities=["US", "Iran"],
+                significance=8,
+            ),
+        ],
+    )
+
+    original = knowledge_module.match_events_to_threads
+    knowledge_module.match_events_to_threads = AsyncMock(return_value=[
+        ThreadMatch(event_index=0, thread_slug="sanctions-escalation", is_new_thread=False),
+    ])
+    try:
+        await _persist_threads(store, AsyncMock(), synthesis, [event], "iran-us")
+    finally:
+        knowledge_module.match_events_to_threads = original
+
+    threads = await store.get_all_threads()
+    assert len(threads) == 1
+    assert threads[0]["id"] == existing_id
+    assert threads[0]["slug"] == "sanctions-escalation"
+    assert threads[0]["headline"] == "US expands sanctions pressure"
 
     await store.close()

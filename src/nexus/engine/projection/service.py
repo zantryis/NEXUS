@@ -19,7 +19,7 @@ from nexus.engine.projection.graph import build_graph_snapshot
 from nexus.engine.projection.historical import HistoricalTopicState, is_signal_rich_events
 from nexus.engine.projection.models import CausalLink, ForecastRun, ThreadSnapshot, TopicProjection
 from nexus.engine.synthesis.knowledge import TopicSynthesis, synthesize_topic
-from nexus.engine.synthesis.threads import create_thread_slug
+from nexus.engine.synthesis.threads import check_staleness, create_thread_slug, promote_thread_status
 from nexus.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -124,6 +124,39 @@ async def capture_thread_snapshots(
             thread.snapshot_count = len(history)
 
 
+async def capture_status_transition_snapshots(
+    store: KnowledgeStore,
+    run_date: date,
+    *,
+    exclude_thread_ids: set[int] | None = None,
+) -> int:
+    """Persist snapshots for threads whose canonical lifecycle changed on the run date."""
+    exclude = exclude_thread_ids or set()
+    cursor = await store.db.execute(
+        "SELECT id, status, significance FROM threads "
+        "WHERE status IN ('stale', 'resolved', 'merged') AND updated_at >= ?",
+        (run_date.isoformat(),),
+    )
+    rows = await cursor.fetchall()
+    captured = 0
+    for row in rows:
+        thread_id = row[0]
+        if thread_id in exclude:
+            continue
+        stats = await store.get_thread_event_stats(thread_id, until=run_date)
+        snapshot = ThreadSnapshot(
+            thread_id=thread_id,
+            snapshot_date=run_date,
+            status=row[1],
+            significance=row[2],
+            event_count=stats["event_count"],
+            latest_event_date=stats["latest_event_date"],
+        )
+        await store.upsert_thread_snapshot(snapshot)
+        captured += 1
+    return captured
+
+
 async def rebuild_thread_causal_links(store: KnowledgeStore, synthesis: TopicSynthesis) -> None:
     """Persist simple within-thread causal chains using event order and relation text."""
     for thread in synthesis.threads:
@@ -183,14 +216,41 @@ async def hydrate_synthesis_threads(
 ) -> TopicSynthesis:
     """Attach persisted thread and event identifiers to a stored synthesis snapshot."""
     persisted_threads = await store.get_all_threads_as_of(topic_slug=topic_slug, cutoff=as_of)
+    by_id = {thread["id"]: thread for thread in persisted_threads}
     by_slug = {thread["slug"]: thread for thread in persisted_threads}
     by_headline = {thread["headline"]: thread for thread in persisted_threads}
 
     for thread in synthesis.threads:
-        candidate_slug = thread.slug or create_thread_slug(thread.headline)
-        persisted = by_slug.get(candidate_slug) or by_headline.get(thread.headline)
+        matched_ids: dict[int, int] = {}
+        for event in thread.events:
+            event_date = event.date.isoformat() if hasattr(event.date, "isoformat") else str(event.date)
+            event.event_id = await store.find_event_id(event.summary, event_date, topic_slug)
+            if event.event_id is None:
+                continue
+            linked_threads = await store.get_threads_for_event(event.event_id)
+            for linked in linked_threads:
+                if linked["id"] not in by_id:
+                    continue
+                matched_ids[linked["id"]] = matched_ids.get(linked["id"], 0) + 1
+
+        persisted = None
+        if matched_ids:
+            ranked = sorted(
+                matched_ids.items(),
+                key=lambda item: (
+                    -item[1],
+                    -int(by_id[item[0]].get("significance", 0) or 0),
+                    by_id[item[0]].get("created_at", "") or "",
+                ),
+            )
+            persisted = by_id[ranked[0][0]]
+        else:
+            candidate_slug = thread.slug or create_thread_slug(thread.headline)
+            persisted = by_slug.get(candidate_slug) or by_headline.get(thread.headline)
+
         if not persisted:
             continue
+
         thread.thread_id = persisted["id"]
         thread.slug = persisted["slug"]
         thread.status = persisted["status"]
@@ -200,9 +260,6 @@ async def hydrate_synthesis_threads(
         thread.velocity_7d = persisted.get("velocity_7d")
         thread.acceleration_7d = persisted.get("acceleration_7d")
         thread.significance_trend_7d = persisted.get("significance_trend_7d")
-        for event in thread.events:
-            event_date = event.date.isoformat() if hasattr(event.date, "isoformat") else str(event.date)
-            event.event_id = await store.find_event_id(event.summary, event_date, topic_slug)
     return synthesis
 
 
@@ -338,10 +395,16 @@ async def backfill_thread_snapshots(store: KnowledgeStore) -> dict:
             stats = await store.get_thread_event_stats(thread_id, until=snapshot_date)
             if stats["event_count"] == 0:
                 continue
+            event_dates_to_snapshot = sorted(event.date for event in events if event.date <= snapshot_date)
+            status = promote_thread_status("emerging", event_dates_to_snapshot)
+            if stats["latest_event_date"] is not None:
+                status = check_staleness(status, stats["latest_event_date"], reference_date=snapshot_date)
+            if thread["status"] == "resolved" and thread["updated_at"][:10] <= snapshot_date.isoformat():
+                status = "resolved"
             snapshot = ThreadSnapshot(
                 thread_id=thread_id,
                 snapshot_date=snapshot_date,
-                status=thread["status"],
+                status=status,
                 significance=thread["significance"],
                 event_count=stats["event_count"],
                 latest_event_date=stats["latest_event_date"],
@@ -376,9 +439,15 @@ async def run_projection_pass(
     experiments_dir: Path,
 ) -> list[TopicSynthesis]:
     """Capture deterministic projection substrate, then optionally generate projections."""
+    hydrated_thread_ids: set[int] = set()
     for synthesis in syntheses:
         await capture_thread_snapshots(store, synthesis, run_date)
         await rebuild_thread_causal_links(store, synthesis)
+        hydrated_thread_ids.update(
+            thread.thread_id for thread in synthesis.threads if thread.thread_id is not None
+        )
+
+    await capture_status_transition_snapshots(store, run_date, exclude_thread_ids=hydrated_thread_ids)
 
     all_signals = await store.detect_and_save_cross_topic_signals(reference_date=run_date)
     by_topic: dict[str, list] = {}

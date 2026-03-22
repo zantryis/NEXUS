@@ -1,7 +1,7 @@
 """Tests for KnowledgeStore — SQLite-backed knowledge graph CRUD."""
 
 import pytest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from nexus.engine.knowledge.store import KnowledgeStore
 from nexus.engine.knowledge.events import Event
 from nexus.engine.knowledge.compression import Summary
@@ -343,10 +343,61 @@ async def test_upsert_thread(store):
     assert tid2 == tid
 
 
+async def test_upsert_thread_noop_preserves_updated_at(store):
+    tid = await store.upsert_thread("stable-thread", "Stable Thread", 7, "active")
+    cursor = await store.db.execute(
+        "SELECT created_at, updated_at FROM threads WHERE id = ?",
+        (tid,),
+    )
+    created_at, updated_at = await cursor.fetchone()
+
+    tid2 = await store.upsert_thread("stable-thread", "Stable Thread", 7, "active")
+    assert tid2 == tid
+
+    cursor = await store.db.execute(
+        "SELECT created_at, updated_at FROM threads WHERE id = ?",
+        (tid,),
+    )
+    created_at_2, updated_at_2 = await cursor.fetchone()
+    assert created_at_2 == created_at
+    assert updated_at_2 == updated_at
+
+
+async def test_link_thread_events_updates_updated_at_only_for_new_links(store):
+    tid = await store.upsert_thread("link-thread", "Link Thread", 7, "active")
+    event = _make_event(summary="Linkable event")
+    event_id = (await store.add_events([event], "test"))[0]
+
+    before_cursor = await store.db.execute(
+        "SELECT updated_at FROM threads WHERE id = ?",
+        (tid,),
+    )
+    before = (await before_cursor.fetchone())[0]
+
+    inserted = await store.link_thread_events(tid, [event_id])
+    after_cursor = await store.db.execute(
+        "SELECT updated_at FROM threads WHERE id = ?",
+        (tid,),
+    )
+    after = (await after_cursor.fetchone())[0]
+    assert inserted == 1
+    assert after >= before
+
+    inserted_again = await store.link_thread_events(tid, [event_id])
+    after_again_cursor = await store.db.execute(
+        "SELECT updated_at FROM threads WHERE id = ?",
+        (tid,),
+    )
+    after_again = (await after_again_cursor.fetchone())[0]
+    assert inserted_again == 0
+    assert after_again == after
+
+
 async def test_get_active_threads(store):
     await store.upsert_thread("t1", "Thread 1", status="emerging")
     await store.upsert_thread("t2", "Thread 2", status="active")
     await store.upsert_thread("t3", "Thread 3", status="resolved")
+    await store.upsert_thread("t4", "Thread 4", status="merged")
 
     active = await store.get_active_threads()
     slugs = {t["slug"] for t in active}
@@ -919,6 +970,41 @@ async def test_get_thread(seeded_store):
     assert await s.get_thread("nonexistent") is None
 
 
+async def test_get_thread_prefers_canonical_status_over_latest_snapshot(store):
+    event = _make_event(d="2026-03-01", summary="Historic event")
+    event_id = (await store.add_events([event], "iran-us"))[0]
+    tid = await store.upsert_thread("status-thread", "Status Thread", 8, "active")
+    await store.link_thread_topic(tid, "iran-us")
+    await store.link_thread_events(tid, [event_id])
+    await store.upsert_thread_snapshot(ThreadSnapshot(
+        thread_id=tid,
+        snapshot_date=date(2026, 3, 2),
+        status="active",
+        significance=8,
+        event_count=1,
+        latest_event_date=date(2026, 3, 1),
+    ))
+    await store.db.execute(
+        "UPDATE threads SET status = 'stale', updated_at = ? WHERE id = ?",
+        (datetime.now().isoformat(), tid),
+    )
+    await store.db.commit()
+
+    thread = await store.get_thread("status-thread")
+    assert thread["status"] == "stale"
+
+
+async def test_get_all_threads_hides_merged_by_default(store):
+    active_id = await store.upsert_thread("active-thread", "Active Thread", 8, "active")
+    merged_id = await store.upsert_thread("merged-thread", "Merged Thread", 5, "merged")
+
+    visible = await store.get_all_threads()
+    merged_only = await store.get_all_threads(status="merged")
+
+    assert {thread["id"] for thread in visible} == {active_id}
+    assert {thread["id"] for thread in merged_only} == {merged_id}
+
+
 async def test_get_all_threads_as_of_uses_historical_snapshot(store):
     event = _make_event(d="2026-03-01", summary="Sanctions statement", entities=["Iran"])
     event_id = (await store.add_events([event], "iran-us"))[0]
@@ -1391,7 +1477,7 @@ async def test_merge_threads_forecast_questions_json_updated(store):
 
 
 async def test_merge_threads_idempotent(store):
-    """Merging an already-resolved thread should not crash."""
+    """Merging an already-merged thread should not crash."""
     keep_id, absorb_id, _ = await _setup_two_threads_with_events(store)
 
     # First merge
@@ -1400,11 +1486,11 @@ async def test_merge_threads_idempotent(store):
     # Second merge — should be a no-op, not an error
     await store.merge_threads(keep_id, absorb_id)
 
-    # Absorbed thread still resolved
+    # Absorbed thread still merged
     cursor = await store.db.execute(
         "SELECT status FROM threads WHERE id = ?", (absorb_id,)
     )
-    assert (await cursor.fetchone())[0] == "resolved"
+    assert (await cursor.fetchone())[0] == "merged"
 
 
 async def test_merge_sets_merged_into_id(store):

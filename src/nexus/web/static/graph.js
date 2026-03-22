@@ -17,10 +17,12 @@ function rgb(type) {
 let simulation, svg, g, linkGroup, nodeGroup, allNodes, allLinks;
 let currentData = null;
 let activeTypes = new Set(['person', 'org', 'country', 'concept', 'treaty', 'unknown']);
+let graphDataUrl = '/api/graph-data';
 
 const LABEL_PERCENTILE = 0.35;
 
-function initGraph(focusEntityId) {
+function initGraph(focusEntityId, dataUrl = '/api/graph-data') {
+    graphDataUrl = dataUrl;
     const container = document.querySelector('.graph-canvas-wrapper');
     const width = container.clientWidth;
     const height = Math.max(container.clientHeight, 600);
@@ -85,7 +87,7 @@ function initGraph(focusEntityId) {
 
 function fetchAndRender(focusEntityId) {
     const minCo = document.getElementById('min-co-slider')?.value || 2;
-    fetch(`/api/graph-data?min_events=3&min_co=${minCo}`)
+    fetch(`${graphDataUrl}?min_events=1&min_co=${minCo}`)
         .then(r => r.json())
         .then(data => {
             currentData = data;

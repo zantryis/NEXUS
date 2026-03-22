@@ -39,35 +39,7 @@
     </div>
 </div>
 
-{% macro thread_card(t) %}
-<a href="/threads/{{ t.slug }}" class="thread-card {{ 'thread-card-stale' if t.status == 'stale' }}">
-    <div class="thread-card-header">
-        <span class="thread-headline">{{ t.headline }}</span>
-        <span class="sig-indicator sig-{{ 'high' if t.significance >= 7 else ('med' if t.significance >= 4 else 'low') }}">
-            {{ t.significance }}
-        </span>
-    </div>
-    <div class="thread-card-meta">
-        <span class="status-dot {{ t.status }}"></span>
-        <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
-        {% if t.trajectory_label %}
-        <span class="badge" style="background: var(--nx-blue-soft); color: var(--nx-blue);">{{ t.trajectory_label | replace('_', ' ') }}</span>
-        {% endif %}
-        {% if t.snapshot_count %}
-        <span class="thread-stat">{{ t.snapshot_count }} snapshots</span>
-        {% endif %}
-        {% if t.key_entities %}
-        {% for e in t.key_entities[:4] %}
-        <span class="entity-tag">{{ e }}</span>
-        {% endfor %}
-        {% if t.key_entities | length > 4 %}
-        <span class="entity-tag" style="opacity: 0.5;">+{{ t.key_entities | length - 4 }}</span>
-        {% endif %}
-        {% endif %}
-    </div>
-    <div class="thread-card-time">Updated {{ t.updated_at | timeago }}{% if t.created_at %} &middot; Created {{ t.created_at | timeago }}{% endif %}</div>
-</a>
-{% endmacro %}
+{% from "partials/thread_card.html" import thread_card %}
 
 {% if clusters %}
 <div class="thread-list">

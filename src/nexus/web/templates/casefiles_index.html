@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Casefiles | Nexus{% endblock %}
+{% block nav_casefiles %}active{% endblock %}
+{% block content %}
+<section class="casefiles-hero">
+    <div class="casefiles-hero-copy">
+        <div class="casefiles-kicker">Persistent Incident Intelligence</div>
+        <h1>Casefiles</h1>
+        <p>Built for contested, information-rich incidents where a user wants one coherent account, the competing hypotheses, and the evidence map behind both.</p>
+    </div>
+</section>
+
+<section class="casefiles-grid">
+    {% for item in cases %}
+    <a href="/casefiles/{{ item.case.slug }}" class="casefile-card">
+        <div class="casefile-card-topline">
+            <span class="casefile-card-label">Casefile</span>
+            {% if item.bundle %}
+            <span class="casefile-pill {{ 'casefile-pill-presentable' if item.bundle.review.presentable else 'casefile-pill-draft' }}">
+                {{ 'Presentable' if item.bundle.review.presentable else 'Draft' }}
+            </span>
+            {% else %}
+            <span class="casefile-pill casefile-pill-draft">Unbuilt</span>
+            {% endif %}
+        </div>
+        <h3>{{ item.case.title }}</h3>
+        <p class="casefile-card-question">{{ item.case.question }}</p>
+        {% if item.bundle %}
+        <p class="casefile-card-summary">{{ item.bundle.overview.best_current_account }}</p>
+        <div class="casefile-card-meta">
+            <span>{{ item.bundle.metadata.document_count }} docs</span>
+            <span>{{ item.bundle.metadata.evidence_count }} evidence</span>
+            <span>{{ item.bundle.metadata.last_updated[:10] }}</span>
+        </div>
+        {% else %}
+        <p class="casefile-card-summary">No built bundle yet. Rebuild from the case page.</p>
+        {% endif %}
+    </a>
+    {% else %}
+    <div class="casefile-empty-state">No casefiles are registered under <code>data/casefiles/</code>.</div>
+    {% endfor %}
+</section>
+{% endblock %}
+

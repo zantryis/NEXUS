@@ -617,6 +617,11 @@ async def run_pipeline(
 
         today_date = date.today()
         if syntheses:
+            _progress("thread-lifecycle")
+            stale_count = await store.mark_stale_threads(reference_date=today_date)
+            if stale_count:
+                logger.info(f"Marked {stale_count} stale thread(s)")
+
             _progress("projections")
             await run_projection_pass(
                 store,

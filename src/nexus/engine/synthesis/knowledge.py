@@ -358,6 +358,23 @@ def _build_article_snippets(events: list[Event], articles: list[ContentItem]) ->
     return "\n".join(lines) if lines else ""
 
 
+def _fallback_thread_headline(
+    thread_payload: dict,
+    thread_events: list[Event],
+    *,
+    index: int,
+) -> str:
+    """Generate a usable thread headline when the LLM omits one."""
+    key_entities = [str(item).strip() for item in (thread_payload.get("key_entities") or []) if str(item).strip()]
+    if len(key_entities) >= 2:
+        return f"{key_entities[0]} and {key_entities[1]} developments"
+    if len(key_entities) == 1:
+        return f"{key_entities[0]} developments"
+    if thread_events:
+        return thread_events[0].summary[:80]
+    return f"Thread {index}"
+
+
 async def synthesize_topic(
     llm: LLMClient,
     topic: TopicConfig,
@@ -367,6 +384,7 @@ async def synthesize_topic(
     monthly_summaries: list[Summary],
     store: KnowledgeStore | None = None,
     topic_slug: str | None = None,
+    case_id: int | None = None,
     divergence_instructions: str | None = None,
     divergence_output_qualifier: str | None = None,
 ) -> TopicSynthesis:
@@ -428,13 +446,18 @@ async def synthesize_topic(
             data = {"threads": data}
 
         threads = []
-        for t in data.get("threads", []):
+        for index, t in enumerate(data.get("threads", []), start=1):
+            if not isinstance(t, dict):
+                continue
             # Map event indices to actual events
             indices = t.get("event_indices", [])
+            if not isinstance(indices, list):
+                indices = [indices]
             thread_events = [events[i] for i in indices if i < len(events)]
+            headline = str(t.get("headline") or _fallback_thread_headline(t, thread_events, index=index))
 
             threads.append(NarrativeThread(
-                headline=t["headline"],
+                headline=headline,
                 events=thread_events,
                 convergence=t.get("convergence", []),
                 divergence=t.get("divergence", []),
@@ -482,7 +505,9 @@ async def synthesize_topic(
 
     # Persist threads to store if available
     if store and topic_slug and synthesis.threads:
-        await _persist_threads(store, llm, synthesis, events, topic_slug)
+        await _persist_threads(store, llm, synthesis, events, topic_slug=topic_slug)
+    elif store and case_id is not None and synthesis.threads:
+        await _persist_threads(store, llm, synthesis, events, case_id=case_id)
 
     return synthesis
 
@@ -490,10 +515,11 @@ async def synthesize_topic(
 async def _consolidate_threads(
     store: KnowledgeStore,
     llm: LLMClient,
-    topic_slug: str,
+    topic_slug: str | None = None,
+    case_id: int | None = None,
 ) -> list[tuple[int, int]]:
     """Post-synthesis thread deduplication. Returns merge pairs executed."""
-    active = await store.get_active_threads(topic_slug)
+    active = await store.get_active_threads(topic_slug, case_id=case_id)
     if len(active) < 2:
         return []
 
@@ -501,6 +527,16 @@ async def _consolidate_threads(
     for keep_id, absorb_id in pairs:
         logger.info(f"Auto-merging thread {absorb_id} → {keep_id}")
         await store.merge_threads(keep_id, absorb_id)
+
+    if topic_slug is not None:
+        # Cross-topic consolidation pass remains topic-only.
+        all_active = await store.get_active_threads()
+        if len(all_active) >= 2:
+            cross_pairs = await find_merge_candidates(all_active, llm)
+            for keep_id, absorb_id in cross_pairs:
+                logger.info(f"Cross-topic merge: thread {absorb_id} → {keep_id}")
+                await store.merge_threads(keep_id, absorb_id)
+            pairs.extend(cross_pairs)
 
     return pairs
 
@@ -510,53 +546,76 @@ async def _persist_threads(
     llm: LLMClient,
     synthesis: TopicSynthesis,
     events: list[Event],
-    topic_slug: str,
+    topic_slug: str | None = None,
+    case_id: int | None = None,
 ) -> None:
     """Match synthesis threads to existing persistent threads and save."""
     try:
-        active_threads = await store.get_active_threads(topic_slug)
+        matchable_threads = await store.get_matchable_threads(topic_slug, case_id=case_id)
+        thread_lookup = {thread["slug"]: thread for thread in matchable_threads}
 
         # Match new events to existing threads
         all_new_events = []
-        for thread in synthesis.threads:
-            all_new_events.extend(thread.events)
+        event_to_thread_index: dict[int, int] = {}
+        for thread_index, thread in enumerate(synthesis.threads):
+            for event in thread.events:
+                event_to_thread_index[len(all_new_events)] = thread_index
+                all_new_events.append(event)
 
         if all_new_events:
-            matches = await match_events_to_threads(llm, all_new_events, active_threads)
+            matches = await match_events_to_threads(llm, all_new_events, matchable_threads)
         else:
             matches = []
 
-        # Build a map: thread headline → match info
-        thread_slugs: dict[str, str] = {}  # headline → slug
+        matched_slug_counts: dict[int, dict[str, int]] = {}
         for match in matches:
-            if match.is_new_thread and match.new_headline:
-                thread_slugs[match.new_headline] = match.thread_slug
-            elif match.thread_slug:
-                # Find headline from active_threads
-                for at in active_threads:
-                    if at["slug"] == match.thread_slug:
-                        thread_slugs[at["headline"]] = match.thread_slug
-                        break
+            if match.is_new_thread or not match.thread_slug:
+                continue
+            thread_index = event_to_thread_index.get(match.event_index)
+            if thread_index is None:
+                continue
+            matched_slug_counts.setdefault(thread_index, {})
+            matched_slug_counts[thread_index][match.thread_slug] = (
+                matched_slug_counts[thread_index].get(match.thread_slug, 0) + 1
+            )
+
+        def _select_existing_slug(thread_index: int) -> str | None:
+            counts = matched_slug_counts.get(thread_index, {})
+            if not counts:
+                return None
+
+            ranked = sorted(
+                counts.items(),
+                key=lambda item: (
+                    -item[1],
+                    -int(thread_lookup.get(item[0], {}).get("significance", 0) or 0),
+                    thread_lookup.get(item[0], {}).get("created_at", "") or "",
+                ),
+            )
+            return ranked[0][0]
 
         # Persist each synthesis thread
-        for thread in synthesis.threads:
-            slug = thread_slugs.get(thread.headline) or create_thread_slug(thread.headline)
+        for thread_index, thread in enumerate(synthesis.threads):
+            slug = _select_existing_slug(thread_index) or create_thread_slug(thread.headline)
             event_dates = [e.date for e in thread.events]
             status = promote_thread_status("emerging", event_dates) if event_dates else "emerging"
 
             # Check if this matches an existing thread
-            existing = next((t for t in active_threads if t["slug"] == slug), None)
+            existing = thread_lookup.get(slug)
             if existing:
                 status = promote_thread_status(existing["status"], event_dates)
 
             tid = await store.upsert_thread(slug, thread.headline, thread.significance, status)
-            await store.link_thread_topic(tid, topic_slug)
+            if topic_slug is not None:
+                await store.link_thread_topic(tid, topic_slug)
+            if case_id is not None:
+                await store.link_thread_case(tid, case_id, relevance=max(0.3, min(thread.significance / 10.0, 1.0)))
 
             # Link thread to its events by matching (summary, date, topic_slug)
             event_ids = []
             for ev in thread.events:
                 ev_date = ev.date if isinstance(ev.date, str) else ev.date.isoformat()
-                eid = await store.find_event_id(ev.summary, ev_date, topic_slug)
+                eid = await store.find_event_id(ev.summary, ev_date, topic_slug, case_id=case_id)
                 if eid:
                     event_ids.append(eid)
             if event_ids:
@@ -566,6 +625,14 @@ async def _persist_threads(
             thread.thread_id = tid
             thread.slug = slug
             thread.status = status
+            thread_lookup[slug] = {
+                **(existing or {}),
+                "id": tid,
+                "slug": slug,
+                "headline": thread.headline,
+                "status": status,
+                "significance": thread.significance,
+            }
 
             # Persist convergence/divergence
             await store.clear_thread_analysis(tid)
@@ -590,9 +657,10 @@ async def _persist_threads(
                     )
 
         # Post-synthesis: consolidate overlapping threads
-        merged = await _consolidate_threads(store, llm, topic_slug)
+        merged = await _consolidate_threads(store, llm, topic_slug=topic_slug, case_id=case_id)
         if merged:
-            logger.info(f"Consolidated {len(merged)} overlapping thread pairs for {topic_slug}")
+            scope_label = topic_slug or f"case:{case_id}"
+            logger.info(f"Consolidated {len(merged)} overlapping thread pairs for {scope_label}")
 
     except Exception as e:
         logger.warning(f"Thread persistence failed (non-blocking): {e}")

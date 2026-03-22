@@ -17,9 +17,9 @@ def diff_syntheses(current: TopicSynthesis, previous: TopicSynthesis) -> dict:
             "source_balance_shift": {affiliation: delta, ...},
         }
     """
-    prev_headlines = {_norm(t.headline) for t in previous.threads}
-    prev_thread_map = {_norm(t.headline): t for t in previous.threads}
-    curr_headlines = {_norm(t.headline) for t in current.threads}
+    prev_ids = {_thread_identity(t) for t in previous.threads}
+    prev_thread_map = {_thread_identity(t): t for t in previous.threads}
+    curr_ids = {_thread_identity(t) for t in current.threads}
 
     new_threads = []
     updated_threads = []
@@ -27,8 +27,8 @@ def diff_syntheses(current: TopicSynthesis, previous: TopicSynthesis) -> dict:
     new_divergence = []
 
     for thread in current.threads:
-        key = _norm(thread.headline)
-        if key not in prev_headlines:
+        key = _thread_identity(thread)
+        if key not in prev_ids:
             new_threads.append(thread)
             # All convergence/divergence in new threads is new
             if thread.convergence:
@@ -76,7 +76,7 @@ def diff_syntheses(current: TopicSynthesis, previous: TopicSynthesis) -> dict:
     # Threads in previous but not current
     resolved_threads = [
         prev_thread_map[key].headline
-        for key in prev_headlines - curr_headlines
+        for key in prev_ids - curr_ids
     ]
 
     # Entity diff
@@ -125,6 +125,19 @@ def is_empty_diff(diff: dict) -> bool:
 def _norm(s: str) -> str:
     """Normalize a headline for comparison."""
     return s.strip().lower()
+
+
+def _thread_identity(thread) -> str:
+    """Prefer persisted identity; fall back to normalized headline for legacy snapshots."""
+    thread_id = getattr(thread, "thread_id", None)
+    if thread_id is not None:
+        return f"id:{thread_id}"
+
+    slug = getattr(thread, "slug", None)
+    if slug:
+        return f"slug:{slug}"
+
+    return f"headline:{_norm(thread.headline)}"
 
 
 def _convergence_key(c) -> str:

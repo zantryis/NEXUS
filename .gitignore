@@ -39,6 +39,8 @@ data/benchmarks/
 data/experiments/
 data/fixtures/
 data/demo/
+data/casefiles/
+data/knowledge.db.bak-*
 experiments/
 
 # OAuth tokens

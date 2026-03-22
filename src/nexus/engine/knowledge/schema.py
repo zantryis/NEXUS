@@ -6,7 +6,7 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 19
+CURRENT_VERSION = 22
 
 DDL = """
 -- Schema version tracking
@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS events (
     relation_to_prior TEXT NOT NULL DEFAULT '',
     raw_entities TEXT NOT NULL DEFAULT '[]',
     topic_slug TEXT NOT NULL,
+    case_id INTEGER REFERENCES cases(id),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -65,7 +66,7 @@ CREATE TABLE IF NOT EXISTS threads (
     slug TEXT NOT NULL UNIQUE,
     headline TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'emerging'
-        CHECK(status IN ('emerging','active','stale','resolved')),
+        CHECK(status IN ('emerging','active','stale','resolved','merged')),
     significance INTEGER NOT NULL DEFAULT 5,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -104,6 +105,112 @@ CREATE TABLE IF NOT EXISTS divergence (
     framing_a TEXT NOT NULL,
     source_b TEXT NOT NULL,
     framing_b TEXT NOT NULL
+);
+
+-- Case registry + case-native artifacts
+CREATE TABLE IF NOT EXISTS cases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    question TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK(status IN ('draft','active','archived')),
+    time_bounds_json TEXT NOT NULL DEFAULT '{}',
+    build_defaults_json TEXT NOT NULL DEFAULT '{}',
+    monitoring_enabled INTEGER NOT NULL DEFAULT 1,
+    generated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS case_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES cases(id),
+    document_key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT NOT NULL,
+    canonical_url TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    role TEXT NOT NULL,
+    source_class TEXT NOT NULL,
+    source_label TEXT NOT NULL DEFAULT '',
+    priority INTEGER NOT NULL DEFAULT 5,
+    notes TEXT,
+    discovered_via TEXT,
+    published_at TEXT,
+    quality_label TEXT NOT NULL DEFAULT 'medium',
+    summary TEXT NOT NULL DEFAULT '',
+    time_anchors_json TEXT NOT NULL DEFAULT '[]',
+    excerpt TEXT,
+    ingestion_status TEXT NOT NULL DEFAULT 'ok',
+    ingestion_error TEXT,
+    UNIQUE(case_id, document_key)
+);
+
+CREATE TABLE IF NOT EXISTS case_evidence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES cases(id),
+    evidence_key TEXT NOT NULL,
+    claim TEXT NOT NULL,
+    stance TEXT NOT NULL DEFAULT 'context',
+    quality_label TEXT NOT NULL DEFAULT 'medium',
+    summary TEXT NOT NULL DEFAULT '',
+    document_key TEXT NOT NULL,
+    document_title TEXT NOT NULL DEFAULT '',
+    document_url TEXT NOT NULL DEFAULT '',
+    source_label TEXT NOT NULL DEFAULT '',
+    source_class TEXT NOT NULL DEFAULT 'analysis',
+    related_hypotheses_json TEXT NOT NULL DEFAULT '[]',
+    excerpt TEXT,
+    time_anchors_json TEXT NOT NULL DEFAULT '[]',
+    UNIQUE(case_id, evidence_key)
+);
+
+CREATE TABLE IF NOT EXISTS case_hypotheses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES cases(id),
+    hypothesis_key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    confidence_label TEXT NOT NULL DEFAULT 'Contested',
+    evidence_for_json TEXT NOT NULL DEFAULT '[]',
+    evidence_against_json TEXT NOT NULL DEFAULT '[]',
+    unresolved_gaps_json TEXT NOT NULL DEFAULT '[]',
+    what_would_change_json TEXT NOT NULL DEFAULT '[]',
+    UNIQUE(case_id, hypothesis_key)
+);
+
+CREATE TABLE IF NOT EXISTS case_assessments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES cases(id),
+    assessment_key TEXT NOT NULL,
+    target_hypothesis_key TEXT NOT NULL,
+    mode TEXT NOT NULL DEFAULT 'posterior',
+    question TEXT NOT NULL,
+    probability REAL NOT NULL DEFAULT 0.5,
+    confidence TEXT NOT NULL DEFAULT 'medium',
+    rationale TEXT NOT NULL DEFAULT '',
+    counterarguments_json TEXT NOT NULL DEFAULT '[]',
+    evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+    evidence_thread_ids_json TEXT NOT NULL DEFAULT '[]',
+    signposts_json TEXT NOT NULL DEFAULT '[]',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(case_id, assessment_key)
+);
+
+CREATE TABLE IF NOT EXISTS case_open_questions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES cases(id),
+    ordinal INTEGER NOT NULL DEFAULT 0,
+    question TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS thread_cases (
+    thread_id INTEGER NOT NULL REFERENCES threads(id),
+    case_id INTEGER NOT NULL REFERENCES cases(id),
+    relevance REAL NOT NULL DEFAULT 0.5,
+    role TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (thread_id, case_id)
 );
 
 -- Compressed period summaries
@@ -296,6 +403,7 @@ CREATE INDEX IF NOT EXISTS idx_threads_status ON threads(status);
 CREATE INDEX IF NOT EXISTS idx_thread_events_thread ON thread_events(thread_id);
 CREATE INDEX IF NOT EXISTS idx_thread_events_event ON thread_events(event_id);
 CREATE INDEX IF NOT EXISTS idx_thread_topics_topic ON thread_topics(topic_slug);
+CREATE INDEX IF NOT EXISTS idx_thread_cases_case ON thread_cases(case_id);
 CREATE INDEX IF NOT EXISTS idx_pages_slug ON pages(slug);
 CREATE INDEX IF NOT EXISTS idx_pages_stale ON pages(stale_after);
 CREATE INDEX IF NOT EXISTS idx_summaries_topic ON summaries(topic_slug, period_type);
@@ -312,6 +420,12 @@ CREATE INDEX IF NOT EXISTS idx_forecast_questions_run ON forecast_questions(fore
 CREATE INDEX IF NOT EXISTS idx_forecast_questions_resolution_date ON forecast_questions(resolution_date);
 CREATE INDEX IF NOT EXISTS idx_forecast_resolutions_question ON forecast_resolutions(forecast_question_id);
 CREATE INDEX IF NOT EXISTS idx_forecast_mappings_question ON forecast_mappings(forecast_question_id);
+CREATE INDEX IF NOT EXISTS idx_cases_slug ON cases(slug);
+CREATE INDEX IF NOT EXISTS idx_case_documents_case ON case_documents(case_id);
+CREATE INDEX IF NOT EXISTS idx_case_evidence_case ON case_evidence(case_id);
+CREATE INDEX IF NOT EXISTS idx_case_hypotheses_case ON case_hypotheses(case_id);
+CREATE INDEX IF NOT EXISTS idx_case_assessments_case ON case_assessments(case_id);
+CREATE INDEX IF NOT EXISTS idx_case_open_questions_case ON case_open_questions(case_id, ordinal);
 """
 
 
@@ -709,6 +823,260 @@ MIGRATION_V19 = """
 ALTER TABLE threads ADD COLUMN merged_into_id INTEGER REFERENCES threads(id);
 """
 
+MIGRATION_V20 = """
+-- Thread lifecycle expansion (v20): allow merged tombstones
+PRAGMA foreign_keys=OFF;
+BEGIN TRANSACTION;
+ALTER TABLE threads RENAME TO threads_old;
+CREATE TABLE threads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT NOT NULL UNIQUE,
+    headline TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'emerging'
+        CHECK(status IN ('emerging','active','stale','resolved','merged')),
+    significance INTEGER NOT NULL DEFAULT 5,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    merged_into_id INTEGER REFERENCES threads(id)
+);
+INSERT INTO threads (id, slug, headline, status, significance, created_at, updated_at, merged_into_id)
+    SELECT id, slug, headline, status, significance, created_at, updated_at, merged_into_id
+    FROM threads_old;
+DROP TABLE threads_old;
+COMMIT;
+PRAGMA foreign_keys=ON;
+CREATE INDEX IF NOT EXISTS idx_threads_status ON threads(status);
+"""
+
+MIGRATION_V21 = """
+-- Repair child thread foreign keys after v20 table rebuilds (v21)
+PRAGMA foreign_keys=OFF;
+BEGIN TRANSACTION;
+
+ALTER TABLE thread_events RENAME TO thread_events_old;
+CREATE TABLE thread_events (
+    thread_id INTEGER NOT NULL REFERENCES threads(id),
+    event_id INTEGER NOT NULL REFERENCES events(id),
+    added_date TEXT NOT NULL DEFAULT (date('now')),
+    PRIMARY KEY (thread_id, event_id)
+);
+INSERT INTO thread_events (thread_id, event_id, added_date)
+    SELECT thread_id, event_id, added_date
+    FROM thread_events_old;
+DROP TABLE thread_events_old;
+
+ALTER TABLE thread_topics RENAME TO thread_topics_old;
+CREATE TABLE thread_topics (
+    thread_id INTEGER NOT NULL REFERENCES threads(id),
+    topic_slug TEXT NOT NULL,
+    PRIMARY KEY (thread_id, topic_slug)
+);
+INSERT INTO thread_topics (thread_id, topic_slug)
+    SELECT thread_id, topic_slug
+    FROM thread_topics_old;
+DROP TABLE thread_topics_old;
+
+ALTER TABLE convergence RENAME TO convergence_old;
+CREATE TABLE convergence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL REFERENCES threads(id),
+    fact_text TEXT NOT NULL,
+    confirmed_by TEXT NOT NULL DEFAULT '[]'
+);
+INSERT INTO convergence (id, thread_id, fact_text, confirmed_by)
+    SELECT id, thread_id, fact_text, confirmed_by
+    FROM convergence_old;
+DROP TABLE convergence_old;
+
+ALTER TABLE divergence RENAME TO divergence_old;
+CREATE TABLE divergence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL REFERENCES threads(id),
+    shared_event TEXT NOT NULL,
+    source_a TEXT NOT NULL,
+    framing_a TEXT NOT NULL,
+    source_b TEXT NOT NULL,
+    framing_b TEXT NOT NULL
+);
+INSERT INTO divergence (id, thread_id, shared_event, source_a, framing_a, source_b, framing_b)
+    SELECT id, thread_id, shared_event, source_a, framing_a, source_b, framing_b
+    FROM divergence_old;
+DROP TABLE divergence_old;
+
+ALTER TABLE thread_snapshots RENAME TO thread_snapshots_old;
+CREATE TABLE thread_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL REFERENCES threads(id),
+    snapshot_date TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'emerging',
+    significance INTEGER NOT NULL DEFAULT 5,
+    event_count INTEGER NOT NULL DEFAULT 0,
+    latest_event_date TEXT,
+    velocity_7d REAL NOT NULL DEFAULT 0.0,
+    acceleration_7d REAL NOT NULL DEFAULT 0.0,
+    significance_trend_7d REAL NOT NULL DEFAULT 0.0,
+    momentum_score REAL NOT NULL DEFAULT 0.0,
+    trajectory_label TEXT NOT NULL DEFAULT 'steady',
+    UNIQUE(thread_id, snapshot_date)
+);
+INSERT INTO thread_snapshots (
+    id,
+    thread_id,
+    snapshot_date,
+    status,
+    significance,
+    event_count,
+    latest_event_date,
+    velocity_7d,
+    acceleration_7d,
+    significance_trend_7d,
+    momentum_score,
+    trajectory_label
+)
+    SELECT
+        id,
+        thread_id,
+        snapshot_date,
+        status,
+        significance,
+        event_count,
+        latest_event_date,
+        velocity_7d,
+        acceleration_7d,
+        significance_trend_7d,
+        momentum_score,
+        trajectory_label
+    FROM thread_snapshots_old;
+DROP TABLE thread_snapshots_old;
+
+COMMIT;
+PRAGMA foreign_keys=ON;
+
+CREATE INDEX IF NOT EXISTS idx_thread_events_thread ON thread_events(thread_id);
+CREATE INDEX IF NOT EXISTS idx_thread_events_event ON thread_events(event_id);
+CREATE INDEX IF NOT EXISTS idx_thread_topics_topic ON thread_topics(topic_slug);
+CREATE INDEX IF NOT EXISTS idx_thread_snapshots_thread_date ON thread_snapshots(thread_id, snapshot_date);
+"""
+
+MIGRATION_V22 = """
+-- First-class case scope (v22)
+CREATE TABLE IF NOT EXISTS cases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    question TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK(status IN ('draft','active','archived')),
+    time_bounds_json TEXT NOT NULL DEFAULT '{}',
+    build_defaults_json TEXT NOT NULL DEFAULT '{}',
+    monitoring_enabled INTEGER NOT NULL DEFAULT 1,
+    generated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+ALTER TABLE events ADD COLUMN case_id INTEGER REFERENCES cases(id);
+
+CREATE TABLE IF NOT EXISTS case_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES cases(id),
+    document_key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT NOT NULL,
+    canonical_url TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    role TEXT NOT NULL,
+    source_class TEXT NOT NULL,
+    source_label TEXT NOT NULL DEFAULT '',
+    priority INTEGER NOT NULL DEFAULT 5,
+    notes TEXT,
+    discovered_via TEXT,
+    published_at TEXT,
+    quality_label TEXT NOT NULL DEFAULT 'medium',
+    summary TEXT NOT NULL DEFAULT '',
+    time_anchors_json TEXT NOT NULL DEFAULT '[]',
+    excerpt TEXT,
+    ingestion_status TEXT NOT NULL DEFAULT 'ok',
+    ingestion_error TEXT,
+    UNIQUE(case_id, document_key)
+);
+
+CREATE TABLE IF NOT EXISTS case_evidence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES cases(id),
+    evidence_key TEXT NOT NULL,
+    claim TEXT NOT NULL,
+    stance TEXT NOT NULL DEFAULT 'context',
+    quality_label TEXT NOT NULL DEFAULT 'medium',
+    summary TEXT NOT NULL DEFAULT '',
+    document_key TEXT NOT NULL,
+    document_title TEXT NOT NULL DEFAULT '',
+    document_url TEXT NOT NULL DEFAULT '',
+    source_label TEXT NOT NULL DEFAULT '',
+    source_class TEXT NOT NULL DEFAULT 'analysis',
+    related_hypotheses_json TEXT NOT NULL DEFAULT '[]',
+    excerpt TEXT,
+    time_anchors_json TEXT NOT NULL DEFAULT '[]',
+    UNIQUE(case_id, evidence_key)
+);
+
+CREATE TABLE IF NOT EXISTS case_hypotheses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES cases(id),
+    hypothesis_key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    confidence_label TEXT NOT NULL DEFAULT 'Contested',
+    evidence_for_json TEXT NOT NULL DEFAULT '[]',
+    evidence_against_json TEXT NOT NULL DEFAULT '[]',
+    unresolved_gaps_json TEXT NOT NULL DEFAULT '[]',
+    what_would_change_json TEXT NOT NULL DEFAULT '[]',
+    UNIQUE(case_id, hypothesis_key)
+);
+
+CREATE TABLE IF NOT EXISTS case_assessments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES cases(id),
+    assessment_key TEXT NOT NULL,
+    target_hypothesis_key TEXT NOT NULL,
+    mode TEXT NOT NULL DEFAULT 'posterior',
+    question TEXT NOT NULL,
+    probability REAL NOT NULL DEFAULT 0.5,
+    confidence TEXT NOT NULL DEFAULT 'medium',
+    rationale TEXT NOT NULL DEFAULT '',
+    counterarguments_json TEXT NOT NULL DEFAULT '[]',
+    evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+    evidence_thread_ids_json TEXT NOT NULL DEFAULT '[]',
+    signposts_json TEXT NOT NULL DEFAULT '[]',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(case_id, assessment_key)
+);
+
+CREATE TABLE IF NOT EXISTS case_open_questions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES cases(id),
+    ordinal INTEGER NOT NULL DEFAULT 0,
+    question TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS thread_cases (
+    thread_id INTEGER NOT NULL REFERENCES threads(id),
+    case_id INTEGER NOT NULL REFERENCES cases(id),
+    relevance REAL NOT NULL DEFAULT 0.5,
+    role TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (thread_id, case_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_case_date ON events(case_id, date);
+CREATE INDEX IF NOT EXISTS idx_cases_slug ON cases(slug);
+CREATE INDEX IF NOT EXISTS idx_case_documents_case ON case_documents(case_id);
+CREATE INDEX IF NOT EXISTS idx_case_evidence_case ON case_evidence(case_id);
+CREATE INDEX IF NOT EXISTS idx_case_hypotheses_case ON case_hypotheses(case_id);
+CREATE INDEX IF NOT EXISTS idx_case_assessments_case ON case_assessments(case_id);
+CREATE INDEX IF NOT EXISTS idx_case_open_questions_case ON case_open_questions(case_id, ordinal);
+CREATE INDEX IF NOT EXISTS idx_thread_cases_case ON thread_cases(case_id);
+"""
+
 MIGRATION_V18 = """
 -- Forecast repricing: probability history tracking (v18)
 ALTER TABLE forecast_questions ADD COLUMN updated_at TEXT;
@@ -818,6 +1186,22 @@ async def initialize_schema(db: aiosqlite.Connection) -> None:
         await db.executescript(MIGRATION_V19)
         logger.info("Applied migration v19: thread merge audit trail")
 
+    if current < 20 and not await _thread_status_supports_merged(db):
+        await db.executescript(MIGRATION_V20)
+        logger.info("Applied migration v20: thread merged status support")
+
+    if current < 21 and await _thread_children_reference_legacy_threads(db):
+        await db.executescript(MIGRATION_V21)
+        logger.info("Applied migration v21: repaired thread child foreign keys")
+
+    if current < 22 and (
+        not await _has_table(db, "cases")
+        or not await _has_column(db, "events", "case_id")
+        or not await _has_table(db, "thread_cases")
+    ):
+        await db.executescript(MIGRATION_V22)
+        logger.info("Applied migration v22: first-class case scope")
+
     if current < CURRENT_VERSION:
         await db.execute(
             "INSERT OR IGNORE INTO schema_version (version) VALUES (?)",
@@ -831,6 +1215,10 @@ async def initialize_schema(db: aiosqlite.Connection) -> None:
             await db.execute(
                 "CREATE INDEX IF NOT EXISTS idx_forecast_mappings_key ON forecast_mappings(forecast_key)"
             )
+        if await _has_column(db, "events", "case_id"):
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_case_date ON events(case_id, date)"
+            )
         await db.commit()
         logger.info(f"Knowledge schema initialized at version {CURRENT_VERSION}")
     else:
@@ -841,6 +1229,10 @@ async def initialize_schema(db: aiosqlite.Connection) -> None:
         if await _has_column(db, "forecast_mappings", "forecast_key"):
             await db.execute(
                 "CREATE INDEX IF NOT EXISTS idx_forecast_mappings_key ON forecast_mappings(forecast_key)"
+            )
+        if await _has_column(db, "events", "case_id"):
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_case_date ON events(case_id, date)"
             )
         await db.commit()
         logger.debug(f"Knowledge schema already at version {current}")
@@ -864,3 +1256,29 @@ async def _has_table(db: aiosqlite.Connection, table_name: str) -> bool:
 async def _has_column(db: aiosqlite.Connection, table_name: str, column_name: str) -> bool:
     cursor = await db.execute(f"PRAGMA table_info({table_name})")
     return any(row[1] == column_name for row in await cursor.fetchall())
+
+
+async def _thread_status_supports_merged(db: aiosqlite.Connection) -> bool:
+    cursor = await db.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'threads'"
+    )
+    row = await cursor.fetchone()
+    if not row or not row[0]:
+        return False
+    return "'merged'" in row[0] or '"merged"' in row[0]
+
+
+async def _thread_children_reference_legacy_threads(db: aiosqlite.Connection) -> bool:
+    child_tables = (
+        "thread_events",
+        "thread_topics",
+        "convergence",
+        "divergence",
+        "thread_snapshots",
+    )
+    for table_name in child_tables:
+        cursor = await db.execute(f"PRAGMA foreign_key_list({table_name})")
+        for row in await cursor.fetchall():
+            if row[2] == "threads_old":
+                return True
+    return False

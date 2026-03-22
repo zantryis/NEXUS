@@ -1,0 +1,593 @@
+{% extends "base.html" %}
+{% block title %}{{ case.title }} | Nexus{% endblock %}
+{% block nav_casefiles %}active{% endblock %}
+{% block content %}
+<div class="casefile-shell">
+    <section class="casefile-header">
+        <div>
+            <div class="casefiles-kicker">Casefile</div>
+            <h1>{{ case.title }}</h1>
+            <p class="casefile-question">{{ case.question }}</p>
+            <div class="casefile-header-meta">
+                <span>{{ case.slug }}</span>
+                {% if bundle %}
+                <span>{{ bundle.metadata.document_count }} docs</span>
+                <span>{{ bundle.metadata.evidence_count }} evidence</span>
+                <span>{{ bundle.graph.node_count }} graph nodes</span>
+                <span>{{ bundle.metadata.last_updated[:10] }}</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="casefile-actions">
+            <button
+                class="casefile-rebuild-btn"
+                hx-post="/api/casefiles/{{ case.slug }}/rebuild"
+                hx-target="#casefile-build-status"
+                hx-swap="outerHTML"
+            >
+                Rebuild
+            </button>
+            <div
+                id="casefile-build-status"
+                class="pipeline-controls-status {% if build_status and build_status.status == 'running' %}status-running{% endif %}"
+                {% if build_status and build_status.status == 'running' %}
+                hx-get="/api/casefiles/{{ case.slug }}/status"
+                hx-trigger="every 3s"
+                hx-swap="outerHTML"
+                {% endif %}
+            >
+                {% if build_status %}
+                    {% if build_status.status == "running" %}
+                    <div class="pipeline-spinner"></div> {{ build_status.label }}
+                    {% elif build_status.status == "failed" %}
+                    {{ build_status.label }}{% if build_status.error %}: {{ build_status.error }}{% endif %}
+                    {% else %}
+                    {{ build_status.label }}
+                    {% endif %}
+                {% elif bundle %}
+                Last built {{ bundle.metadata.last_updated }}
+                {% else %}
+                No built casefile yet
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    {% if bundle %}
+    <nav class="casefile-tabs">
+        <button class="casefile-tab {{ 'active' if initial_tab == 'overview' else '' }}" type="button" data-tab="overview">Overview</button>
+        <button class="casefile-tab {{ 'active' if initial_tab == 'threads' else '' }}" type="button" data-tab="threads">Threads</button>
+        <button class="casefile-tab {{ 'active' if initial_tab == 'graph' else '' }}" type="button" data-tab="graph">Graph</button>
+        <button class="casefile-tab {{ 'active' if initial_tab == 'divergence' else '' }}" type="button" data-tab="divergence">Divergence</button>
+        <button class="casefile-tab {{ 'active' if initial_tab == 'odds' else '' }}" type="button" data-tab="odds">Odds</button>
+        <button class="casefile-tab {{ 'active' if initial_tab == 'updates' else '' }}" type="button" data-tab="updates">Updates</button>
+        <button class="casefile-tab {{ 'active' if initial_tab == 'ask' else '' }}" type="button" data-tab="ask">Ask</button>
+    </nav>
+
+    <div class="casefile-tab-panel {{ 'active' if initial_tab == 'overview' else '' }}" data-tab-panel="overview">
+        <section class="casefile-reading-levels">
+            <div class="casefile-section-head">
+                <h2>Best Current Account</h2>
+                <div class="casefile-level-toggles">
+                    {% for level in ["short", "standard", "deep"] %}
+                    <button
+                        class="casefile-level-btn {{ 'active' if level == 'standard' else '' }}"
+                        data-reading-level="{{ level }}"
+                        type="button"
+                    >
+                        {{ level.title() }}
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+            {% if not bundle.review.presentable %}
+            <div class="casefile-warning-banner">
+                <strong>Draft / Not Ready.</strong>
+                {% if bundle.review.blocker_reasons %}
+                {{ bundle.review.blocker_reasons | join(" ") }}
+                {% else %}
+                The casefile still needs stronger evidence separation before presentation.
+                {% endif %}
+            </div>
+            {% endif %}
+            <div class="casefile-overview-card">
+                <div class="casefile-overview-topline">
+                    <span class="casefile-pill {{ 'casefile-pill-presentable' if bundle.review.presentable else 'casefile-pill-draft' }}">
+                        {{ 'Presentable' if bundle.review.presentable else 'Draft' }}
+                    </span>
+                    <span class="casefile-confidence">{{ bundle.overview.confidence_label }}</span>
+                </div>
+                <p class="casefile-best-account">{{ bundle.overview.best_current_account }}</p>
+                {% for level in ["short", "standard", "deep"] %}
+                <div class="casefile-reading-copy {{ 'active' if level == 'standard' else '' }}" data-reading-copy="{{ level }}">
+                    {{ bundle.overview.reading_levels.get(level, bundle.overview.best_current_account) }}
+                </div>
+                {% endfor %}
+                {% if bundle.overview.key_judgments %}
+                <div class="casefile-chip-list">
+                    {% for item in bundle.overview.key_judgments %}
+                    <span class="casefile-chip">{{ item }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="casefile-section">
+            <div class="casefile-section-head">
+                <h2>Ranked Hypotheses</h2>
+            </div>
+            <div class="casefile-hypothesis-grid">
+                {% for item in bundle.hypotheses %}
+                <article class="casefile-hypothesis-card">
+                    <div class="casefile-hypothesis-topline">
+                        <span class="casefile-hypothesis-id">{{ item.id }}</span>
+                        <span class="casefile-confidence">{{ item.confidence_label }}</span>
+                    </div>
+                    <h3>{{ item.title }}</h3>
+                    <p>{{ item.summary }}</p>
+                    <div class="casefile-subsection">
+                        <h4>Evidence For</h4>
+                        <ul class="casefile-list">
+                            {% for eid in item.evidence_for %}
+                            <li><a href="#evidence-{{ eid|lower }}">{{ eid }}</a>{% if evidence_index.get(eid) %}: {{ evidence_index[eid].claim }}{% endif %}</li>
+                            {% else %}
+                            <li>No strong supporting evidence mapped yet.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <div class="casefile-subsection">
+                        <h4>Evidence Against</h4>
+                        <ul class="casefile-list">
+                            {% for eid in item.evidence_against %}
+                            <li><a href="#evidence-{{ eid|lower }}">{{ eid }}</a>{% if evidence_index.get(eid) %}: {{ evidence_index[eid].claim }}{% endif %}</li>
+                            {% else %}
+                            <li>No strong counterevidence mapped yet.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <div class="casefile-subsection">
+                        <h4>Unresolved Gaps</h4>
+                        <ul class="casefile-list">
+                            {% for gap in item.unresolved_gaps %}
+                            <li>{{ gap }}</li>
+                            {% else %}
+                            <li>No major gap notes captured yet.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <div class="casefile-subsection">
+                        <h4>What Would Change My Mind</h4>
+                        <ul class="casefile-list">
+                            {% for text in item.what_would_change_my_mind %}
+                            <li>{{ text }}</li>
+                            {% else %}
+                            <li>No explicit falsifier listed yet.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="casefile-section">
+            <div class="casefile-section-head">
+                <h2>Timeline</h2>
+            </div>
+            <div class="casefile-timeline">
+                {% for item in bundle.timeline %}
+                <article class="casefile-timeline-item">
+                    <div class="casefile-timeline-date">{{ item.date }}</div>
+                    <div class="casefile-timeline-body">
+                        <h3>{{ item.label }}</h3>
+                        <p>{{ item.description }}</p>
+                        {% if item.evidence_ids %}
+                        <div class="casefile-inline-links">
+                            {% for eid in item.evidence_ids %}
+                            <a href="#evidence-{{ eid|lower }}">{{ eid }}</a>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="casefile-section">
+            <div class="casefile-section-head">
+                <h2>Evidence Ledger</h2>
+            </div>
+            <div class="casefile-evidence-list">
+                {% for item in bundle.evidence %}
+                <article class="casefile-evidence-card" id="evidence-{{ item.id|lower }}">
+                    <div class="casefile-evidence-topline">
+                        <span class="casefile-hypothesis-id">{{ item.id }}</span>
+                        <span class="casefile-pill">{{ item.stance }}</span>
+                        <span class="casefile-pill">{{ item.source_class }}</span>
+                        <span class="casefile-pill">{{ item.quality_label }}</span>
+                    </div>
+                    <h3>{{ item.claim }}</h3>
+                    <p>{{ item.summary }}</p>
+                    {% if item.excerpt %}
+                    <blockquote class="casefile-quote">{{ item.excerpt }}</blockquote>
+                    {% endif %}
+                    <div class="casefile-card-meta">
+                        <a href="{{ item.document_url }}" target="_blank" rel="noopener noreferrer">{{ item.document_title }}</a>
+                        <span>{{ item.source_label }}</span>
+                        {% if item.related_hypotheses %}
+                        <span>{{ item.related_hypotheses | join(", ") }}</span>
+                        {% endif %}
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="casefile-section">
+            <div class="casefile-section-head">
+                <h2>Open Questions</h2>
+            </div>
+            <ul class="casefile-list">
+                {% for item in bundle.open_questions %}
+                <li>{{ item }}</li>
+                {% else %}
+                <li>No open questions recorded yet.</li>
+                {% endfor %}
+            </ul>
+        </section>
+
+        <section class="casefile-section">
+            <div class="casefile-section-head">
+                <h2>Entities &amp; Relationships</h2>
+            </div>
+            <div class="casefile-entity-grid">
+                {% for item in bundle.entities %}
+                <article class="casefile-entity-card">
+                    <div class="casefile-entity-name">{{ item.name }}</div>
+                    <div class="casefile-card-meta">
+                        <span>{{ item.type }}</span>
+                        {% if item.description %}
+                        <span>{{ item.description }}</span>
+                        {% endif %}
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+            {% if bundle.relations %}
+            <div class="casefile-subsection">
+                <h3>Relationships</h3>
+                <ul class="casefile-list">
+                    {% for item in bundle.relations %}
+                    <li>
+                        {{ entity_index.get(item.source_entity_id).name if entity_index.get(item.source_entity_id) else item.source_entity_id }}
+                        → {{ item.relationship }} →
+                        {{ entity_index.get(item.target_entity_id).name if entity_index.get(item.target_entity_id) else item.target_entity_id }}
+                        {% if item.evidence_ids %}
+                        ({{ item.evidence_ids | join(", ") }})
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </section>
+
+        <section class="casefile-section">
+            <div class="casefile-section-head">
+                <h2>Readiness Review</h2>
+            </div>
+            <div class="casefile-review-grid">
+                <div class="casefile-review-card">
+                    <h3>Scores</h3>
+                    <ul class="casefile-list">
+                        <li>Coherence: {{ bundle.review.scores.coherence }}/5</li>
+                        <li>Evidentiary grounding: {{ bundle.review.scores.evidentiary_grounding }}/5</li>
+                        <li>Source diversity: {{ bundle.review.scores.source_diversity }}/5</li>
+                        <li>Hypothesis separation: {{ bundle.review.scores.separation_of_hypotheses }}/5</li>
+                        <li>Uncertainty honesty: {{ bundle.review.scores.uncertainty_honesty }}/5</li>
+                        <li>Non-obvious synthesis: {{ bundle.review.scores.non_obvious_synthesis }}/5</li>
+                    </ul>
+                </div>
+                <div class="casefile-review-card">
+                    <h3>Flags</h3>
+                    <ul class="casefile-list">
+                        {% for item in bundle.review.flags %}
+                        <li>{{ item }}</li>
+                        {% else %}
+                        <li>No review flags.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="casefile-review-card">
+                    <h3>Blockers</h3>
+                    <ul class="casefile-list">
+                        {% for item in bundle.review.blocker_reasons %}
+                        <li>{{ item }}</li>
+                        {% else %}
+                        <li>No readiness blockers.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div class="casefile-tab-panel {{ 'active' if initial_tab == 'threads' else '' }}" data-tab-panel="threads">
+        {% from "partials/thread_card.html" import thread_card %}
+        <section class="casefile-section">
+            <div class="casefile-section-head">
+                <h2>Threads</h2>
+                <span class="casefile-confidence">{{ bundle.threads | length }} tracked arcs</span>
+            </div>
+            <div class="thread-list">
+                {% for item in bundle.threads %}
+                {{ thread_card(item, link_prefix="/casefiles/" ~ case.slug ~ "/threads/", show_index=true, index=loop.index, show_case_stats=true) }}
+                {% else %}
+                <div class="casefile-empty-state">No case threads persisted yet.</div>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+
+    <div class="casefile-tab-panel {{ 'active' if initial_tab == 'graph' else '' }}" data-tab-panel="graph">
+        <section class="casefile-section">
+            <div class="casefile-section-head">
+                <h2>Graph</h2>
+                <span class="casefile-confidence">{{ bundle.graph.node_count }} nodes / {{ bundle.graph.edge_count }} edges</span>
+            </div>
+            {% if bundle.graph.node_count %}
+            <div class="graph-page casefile-graph-page">
+                <div class="graph-hud">
+                    <div class="graph-hud-left">
+                        <span class="graph-hud-title">&#9670; CASE GRAPH</span>
+                        <span class="graph-hud-stat" id="node-count">{{ bundle.graph.node_count }}</span>
+                        <span class="graph-hud-label">entities</span>
+                        <span class="graph-hud-stat" id="link-count">{{ bundle.graph.edge_count }}</span>
+                        <span class="graph-hud-label">connections</span>
+                    </div>
+                    <div class="graph-hud-right">
+                        <div class="graph-hud-filters">
+                            <label class="graph-type-pill person-pill">
+                                <input type="checkbox" class="type-toggle" value="person" checked>
+                                <span>Person</span>
+                            </label>
+                            <label class="graph-type-pill org-pill">
+                                <input type="checkbox" class="type-toggle" value="org" checked>
+                                <span>Org</span>
+                            </label>
+                            <label class="graph-type-pill country-pill">
+                                <input type="checkbox" class="type-toggle" value="country" checked>
+                                <span>Country</span>
+                            </label>
+                            <label class="graph-type-pill concept-pill">
+                                <input type="checkbox" class="type-toggle" value="concept" checked>
+                                <span>Concept</span>
+                            </label>
+                        </div>
+                        <div class="graph-hud-slider">
+                            <span class="graph-hud-label">Density</span>
+                            <input type="range" id="min-co-slider" min="1" max="10" value="1">
+                            <span class="graph-hud-stat" id="min-co-value">1</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="graph-canvas-wrapper casefile-graph-canvas">
+                    <svg id="graph-svg"></svg>
+                    <div class="graph-grid-overlay"></div>
+                    <div id="entity-panel" class="entity-panel hidden">
+                        <button class="panel-close" onclick="document.getElementById('entity-panel').classList.add('hidden')">&times;</button>
+                        <div id="panel-content"></div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="casefile-empty-state">No graph slice has been materialized for this case yet.</div>
+            {% endif %}
+        </section>
+    </div>
+
+    <div class="casefile-tab-panel {{ 'active' if initial_tab == 'divergence' else '' }}" data-tab-panel="divergence">
+        <section class="casefile-section">
+            <div class="casefile-section-head">
+                <h2>Divergence</h2>
+                <span class="casefile-confidence">{{ bundle.divergence | length }} tracked disagreements</span>
+            </div>
+            {% if bundle.divergence %}
+            <div class="analysis-card divergence">
+                <div class="analysis-card-header">Where Sources Disagree</div>
+                <div class="analysis-card-body">
+                    {% for item in bundle.divergence %}
+                    <div class="analysis-item">
+                        <div class="analysis-fact">{{ item.shared_event }}</div>
+                        <div class="analysis-sources">
+                            <a href="/casefiles/{{ case.slug }}/threads/{{ item.thread_slug }}" class="source-badge">{{ item.thread_headline }}</a>
+                        </div>
+                        <div class="divergence-vs">
+                            <div class="divergence-side">
+                                <div class="divergence-source">{{ item.source_a }}</div>
+                                <div class="divergence-framing">{{ item.framing_a }}</div>
+                            </div>
+                            <div class="divergence-side">
+                                <div class="divergence-source">{{ item.source_b }}</div>
+                                <div class="divergence-framing">{{ item.framing_b }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="casefile-empty-state">No explicit divergence records persisted yet.</div>
+            {% endif %}
+        </section>
+    </div>
+
+    <div class="casefile-tab-panel {{ 'active' if initial_tab == 'odds' else '' }}" data-tab-panel="odds">
+        <section class="casefile-section">
+            <div class="casefile-section-head">
+                <h2>Odds &amp; Assessments</h2>
+            </div>
+            <div class="casefile-review-grid">
+                {% for item in bundle.assessments %}
+                <article class="casefile-review-card">
+                    <div class="casefile-hypothesis-topline">
+                        <span class="casefile-pill">{{ item.mode }}</span>
+                        <span class="casefile-confidence">{{ (item.probability * 100) | round | int }}%</span>
+                    </div>
+                    <h3>{{ item.question }}</h3>
+                    <p>{{ item.rationale }}</p>
+                    {% if item.evidence_ids %}
+                    <div class="casefile-inline-links">
+                        {% for eid in item.evidence_ids %}
+                        <a href="#evidence-{{ eid|lower }}">{{ eid }}</a>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if item.counterarguments %}
+                    <div class="casefile-subsection">
+                        <h4>Counterarguments</h4>
+                        <ul class="casefile-list">
+                            {% for text in item.counterarguments %}
+                            <li>{{ text }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </article>
+                {% else %}
+                <div class="casefile-empty-state">No assessments persisted yet.</div>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+
+    <div class="casefile-tab-panel {{ 'active' if initial_tab == 'updates' else '' }}" data-tab-panel="updates">
+        <section class="casefile-section">
+            <div class="casefile-section-head">
+                <h2>Updates</h2>
+            </div>
+            <ul class="casefile-list">
+                {% for item in bundle.recent_changes %}
+                <li>{{ item }}</li>
+                {% else %}
+                <li>No case updates have been summarized yet.</li>
+                {% endfor %}
+            </ul>
+        </section>
+    </div>
+
+    <div class="casefile-tab-panel {{ 'active' if initial_tab == 'ask' else '' }}" data-tab-panel="ask">
+        <section class="casefile-section">
+            <div class="casefile-section-head">
+                <h2>Ask This Case</h2>
+            </div>
+            <form class="casefile-chat-form" id="casefile-chat-form">
+                <textarea id="casefile-question" placeholder="Ask a grounded question about this casefile."></textarea>
+                <button type="submit" class="casefile-rebuild-btn">Ask</button>
+            </form>
+            <div class="casefile-chat-result" id="casefile-chat-result"></div>
+        </section>
+    </div>
+    {% else %}
+    <section class="casefile-empty-state">
+        No built casefile bundle yet. Use <strong>Rebuild</strong> to generate one from this case definition.
+    </section>
+    {% if seeds %}
+    <section class="casefile-section">
+        <div class="casefile-section-head">
+            <h2>Seed Sources</h2>
+        </div>
+        <ul class="casefile-list">
+            {% for item in seeds %}
+            <li><a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.label }}</a> ({{ item.role }}, {{ item.source_class }})</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if bundle %}
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="/static/graph.js"></script>
+<script>
+function escapeHtml(value) {
+    return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
+let caseGraphLoaded = false;
+const initialTab = '{{ initial_tab | default("overview") }}';
+function ensureCaseGraph() {
+    if (caseGraphLoaded) return;
+    const svg = document.getElementById('graph-svg');
+    if (!svg) return;
+    caseGraphLoaded = true;
+    initGraph(null, '/api/casefiles/{{ case.slug }}/graph');
+}
+
+document.querySelectorAll('.casefile-level-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const level = btn.dataset.readingLevel;
+        document.querySelectorAll('.casefile-level-btn').forEach(node => node.classList.remove('active'));
+        document.querySelectorAll('.casefile-reading-copy').forEach(node => node.classList.remove('active'));
+        btn.classList.add('active');
+        const target = document.querySelector('[data-reading-copy="' + level + '"]');
+        if (target) target.classList.add('active');
+    });
+});
+
+document.querySelectorAll('.casefile-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        document.querySelectorAll('.casefile-tab').forEach(node => node.classList.remove('active'));
+        document.querySelectorAll('.casefile-tab-panel').forEach(node => node.classList.remove('active'));
+        btn.classList.add('active');
+        const panel = document.querySelector('[data-tab-panel="' + tab + '"]');
+        if (panel) panel.classList.add('active');
+        if (tab === 'graph') ensureCaseGraph();
+    });
+});
+
+if (initialTab === 'graph') {
+    ensureCaseGraph();
+}
+
+const chatForm = document.getElementById('casefile-chat-form');
+const questionBox = document.getElementById('casefile-question');
+const resultBox = document.getElementById('casefile-chat-result');
+if (chatForm && questionBox && resultBox) {
+    chatForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const question = questionBox.value.trim();
+        if (!question) return;
+        resultBox.textContent = 'Thinking...';
+        try {
+            const response = await fetch('/api/casefiles/{{ case.slug }}/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({question}),
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                resultBox.textContent = payload.error || 'Failed to answer question.';
+                return;
+            }
+            const citationLinks = (payload.citations || []).map(id => '<a href="#evidence-' + id.toLowerCase() + '">' + escapeHtml(id) + '</a>');
+            resultBox.innerHTML = '<p>' + escapeHtml(payload.answer) + '</p><div class="casefile-inline-links">' + citationLinks.join(' ') + '</div>';
+        } catch (error) {
+            resultBox.textContent = 'Failed to answer question.';
+        }
+    });
+}
+</script>
+{% endif %}
+{% endblock %}

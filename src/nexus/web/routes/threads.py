@@ -28,7 +28,7 @@ async def thread_list(request: Request):
         "SELECT tt.topic_slug, COUNT(DISTINCT tt.thread_id) "
         "FROM thread_topics tt "
         "JOIN threads t ON tt.thread_id = t.id "
-        "WHERE t.status NOT IN ('resolved') "
+        "WHERE t.status NOT IN ('resolved', 'merged') "
         "GROUP BY tt.topic_slug ORDER BY COUNT(DISTINCT tt.thread_id) DESC",
     )
     topic_counts = await cursor.fetchall()
