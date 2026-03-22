@@ -17,7 +17,6 @@ from nexus.casefiles.builder import build_casefile
 from nexus.casefiles.models import (
     BuildStatus,
     CaseAssessment,
-    CaseDivergence,
     CaseHypothesis,
     EvidenceItem,
     ExtractedDocument,

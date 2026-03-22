@@ -14,9 +14,7 @@ from nexus.agent.websearch import web_search
 from nexus.casefiles.acquisition import acquire_case_documents
 from nexus.casefiles.models import (
     AcquisitionResult,
-    CaseAssessment,
     CaseConfig,
-    CaseDivergence,
     CaseEntity,
     CaseGraphSummary,
     CaseHypothesis,
@@ -24,7 +22,6 @@ from nexus.casefiles.models import (
     CaseOverview,
     CaseRelation,
     CaseReview,
-    CaseThread,
     CasefileBundle,
     EvidenceItem,
     ExtractedClaim,

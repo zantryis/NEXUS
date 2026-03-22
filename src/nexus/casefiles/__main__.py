@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import os
 from pathlib import Path
 
@@ -37,15 +38,17 @@ async def _run(slug: str, data_dir: Path) -> None:
     store = KnowledgeStore(data_dir / "knowledge.db")
     await store.initialize()
 
+    log = logging.getLogger(__name__)
+
     def _progress(message: str) -> None:
-        print(f"[casefile:{slug}] {message}")
+        log.info("[casefile:%s] %s", slug, message)
 
     try:
         bundle = await build_casefile(case_dir(data_dir, slug), llm=llm, store=store, progress=_progress)
         verdict = "presentable" if bundle.review.presentable else "draft"
-        print(f"[casefile:{slug}] complete ({verdict})")
+        log.info("[casefile:%s] complete (%s)", slug, verdict)
         for blocker in bundle.review.blocker_reasons:
-            print(f"  - {blocker}")
+            log.info("  - %s", blocker)
     finally:
         await store.close()
 
